@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark mode scrollbars sitewide */
+::-webkit-scrollbar {
+  width: 12px;
+  background: #181A20;
+}
+::-webkit-scrollbar-thumb {
+  background: #393A41;
+  border-radius: 8px;
+  border: 2px solid #181A20;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7C3AED;
+}
+::-webkit-scrollbar-corner {
+  background: #181A20;
+}
+
+/* For Firefox */
+html {
+  scrollbar-color: #393A41 #181A20;
+  scrollbar-width: thin;
+}
