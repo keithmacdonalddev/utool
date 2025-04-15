@@ -118,8 +118,8 @@ exports.getAdminLogs = async (req, res) => {
       sort = '-createdAt', // Default sort by newest first
     } = req.query;
 
-    // Check admin permissions
-    if (req.user.role !== 'admin') {
+    // Check admin permissions - fix case sensitivity by using localeCompare or toUpperCase
+    if (req.user.role.toLowerCase() !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Access denied: Admin privileges required to view logs',
@@ -180,8 +180,8 @@ exports.getAdminLogs = async (req, res) => {
 // @access  Admin only
 exports.getSystemHealth = async (req, res) => {
   try {
-    // Check admin permissions
-    if (req.user.role !== 'admin') {
+    // Check admin permissions - fix case sensitivity by using localeCompare or toUpperCase
+    if (req.user.role.toLowerCase() !== 'admin') {
       return res.status(403).json({
         success: false,
         message:
