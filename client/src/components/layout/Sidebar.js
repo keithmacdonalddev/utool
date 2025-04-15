@@ -12,6 +12,7 @@ import {
   ChevronsRight,
   Wrench,
   Star,
+  LineChart, // Added for Admin Logs Dashboard
 } from 'lucide-react'; // Added Star
 
 const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
@@ -165,19 +166,35 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
           {/* TODO: Add Tasks link */}
           {/* Admin Links */}
           {user?.role === 'Admin' && (
-            <NavLink
-              to="/admin/users"
-              className={({ isActive }) =>
-                `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
-                  isActive ? activeLinkClasses : inactiveLinkClasses
-                }`
-              }
-              onClick={toggleSidebar}
-              title="User Management"
-            >
-              <Users size={20} className="flex-shrink-0" />
-              <span className={linkTextClasses}>User Management</span>
-            </NavLink>
+            <>
+              <NavLink
+                to="/admin/users"
+                className={({ isActive }) =>
+                  `${linkItemClasses} ${
+                    isMinimized ? 'md:justify-center' : ''
+                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                }
+                onClick={toggleSidebar}
+                title="User Management"
+              >
+                <Users size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>User Management</span>
+              </NavLink>
+
+              <NavLink
+                to="/admin/logs"
+                className={({ isActive }) =>
+                  `${linkItemClasses} ${
+                    isMinimized ? 'md:justify-center' : ''
+                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                }
+                onClick={toggleSidebar}
+                title="Server Logs"
+              >
+                <LineChart size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>Server Logs</span>
+              </NavLink>
+            </>
           )}
         </nav>
 

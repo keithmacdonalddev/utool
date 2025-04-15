@@ -6,7 +6,7 @@ const api = axios.create({
   // Set the base URL depending on the environment
   baseURL:
     process.env.NODE_ENV === 'production'
-      ? process.env.REACT_APP_API_URL // In production, use the Render URL from environment variable
+      ? process.env.REACT_APP_API_URL || 'https://utool.onrender.com/api/v1' // Use the correct Render URL
       : 'http://localhost:5000/api/v1', // Point directly to backend server in development
   headers: {
     'Content-Type': 'application/json',
