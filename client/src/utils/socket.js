@@ -4,7 +4,7 @@ import io from 'socket.io-client';
 // In development, use the standard backend URL
 const isDevelopment = process.env.NODE_ENV === 'development';
 const SERVER_URL = isDevelopment
-  ? (process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000')
+  ? process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000'
   : process.env.REACT_APP_API_URL; // Use the same env variable as API
 
 // Create and export the socket instance
