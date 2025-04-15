@@ -111,19 +111,6 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
             <span className={linkTextClasses}>Dashboard</span>
           </NavLink>
           <NavLink
-            to="/case-wizard"
-            className={({ isActive }) =>
-              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
-                isActive ? activeLinkClasses : inactiveLinkClasses
-              }`
-            }
-            onClick={toggleSidebar}
-            title="Case Wizard"
-          >
-            <Wrench size={20} className="flex-shrink-0" />
-            <span className={linkTextClasses}>Case Wizard</span>
-          </NavLink>
-          <NavLink
             to="/projects"
             className={({ isActive }) =>
               `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${

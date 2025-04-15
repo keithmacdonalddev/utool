@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { logoutUser, resetAuthStatus } from '../../features/auth/authSlice';
 import Sidebar from './Sidebar';
 import NavbarClockStockWeather from './NavbarClockStockWeather';
-import { Menu, X, ChevronsLeft, ChevronsRight, LogOut } from 'lucide-react';
+import { Menu, X, LogOut } from 'lucide-react';
 
 const MainLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
