@@ -26,6 +26,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:local": "node scripts/start-with-server.js local",
+    "start:prod": "node scripts/start-with-server.js prod",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

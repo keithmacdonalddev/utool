@@ -5,9 +5,10 @@ import { store } from '../app/store'; // Import the Redux store
 const api = axios.create({
   // Set the base URL depending on the environment
   baseURL:
-    process.env.NODE_ENV === 'production'
-      ? process.env.REACT_APP_API_URL || 'https://utool.onrender.com/api/v1' // Use the correct Render URL
-      : 'http://localhost:5000/api/v1', // Point directly to backend server in development
+    process.env.REACT_APP_API_URL || // Check for an environment variable first
+    (process.env.NODE_ENV === 'production'
+      ? 'https://utool.onrender.com/api/v1' // Fallback production URL
+      : 'http://localhost:5000/api/v1'), // Fallback development URL
   headers: {
     'Content-Type': 'application/json',
   },
