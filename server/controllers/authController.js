@@ -83,13 +83,13 @@ exports.login = async (req, res, next) => {
 
   try {
     console.log(`Login attempt for email: ${email}`);
-    
+
     // Check if MongoDB is connected
     if (mongoose.connection.readyState !== 1) {
       console.error('MongoDB not connected during login attempt');
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database connection issue. Please try again later.' 
+      return res.status(500).json({
+        success: false,
+        message: 'Database connection issue. Please try again later.',
       });
     }
 
@@ -120,7 +120,7 @@ exports.login = async (req, res, next) => {
       user.failedLoginAttempts += 1;
       await auditLog(req, 'login', 'failed', {
         email,
-        failedAttempts: user.failedLoginAttempts
+        failedAttempts: user.failedLoginAttempts,
       });
 
       const MAX_FAILED_ATTEMPTS = 5;
@@ -161,19 +161,18 @@ exports.login = async (req, res, next) => {
     console.error('Login error detail:', err.message);
     console.error('Error stack:', err.stack);
     console.error('JWT_SECRET exists:', Boolean(process.env.JWT_SECRET));
-    
+
     const errorDetails = {
       message: err.message,
-      mongoConnectionState: mongoose.connection.readyState
+      mongoConnectionState: mongoose.connection.readyState,
     };
-    
-    res
-      .status(500)
-      .json({ 
-        success: false, 
-        message: 'Server error during login',
-        details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
-      });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error during login',
+      details:
+        process.env.NODE_ENV === 'development' ? errorDetails : undefined,
+    });
   }
 };
 
@@ -294,9 +293,8 @@ exports.getMe = async (req, res, next) => {
     return res.status(404).json({ success: false, message: 'User not found' });
   }
 
-    res.status(200).json({ success: true, data: user });
+  res.status(200).json({ success: true, data: user });
 };
-
 
 // @desc    Update user details (name, email - not password)
 // @route   PUT /api/v1/auth/updateme
@@ -311,14 +309,18 @@ exports.updateMe = async (req, res, next) => {
     country: req.body.country,
     city: req.body.city,
     website: req.body.website,
-    bio: req.body.bio
+    bio: req.body.bio,
   };
 
   // Remove undefined fields so they don't overwrite existing data
-  Object.keys(fieldsToUpdate).forEach(key => fieldsToUpdate[key] === undefined && delete fieldsToUpdate[key]);
+  Object.keys(fieldsToUpdate).forEach(
+    (key) => fieldsToUpdate[key] === undefined && delete fieldsToUpdate[key]
+  );
 
   if (Object.keys(fieldsToUpdate).length === 0) {
-      return res.status(400).json({ success: false, message: 'No fields provided for update' });
+    return res
+      .status(400)
+      .json({ success: false, message: 'No fields provided for update' });
   }
 
   try {
@@ -331,35 +333,43 @@ exports.updateMe = async (req, res, next) => {
 
     if (!user) {
       // Should not happen if protect middleware worked correctly
-      return res.status(404).json({ success: false, message: 'User not found during update' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'User not found during update' });
     }
 
     // Don't send back the token on update, just the updated user data
     const changedFields = Object.keys(fieldsToUpdate);
     await auditLog(req, 'profile_update', 'success', {
       userId: user._id,
-      changedFields
+      changedFields,
     });
     res.status(200).json({ success: true, data: user });
-
   } catch (err) {
     console.error('Update Me error:', err);
-     // Handle potential duplicate email error
-    if (err.code === 11000 || err.name === 'MongoServerError' && err.keyValue?.email) {
-        return res.status(400).json({ success: false, message: 'Email address already in use.' });
+    // Handle potential duplicate email error
+    if (
+      err.code === 11000 ||
+      (err.name === 'MongoServerError' && err.keyValue?.email)
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Email address already in use.' });
     }
     // Handle validation errors
     if (err.name === 'ValidationError') {
-        const messages = Object.values(err.errors).map(val => val.message);
-        return res.status(400).json({ success: false, message: messages.join('. ') });
+      const messages = Object.values(err.errors).map((val) => val.message);
+      return res
+        .status(400)
+        .json({ success: false, message: messages.join('. ') });
     }
-    res.status(500).json({ success: false, message: 'Server error updating user details' });
+    res
+      .status(500)
+      .json({ success: false, message: 'Server error updating user details' });
   }
 };
 
-
 // TODO: Add updateMyPassword controller later
-
 
 // Get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {
