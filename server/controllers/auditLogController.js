@@ -115,7 +115,7 @@ exports.getAdminLogs = async (req, res) => {
       endDate,
       page = 1,
       limit = 50,
-      sort = '-createdAt', // Default sort by newest first
+      sort = '-timestamp', // Changed from createdAt to timestamp to match the schema
     } = req.query;
 
     // Check admin permissions - fix case sensitivity by using localeCompare or toUpperCase
@@ -131,13 +131,13 @@ exports.getAdminLogs = async (req, res) => {
 
     if (action) query.action = action;
     if (status) query.status = status;
-    if (user) query.user = user;
+    if (user) query.userId = user; // Changed from user to userId to match the schema
 
     // Date filtering
     if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+      query.timestamp = {}; // Changed from createdAt to timestamp to match the schema
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
     }
 
     // Pagination
@@ -148,7 +148,7 @@ exports.getAdminLogs = async (req, res) => {
       .sort(sort)
       .skip(skip)
       .limit(parseInt(limit))
-      .populate('user', 'name email role')
+      .populate('userId', 'name email role') // Changed from user to userId to match the schema
       .lean();
 
     // Get total count for pagination
@@ -193,9 +193,9 @@ exports.getSystemHealth = async (req, res) => {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentErrors = await AuditLog.find({
       status: 'failed',
-      createdAt: { $gte: oneDayAgo },
+      timestamp: { $gte: oneDayAgo }, // Changed from createdAt to timestamp to match the schema
     })
-      .sort('-createdAt')
+      .sort('-timestamp') // Changed from createdAt to timestamp to match the schema
       .limit(10)
       .lean();
 
@@ -204,7 +204,7 @@ exports.getSystemHealth = async (req, res) => {
       {
         $match: {
           status: 'failed',
-          createdAt: { $gte: oneDayAgo },
+          timestamp: { $gte: oneDayAgo }, // Changed from createdAt to timestamp to match the schema
         },
       },
       {
@@ -219,15 +219,15 @@ exports.getSystemHealth = async (req, res) => {
     // Get system stats
     const stats = {
       totalRequests: await AuditLog.countDocuments({
-        createdAt: { $gte: oneDayAgo },
+        timestamp: { $gte: oneDayAgo }, // Changed from createdAt to timestamp to match the schema
       }),
       successfulRequests: await AuditLog.countDocuments({
         status: 'success',
-        createdAt: { $gte: oneDayAgo },
+        timestamp: { $gte: oneDayAgo }, // Changed from createdAt to timestamp to match the schema
       }),
       failedRequests: await AuditLog.countDocuments({
         status: 'failed',
-        createdAt: { $gte: oneDayAgo },
+        timestamp: { $gte: oneDayAgo }, // Changed from createdAt to timestamp to match the schema
       }),
       serverUptime: process.uptime(), // Server uptime in seconds
       nodeVersion: process.version,
