@@ -17,5 +17,9 @@
       "memory": 1024,
       "maxDuration": 10
     }
+  },
+  "env": {
+    "CI": "false",
+    "DISABLE_ESLINT_PLUGIN": "true"
   }
 }
