@@ -1,15 +1,19 @@
 import io from 'socket.io-client';
 
-// Use environment variable for server URL or default to localhost
-const SERVER_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+// In production (Vercel), the socket endpoint is at /api/socket
+// In development, use the standard backend URL
+const isDevelopment = process.env.NODE_ENV === 'development';
+const SERVER_URL = isDevelopment
+  ? process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000'
+  : window.location.origin;
 
 // Create and export the socket instance
-// We initialize it here but connect/disconnect based on component lifecycle or auth state
 const socket = io(SERVER_URL, {
   autoConnect: false, // Don't connect automatically
-  // Add authentication if needed, e.g., sending JWT token
+  path: isDevelopment ? undefined : '/api/socket',
+  // Add authentication if needed
   // auth: {
-  //   token: localStorage.getItem('token') // Example: Get token from local storage
+  //   token: localStorage.getItem('token')
   // }
 });
 
