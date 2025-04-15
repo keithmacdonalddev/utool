@@ -4,8 +4,8 @@ import io from 'socket.io-client';
 // In development, use the standard backend URL
 const isDevelopment = process.env.NODE_ENV === 'development';
 const SERVER_URL = isDevelopment
-  ? (process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000')
-  : (process.env.REACT_APP_API_URL || 'https://utool.onrender.com'); // Use the correct Render URL
+  ? process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000'
+  : process.env.REACT_APP_API_URL || 'https://utool.onrender.com'; // Use the correct Render URL
 
 // Create and export the socket instance
 const socket = io(SERVER_URL, {

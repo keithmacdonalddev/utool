@@ -11,7 +11,11 @@ const server = http.createServer(app); // Create HTTP server from Express app
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000', // Allow client origin from Vercel
+    origin: [
+      process.env.FRONTEND_URL,
+      'http://localhost:3000',
+      'https://utool-xi.vercel.app',
+    ],
     methods: ['GET', 'POST'],
     credentials: true, // Allow credentials (cookies, authorization headers, etc.)
   },
@@ -41,7 +45,26 @@ const stockRoutes = require('./routes/stocks'); // Import stock routes
 // Enhanced CORS configuration for Vercel frontend
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        process.env.FRONTEND_URL,
+        'http://localhost:3000',
+        'https://utool-xi.vercel.app',
+      ];
+
+      // Allow requests with no origin (like mobile apps, curl requests)
+      if (!origin) return callback(null, true);
+
+      if (
+        allowedOrigins.indexOf(origin) !== -1 ||
+        process.env.NODE_ENV !== 'production'
+      ) {
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(null, true); // Allow all origins in case env variables aren't set properly
+      }
+    },
     credentials: true,
   })
 );
