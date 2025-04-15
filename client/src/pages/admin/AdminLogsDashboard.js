@@ -117,7 +117,16 @@ const AdminLogsDashboard = () => {
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-bold mb-6">Admin Logs Dashboard</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Admin Logs Dashboard</h1>
+        <a 
+          href="/admin/server-logs" 
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center"
+        >
+          <span className="mr-2">📊</span>
+          Live Server Logs
+        </a>
+      </div>
 
       {/* System Health Panel */}
       {systemHealth && (

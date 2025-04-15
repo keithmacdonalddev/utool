@@ -36,6 +36,7 @@ const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
 const AdminLogsDashboard = lazy(() =>
   import('./pages/admin/AdminLogsDashboard')
 );
+const LiveServerLogs = lazy(() => import('./pages/admin/LiveServerLogs'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 
 function App() {
@@ -102,6 +103,10 @@ function App() {
                     <Route
                       path="/admin/logs"
                       element={<AdminLogsDashboard />}
+                    />
+                    <Route
+                      path="/admin/server-logs"
+                      element={<LiveServerLogs />}
                     />
                     {/* Add other admin routes here */}
                   </Route>
