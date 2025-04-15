@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose'); // Added mongoose import
 const User = require('../models/User');
 const { auditLog } = require('../middleware/auditLogMiddleware');
 // const sendEmail = require('../utils/sendEmail'); // Implement later
@@ -81,6 +82,17 @@ exports.login = async (req, res, next) => {
   }
 
   try {
+    console.log(`Login attempt for email: ${email}`);
+    
+    // Check if MongoDB is connected
+    if (mongoose.connection.readyState !== 1) {
+      console.error('MongoDB not connected during login attempt');
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Database connection issue. Please try again later.' 
+      });
+    }
+
     const user = await User.findOne({ email }).select(
       '+password +failedLoginAttempts +accountLockedUntil'
     );
@@ -143,12 +155,25 @@ exports.login = async (req, res, next) => {
     }
 
     await auditLog(req, 'login', 'success', { userId: user._id });
+    console.log(`Login successful for user: ${user.email} (${user._id})`);
     sendTokenResponse(user, 200, res);
   } catch (err) {
-    console.error('Login error:', err);
+    console.error('Login error detail:', err.message);
+    console.error('Error stack:', err.stack);
+    console.error('JWT_SECRET exists:', Boolean(process.env.JWT_SECRET));
+    
+    const errorDetails = {
+      message: err.message,
+      mongoConnectionState: mongoose.connection.readyState
+    };
+    
     res
       .status(500)
-      .json({ success: false, message: 'Server error during login' });
+      .json({ 
+        success: false, 
+        message: 'Server error during login',
+        details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+      });
   }
 };
 

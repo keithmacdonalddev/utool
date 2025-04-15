@@ -26,6 +26,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Global error handler caught:', err);
+  res.status(500).json({ 
+    success: false, 
+    message: 'Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
 // Mount Routers
 app.use('/v1/auth', authRoutes);
 app.use('/v1/tasks', taskRoutes);
@@ -52,6 +62,18 @@ app.use('/admin/notes', (req, res, next) => {
   }
 });
 
+// Environment variable check route - useful for debugging
+app.get('/api-status', (req, res) => {
+  res.json({
+    status: 'API is running',
+    environment: process.env.NODE_ENV,
+    mongoConnected: mongoose.connection.readyState === 1,
+    hasMongoUri: Boolean(process.env.MONGO_URI),
+    hasJwtSecret: Boolean(process.env.JWT_SECRET),
+    dbConnectionState: mongoose.connection.readyState
+  });
+});
+
 // Basic Route
 app.get('/', (req, res) => {
   res.send('API is running...');
@@ -62,10 +84,22 @@ const MONGO_URI = process.env.MONGO_URI;
 if (!MONGO_URI) {
   console.error('FATAL ERROR: MONGO_URI is not defined.');
 } else {
+  // Set more connection options for better reliability
   mongoose
-    .connect(MONGO_URI)
+    .connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4 // Use IPv4, skip trying IPv6
+    })
     .then(() => console.log('MongoDB Connected'))
-    .catch((err) => console.error('MongoDB Connection Error:', err));
+    .catch((err) => {
+      console.error('MongoDB Connection Error:', err);
+      // Don't crash the server on connection error
+      console.error('Connection details:', {
+        mongoUri: MONGO_URI ? MONGO_URI.substring(0, 20) + '...' : 'Not defined',
+        hasJwtSecret: Boolean(process.env.JWT_SECRET)
+      });
+    });
 }
 
 // Export the Express API
