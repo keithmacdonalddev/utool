@@ -1,16 +1,16 @@
 import io from 'socket.io-client';
 
-// In production (Vercel), the socket endpoint is at /api/socket
+// In production, use the Render backend URL from env variable
 // In development, use the standard backend URL
 const isDevelopment = process.env.NODE_ENV === 'development';
 const SERVER_URL = isDevelopment
-  ? process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000'
-  : window.location.origin;
+  ? (process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000')
+  : process.env.REACT_APP_API_URL; // Use the same env variable as API
 
 // Create and export the socket instance
 const socket = io(SERVER_URL, {
   autoConnect: false, // Don't connect automatically
-  path: isDevelopment ? undefined : '/api/socket',
+  // No special path needed with Render (removing the /api/socket path)
   // Add authentication if needed
   // auth: {
   //   token: localStorage.getItem('token')

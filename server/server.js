@@ -11,8 +11,9 @@ const server = http.createServer(app); // Create HTTP server from Express app
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000', // Allow client origin
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000', // Allow client origin from Vercel
     methods: ['GET', 'POST'],
+    credentials: true, // Allow credentials (cookies, authorization headers, etc.)
   },
 });
 
@@ -37,8 +38,27 @@ const quoteRoutes = require('./routes/quotes'); // Import quotes routes
 const stockRoutes = require('./routes/stocks'); // Import stock routes
 
 // Middleware
-app.use(cors());
+// Enhanced CORS configuration for Vercel frontend
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json());
+
+// Status endpoint for health checks
+app.get('/api/v1/status', (req, res) => {
+  res.json({
+    status: 'API is running',
+    environment: process.env.NODE_ENV,
+    mongoConnected: mongoose.connection.readyState === 1,
+    hasMongoUri: Boolean(process.env.MONGO_URI),
+    hasJwtSecret: Boolean(process.env.JWT_SECRET),
+    dbConnectionState: mongoose.connection.readyState,
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Mount Routers
 app.use('/api/v1/auth', authRoutes);

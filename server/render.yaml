@@ -1,0 +1,23 @@
+services:
+  # Backend API service
+  - type: web
+    name: mern-productivity-backend
+    env: node
+    rootDirectory: server
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false # This will be manually set in Render dashboard
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 30d
+      - key: JWT_COOKIE_EXPIRE_DAYS
+        value: '30'
+      - key: FRONTEND_URL
+        sync: false # Set this to your Vercel frontend URL
+      # Add any other environment variables your app needs
+    healthCheckPath: /api/v1/status # Uses the status endpoint we created earlier
