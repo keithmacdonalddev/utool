@@ -31,6 +31,9 @@ app.get('/', (req, res) => {
   res.send('API is running...');
 });
 
+// Simple test route for debugging
+app.get('/v1/ping', (req, res) => res.json({ pong: true, time: new Date().toISOString() }));
+
 // Environment variable check route - useful for debugging
 // This needs to be before our error handler to ensure it's accessible
 app.get('/v1/status', (req, res) => {
