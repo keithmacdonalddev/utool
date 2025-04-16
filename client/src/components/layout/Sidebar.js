@@ -12,8 +12,7 @@ import {
   ChevronsRight,
   Wrench,
   Star,
-  LineChart, // Added for Admin Logs Dashboard
-} from 'lucide-react'; // Added Star
+} from 'lucide-react'; // Removed LineChart import
 
 const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
   const { user } = useSelector((state) => state.auth);
@@ -180,20 +179,7 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
                 <Users size={20} className="flex-shrink-0" />
                 <span className={linkTextClasses}>User Management</span>
               </NavLink>
-
-              <NavLink
-                to="/admin/logs"
-                className={({ isActive }) =>
-                  `${linkItemClasses} ${
-                    isMinimized ? 'md:justify-center' : ''
-                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
-                }
-                onClick={toggleSidebar}
-                title="Server Logs"
-              >
-                <LineChart size={20} className="flex-shrink-0" />
-                <span className={linkTextClasses}>Server Logs</span>
-              </NavLink>
+              {/* Removed Server Logs NavLink */}
             </>
           )}
         </nav>

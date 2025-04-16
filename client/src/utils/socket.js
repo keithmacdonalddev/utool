@@ -5,8 +5,8 @@ import { store } from '../app/store';
 // In development, use the standard backend URL
 const isDevelopment = process.env.NODE_ENV === 'development';
 const SERVER_URL = isDevelopment
-  ? (process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000')
-  : (process.env.REACT_APP_API_URL || 'https://utool.onrender.com'); // Use the correct Render URL
+  ? process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000'
+  : process.env.REACT_APP_API_URL || 'https://utool.onrender.com'; // Use the correct Render URL
 
 // Create the socket instance
 const socket = io(SERVER_URL, {
@@ -14,54 +14,61 @@ const socket = io(SERVER_URL, {
   // Add authentication
   auth: {
     // This will be updated before connection
-    token: null
-  }
+    token: null,
+  },
 });
+
+// Track last token to avoid duplicate connections
+let lastToken = null;
 
 // Update auth token before connecting
 const updateAuthToken = () => {
   const state = store.getState();
   const token = state.auth.token;
-  
-  if (token) {
+
+  if (token && token !== lastToken) {
     socket.auth.token = token;
-    console.log('Auth token set for socket connection');
-  } else {
-    console.warn('No auth token available for socket connection');
+    lastToken = token;
   }
 };
 
 // Connect with auth token
 export const connectWithAuth = () => {
   updateAuthToken();
-  
+
   if (!socket.auth.token) {
-    console.error('Cannot connect socket: No authentication token available');
     return false;
   }
-  
-  if (!socket.connected) {
+
+  // Only connect if not already connected or connecting
+  if (!socket.connected && !socket.connecting) {
     socket.connect();
   }
-  
+
   return true;
 };
 
-// Socket event handlers
+// Socket event handlers for general connection status
 socket.on('connect', () => {
-  console.log('Socket connected:', socket.id);
+  // Connection established
 });
 
-socket.on('disconnect', (reason) => {
-  console.log('Socket disconnected:', reason);
+socket.on('disconnect', () => {
+  // Disconnected from server
 });
 
-socket.on('connect_error', (error) => {
-  console.error('Socket connection error:', error);
+socket.on('connect_error', () => {
+  // Connection error occurred
 });
 
-socket.on('unauthorized', (error) => {
-  console.error('Socket authorization failed:', error);
+socket.on('unauthorized', () => {
+  // Authorization failed
 });
+
+export const disconnectSocket = () => {
+  if (socket.connected) {
+    socket.disconnect();
+  }
+};
 
 export default socket;

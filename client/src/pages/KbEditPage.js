@@ -47,10 +47,7 @@ const KbEditPage = () => {
       }
 
       try {
-        // Preserving your console log typo if intentional
-        console.log(`Workspaceing article with ID: ${id}`);
         const response = await api.get(`/kb/${id}`);
-        console.log('API Response:', response.data);
 
         if (
           response.data &&
@@ -66,12 +63,10 @@ const KbEditPage = () => {
           // Set content state, default to empty string if null/undefined from API
           setEditorContent(content || '');
           setIsEditorReady(true); // Mark as ready AFTER content is set
-          console.log('Article loaded successfully.');
         } else {
           throw new Error('Invalid data structure received from API.');
         }
       } catch (error) {
-        console.error('Fetch Error:', error);
         setIsError(true);
         setMessage(
           error.response?.data?.message ||
@@ -96,26 +91,24 @@ const KbEditPage = () => {
 
       // Listener for receiving changes from others
       const handleReceiveChanges = (receivedState) => {
-        console.log('Received changes from socket');
         isRemoteUpdate.current = true; // Flag that this is a remote update
         setEditorContent(receivedState);
         // Reset the flag shortly after, allowing local changes again
         // Use setTimeout to ensure it happens after the current render cycle
         setTimeout(() => {
-            isRemoteUpdate.current = false;
+          isRemoteUpdate.current = false;
         }, 0);
       };
       socket.on('receive_changes', handleReceiveChanges);
 
       // Listen for connection status changes (optional but good for UI feedback)
-       const handleConnect = () => setIsSocketConnected(true);
-       const handleDisconnect = () => setIsSocketConnected(false);
-       socket.on('connect', handleConnect);
-       socket.on('disconnect', handleDisconnect);
+      const handleConnect = () => setIsSocketConnected(true);
+      const handleDisconnect = () => setIsSocketConnected(false);
+      socket.on('connect', handleConnect);
+      socket.on('disconnect', handleDisconnect);
 
       // Cleanup on component unmount or ID change
       return () => {
-        console.log(`Leaving document room: ${id} and disconnecting socket.`);
         // No specific leave room event needed if disconnect handles server cleanup
         socket.off('receive_changes', handleReceiveChanges);
         socket.off('connect', handleConnect);
@@ -125,7 +118,6 @@ const KbEditPage = () => {
       };
     }
     // --- End Socket Connection Lifecycle ---
-
   }, [id]); // Effect depends on article ID
 
   // --- Handle changes in standard form inputs ---
@@ -138,22 +130,26 @@ const KbEditPage = () => {
   }, []);
 
   // --- Handle changes from the LexicalEditor component ---
-  const handleEditorContentChange = useCallback((newContent) => {
-    // Update local state
-    setEditorContent(newContent);
+  const handleEditorContentChange = useCallback(
+    (newContent) => {
+      // Update local state
+      setEditorContent(newContent);
 
-    // If the change was triggered by a remote update, don't emit it back
-    if (isRemoteUpdate.current) {
-        // console.log('Skipping emit for remote update');
+      // If the change was triggered by a remote update, don't emit it back
+      if (isRemoteUpdate.current) {
         return;
-    }
+      }
 
-    // Emit local changes via socket if connected
-    if (socket.connected && id) {
-      // console.log('Emitting local changes via socket');
-      socket.emit('send_changes', { documentId: id, editorState: newContent });
-    }
-  }, [id]); // Depend on id to ensure it's available in the closure
+      // Emit local changes via socket if connected
+      if (socket.connected && id) {
+        socket.emit('send_changes', {
+          documentId: id,
+          editorState: newContent,
+        });
+      }
+    },
+    [id]
+  ); // Depend on id to ensure it's available in the closure
 
   // --- Handle form submission ---
   const onSubmit = async (e) => {
@@ -193,15 +189,11 @@ const KbEditPage = () => {
         .filter((cat) => cat !== ''),
     };
 
-    console.log('Submitting updated article:', updatedArticle);
-
     try {
       await api.put(`/kb/${id}`, updatedArticle);
-      console.log('Article updated successfully.');
       // Navigate after successful update
       navigate(`/kb/${id}`); // Redirect to the details page
     } catch (error) {
-      console.error('Update Error:', error);
       setIsError(true);
       setMessage(error.response?.data?.message || 'Failed to update article.');
     }
@@ -242,14 +234,17 @@ const KbEditPage = () => {
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-2">Edit Knowledge Base Article</h1>
-       {/* Socket Connection Status Indicator */}
-       <div className="mb-4 text-xs">
-         Collaboration Status:
-         <span className={`ml-2 font-semibold ${isSocketConnected ? 'text-green-600' : 'text-red-600'}`}>
-           {isSocketConnected ? 'Connected' : 'Disconnected'}
-         </span>
-       </div>
-
+      {/* Socket Connection Status Indicator */}
+      <div className="mb-4 text-xs">
+        Collaboration Status:
+        <span
+          className={`ml-2 font-semibold ${
+            isSocketConnected ? 'text-green-600' : 'text-red-600'
+          }`}
+        >
+          {isSocketConnected ? 'Connected' : 'Disconnected'}
+        </span>
+      </div>
 
       {/* Display submission/update errors */}
       {/* *** THIS IS THE CORRECTED BLOCK *** */}
@@ -354,7 +349,6 @@ const KbEditPage = () => {
           {/* Submit/Cancel Button Container */}
           <div className="flex items-center justify-center pt-4 gap-4">
             {' '}
-            {/* Added gap */}
             {/* Update Button */}
             <button
               className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"

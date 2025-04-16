@@ -24,14 +24,12 @@ const RegisterPage = () => {
     // Handle redirection or display messages after registration attempt
     if (isError) {
       // Display error message (e.g., using a toast library later)
-      console.error('Registration Error:', message);
       // Optionally reset status after showing message
       // dispatch(resetAuthStatus());
     }
 
     if (isSuccess) {
       // Display success message (e.g., "Check your email")
-      console.log('Registration Success:', message);
       // Optionally redirect or clear form
       // navigate('/login'); // Redirect to login after successful registration message
       // Reset form?
@@ -107,7 +105,9 @@ const RegisterPage = () => {
             Name <span className="text-[#C7C9D1] text-sm">(Optional)</span>
           </label>
           <input
-            className={`shadow appearance-none border border-dark-600 rounded w-full py-2 px-3 bg-dark-700 text-text leading-tight focus:outline-none focus:shadow-outline ${isLoading ? 'opacity-60' : ''}`}
+            className={`shadow appearance-none border border-dark-600 rounded w-full py-2 px-3 bg-dark-700 text-text leading-tight focus:outline-none focus:shadow-outline ${
+              isLoading ? 'opacity-60' : ''
+            }`}
             id="name"
             type="text"
             placeholder="Your Name"
@@ -200,7 +200,10 @@ const RegisterPage = () => {
         {/* Login Link Paragraph - Moved inside form, after button div */}
         <p className="text-center text-[#C7C9D1] text-xs mt-4">
           Already have an account? {/* TODO: Replace with Link component */}
-          <a className="text-accent-purple font-bold hover:text-accent-blue hover:underline" href="/login">
+          <a
+            className="text-accent-purple font-bold hover:text-accent-blue hover:underline"
+            href="/login"
+          >
             Login here
           </a>
         </p>

@@ -97,10 +97,7 @@ const KbDetailsPage = () => {
       }
 
       try {
-        // Preserving your console log with the typo "Workspaceing"
-        console.log(`Workspaceing article (Details Page): ${id}`);
         const response = await api.get(`/kb/${id}`);
-        console.log('API Response (Details Page):', response.data);
 
         // Validate response data
         if (
@@ -142,7 +139,9 @@ const KbDetailsPage = () => {
       navigate('/kb'); // Redirect to list page after successful deletion
     } catch (error) {
       console.error('Delete Error:', error);
-      setDeleteError(error.response?.data?.message || 'Failed to delete article.');
+      setDeleteError(
+        error.response?.data?.message || 'Failed to delete article.'
+      );
       setIsDeleting(false); // Keep modal open on error
     }
     // No finally block needed here as we only close modal on success or handle error state
@@ -243,13 +242,13 @@ const KbDetailsPage = () => {
             <RichTextPlugin
               contentEditable={
                 // Render content in a non-editable element
-                 <ContentEditable
-                   className="read-only-content-area"
-                   aria-readonly={true}
-                   role="article"
-                   // editable={false} // Removed non-boolean attribute warning
-                 />
-               }
+                <ContentEditable
+                  className="read-only-content-area"
+                  aria-readonly={true}
+                  role="article"
+                  // editable={false} // Removed non-boolean attribute warning
+                />
+              }
               placeholder={null} // No placeholder needed for viewer
               ErrorBoundary={LexicalErrorBoundary} // Catch errors during rendering
             />
@@ -272,7 +271,9 @@ const KbDetailsPage = () => {
       </div>
 
       {/* Action Buttons */}
-      <div className="mt-6 border-t pt-4 flex flex-wrap gap-3 items-center"> {/* Added flex-wrap and items-center */}
+      <div className="mt-6 border-t pt-4 flex flex-wrap gap-3 items-center">
+        {' '}
+        {/* Added flex-wrap and items-center */}
         <Link
           // Ensure article._id is the correct field from your API
           to={`/kb/${article._id || id}/edit`}
@@ -306,10 +307,13 @@ const KbDetailsPage = () => {
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
                 <AlertTriangle size={24} className="text-red-600" />
               </div>
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">Delete Article</h3>
+              <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">
+                Delete Article
+              </h3>
               <div className="mt-2 px-7 py-3">
                 <p className="text-sm text-gray-500">
-                  Are you sure you want to delete this article? This action cannot be undone.
+                  Are you sure you want to delete this article? This action
+                  cannot be undone.
                 </p>
               </div>
               {deleteError && (
@@ -345,7 +349,6 @@ const KbDetailsPage = () => {
       {/* Render CommentList only if article ID is available */}
       {id && <CommentList articleId={id} />}
       {/* --- End Comment Section --- */}
-
     </div>
   );
 };

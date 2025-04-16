@@ -33,10 +33,6 @@ const TrashPage = lazy(() => import('./pages/TrashPage'));
 // Admin Pages
 const AdminUserListPage = lazy(() => import('./pages/admin/UserListPage'));
 const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
-const AdminLogsDashboard = lazy(() =>
-  import('./pages/admin/AdminLogsDashboard')
-);
-const LiveServerLogs = lazy(() => import('./pages/admin/LiveServerLogs'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 
 function App() {
@@ -100,15 +96,7 @@ function App() {
                       path="/admin/users/:id/edit"
                       element={<AdminUserEditPage />}
                     />
-                    <Route
-                      path="/admin/logs"
-                      element={<AdminLogsDashboard />}
-                    />
-                    <Route
-                      path="/admin/server-logs"
-                      element={<LiveServerLogs />}
-                    />
-                    {/* Add other admin routes here */}
+                    {/* Admin logging routes have been removed */}
                   </Route>
                 </Route>
               </Route>

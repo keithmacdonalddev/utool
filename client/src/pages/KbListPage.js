@@ -35,10 +35,8 @@ const KbListPage = () => {
     try {
       let response;
       if (isSearching) {
-        console.log('Searching KB articles with:', searchParams);
         response = await api.post('/kb/search', searchParams); // Use POST for search
       } else {
-        console.log('Fetching all KB articles');
         response = await api.get('/kb'); // Default GET for all articles
       }
 
@@ -145,35 +143,31 @@ const KbListPage = () => {
     // Use flex column layout for the page, taking full height available in <main>
     <div className="flex flex-col h-full">
       {/* Fixed Header Section */}
-      
-        {/* Header Row: Back Link, Title, Create Button */}
-        <div className="flex justify-between items-center mb-3 px-4 md:px-0 pt-4">
-          <div className="flex items-center gap-4">
-            <Link
-              to="/dashboard"
-              className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
-              title="Back to Dashboard"
-            >
-              <ArrowLeft size={18} />
-            </Link>
-            <h1 className="text-2xl font-bold text-[#F8FAFC]">
-              Knowledge Base
-            </h1>
-          </div>
-          <Button
-            variant="primary"
-            className="py-2 px-6 text-base font-bold shadow"
-            style={{ color: '#F8FAFC' }}
-            onClick={() => (window.location.href = '/kb/new')}
+      {/* Header Row: Back Link, Title, Create Button */}
+      <div className="flex justify-between items-center mb-3 px-4 md:px-0 pt-4">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
+            title="Back to Dashboard"
           >
-            + New Article
-          </Button>
+            <ArrowLeft size={18} />
+          </Link>
+          <h1 className="text-2xl font-bold text-[#F8FAFC]">Knowledge Base</h1>
         </div>
-        {/* Search Bar - Standalone, no background */}
-        <div className="px-4 md:px-0 mt-2">
-          <KbSearchBar onSearch={handleSearch} />
-        </div>
-     
+        <Button
+          variant="primary"
+          className="py-2 px-6 text-base font-bold shadow"
+          style={{ color: '#F8FAFC' }}
+          onClick={() => (window.location.href = '/kb/new')}
+        >
+          + New Article
+        </Button>
+      </div>
+      {/* Search Bar - Standalone, no background */}
+      <div className="px-4 md:px-0 mt-2">
+        <KbSearchBar onSearch={handleSearch} />
+      </div>
       {/* Scrollable Content Area */}
       <div className="flex-grow overflow-y-auto p-4 md:px-0">
         {/* Loading State */}
