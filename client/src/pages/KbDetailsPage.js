@@ -1,8 +1,9 @@
 // src/pages/KbDetailsPage.jsx (or .js)
 
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom'; // Added useNavigate
-import api from '../utils/api'; // Adjust path as needed
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux'; // Import useSelector to access Redux state
+import api from '../utils/api';
 
 // --- Icon Import for Back Link ---
 import { ArrowLeft, AlertTriangle } from 'lucide-react';
@@ -28,29 +29,27 @@ import { HeadingNode, QuoteNode } from '@lexical/rich-text';
 const theme = {
   ltr: 'ltr',
   rtl: 'rtl',
-  paragraph: 'mb-2 text-left', // Ensure paragraphs are left-aligned
+  paragraph: 'mb-2 text-left text-white', // Added text-white
   heading: {
-    h1: 'text-3xl font-bold my-4', // Match editor/viewer styles
-    h2: 'text-2xl font-bold my-3',
-    h3: 'text-xl font-bold my-2',
+    h1: 'text-3xl font-bold my-4 text-white', // Added text-white
+    h2: 'text-2xl font-bold my-3 text-white',
+    h3: 'text-xl font-bold my-2 text-white',
     // h4, h5, h6... if used
   },
   list: {
-    ul: 'list-disc ml-6 mb-2 text-left', // Keep explicit text-left
-    ol: 'list-decimal ml-6 mb-2 text-left', // Keep explicit text-left
-    // *** FIX APPLIED HERE: Removed 'block' class ***
-    listitem: 'mb-1 text-left',
-    // *** END FIX ***
+    ul: 'list-disc ml-6 mb-2 text-left text-white', // Added text-white
+    ol: 'list-decimal ml-6 mb-2 text-left text-white', // Added text-white
+    listitem: 'mb-1 text-left text-white',
   },
   text: {
     bold: 'font-bold',
     italic: 'italic',
     underline: 'underline',
     strikethrough: 'line-through', // If used
-    code: 'bg-gray-100 text-sm font-mono px-1 py-0.5 rounded mx-0.5',
+    code: 'bg-dark-700 text-sm font-mono px-1 py-0.5 rounded mx-0.5 text-accent-blue', // Updated for dark theme
   },
-  link: 'text-blue-600 hover:underline cursor-pointer',
-  quote: 'border-l-4 border-gray-300 pl-4 italic my-4',
+  link: 'text-accent-purple hover:underline cursor-pointer', // Updated to match dark theme accent color
+  quote: 'border-l-4 border-gray-600 pl-4 italic my-4 text-gray-300', // Updated for dark theme
   // ... other theme keys if needed (e.g., code block styles)
 };
 
@@ -76,6 +75,11 @@ const KbDetailsPage = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false); // State for delete confirmation modal
   const [isDeleting, setIsDeleting] = useState(false); // State for delete operation loading
   const [deleteError, setDeleteError] = useState(''); // State for delete errors
+
+  // Get user from Redux store
+  const { user } = useSelector((state) => state.auth);
+  // Helper function to check if user is an admin
+  const isAdmin = user && user.role === 'Admin';
 
   const navigate = useNavigate(); // Hook for navigation
 
@@ -206,7 +210,7 @@ const KbDetailsPage = () => {
         {/* Using mb-4 as requested originally */}
         <Link
           to="/kb" // Link to the main KB list page route
-          className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 hover:underline transition duration-150 ease-in-out"
+          className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline transition duration-150 ease-in-out"
         >
           <ArrowLeft size={16} className="mr-1" /> {/* Optional icon */}
           Back to Knowledge Base List
@@ -215,7 +219,7 @@ const KbDetailsPage = () => {
       {/* *** END BACK LINK *** */}
 
       {/* Header */}
-      <h1 className="text-3xl font-bold mb-2 text-gray-900">{article.title}</h1>
+      <h1 className="text-3xl font-bold mb-2 text-white">{article.title}</h1>
 
       {/* Display Lexical Rendering Error if occurs */}
       {renderError && (
@@ -230,7 +234,7 @@ const KbDetailsPage = () => {
 
       {/* Lexical Content Renderer */}
       {/* Apply prose for typography defaults, wrapped in a styled container */}
-      <div className="prose lg:prose-xl max-w-none mb-6 p-6 bg-white rounded-lg shadow-md border border-gray-200">
+      <div className="prose lg:prose-xl max-w-none mb-6 p-6 bg-card border border-dark-700 shadow-card rounded-lg text-white">
         {/* Check if content exists before attempting render */}
         {article.content ? (
           <LexicalComposer
@@ -243,7 +247,7 @@ const KbDetailsPage = () => {
               contentEditable={
                 // Render content in a non-editable element
                 <ContentEditable
-                  className="read-only-content-area"
+                  className="read-only-content-area text-white"
                   aria-readonly={true}
                   role="article"
                   // editable={false} // Removed non-boolean attribute warning
@@ -255,13 +259,13 @@ const KbDetailsPage = () => {
             {/* No other plugins like History, OnChange needed for viewing */}
           </LexicalComposer>
         ) : (
-          <p className="italic text-gray-500">Article content is empty.</p>
+          <p className="italic text-gray-400">Article content is empty.</p>
         )}
       </div>
       {/* End Lexical Renderer */}
 
       {/* Metadata Display - Placed after content renderer as per your code */}
-      <div className="mb-6 text-sm text-gray-500 flex flex-wrap gap-x-4 gap-y-1">
+      <div className="mb-6 text-sm text-gray-400 flex flex-wrap gap-x-4 gap-y-1">
         {article.categories?.length > 0 && (
           <span>Categories: {article.categories.join(', ')}</span>
         )}
@@ -270,80 +274,29 @@ const KbDetailsPage = () => {
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="mt-6 border-t pt-4 flex flex-wrap gap-3 items-center">
-        {' '}
-        {/* Added flex-wrap and items-center */}
-        <Link
-          // Ensure article._id is the correct field from your API
-          to={`/kb/${article._id || id}/edit`}
-          className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded shadow-sm transition duration-150 ease-in-out"
-        >
-          Edit
-        </Link>
-        {/* Version History Button */}
-        <Link
-          to={`/kb/${article._id || id}/versions`} // Link to a potential versions page/modal trigger
-          className="inline-block bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded shadow-sm transition duration-150 ease-in-out"
-        >
-          View History
-        </Link>
-        {/* Delete Button - Moved to the end for better flow */}
-        <button
-          type="button"
-          onClick={() => setShowConfirmModal(true)} // Open confirmation modal
-          className="inline-block bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded shadow-sm transition duration-150 ease-in-out disabled:opacity-50"
-          disabled={isDeleting} // Disable button while deleting
-        >
-          Delete
-        </button>
-      </div>
-
-      {/* Delete Confirmation Modal */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
-          <div className="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
-            <div className="mt-3 text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                <AlertTriangle size={24} className="text-red-600" />
-              </div>
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">
-                Delete Article
-              </h3>
-              <div className="mt-2 px-7 py-3">
-                <p className="text-sm text-gray-500">
-                  Are you sure you want to delete this article? This action
-                  cannot be undone.
-                </p>
-              </div>
-              {deleteError && (
-                <div className="mt-2 px-7 py-1 text-sm text-red-600">
-                  Error: {deleteError}
-                </div>
-              )}
-              <div className="items-center px-4 py-3 mt-4 flex justify-center gap-4">
-                <button
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  {isDeleting ? 'Deleting...' : 'Confirm Delete'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setDeleteError(''); // Clear error when cancelling
-                  }}
-                  disabled={isDeleting}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Action Buttons - Only show for Admin users */}
+      {isAdmin && (
+        <div className="mt-6 border-t pt-4 flex flex-wrap gap-3 items-center">
+          {' '}
+          {/* Added flex-wrap and items-center */}
+          <Link
+            // Ensure article._id is the correct field from your API
+            to={`/kb/${article._id || id}/edit`}
+            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded shadow-sm transition duration-150 ease-in-out"
+          >
+            Edit
+          </Link>
+          {/* Version History Button */}
+          <Link
+            to={`/kb/${article._id || id}/versions`} // Link to a potential versions page/modal trigger
+            className="inline-block bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded shadow-sm transition duration-150 ease-in-out"
+          >
+            View History
+          </Link>
         </div>
       )}
+
+      {/* Delete Confirmation Modal - Removed */}
 
       {/* --- Comment Section --- */}
       {/* Render CommentList only if article ID is available */}

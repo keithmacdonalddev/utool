@@ -27,28 +27,28 @@ import Toolbar from './Toolbar'; // Assuming Toolbar is correctly set up
 const theme = {
   ltr: 'ltr',
   rtl: 'rtl',
-  paragraph: 'mb-2 text-left', // Ensure left alignment
+  paragraph: 'mb-2 text-left text-white', // Added text-white for dark theme
   heading: {
-    h1: 'text-3xl font-bold my-4',
-    h2: 'text-2xl font-bold my-3',
-    h3: 'text-xl font-bold my-2',
+    h1: 'text-3xl font-bold my-4 text-white',
+    h2: 'text-2xl font-bold my-3 text-white',
+    h3: 'text-xl font-bold my-2 text-white',
     // h4, h5, h6... if used
   },
   list: {
-    ul: 'list-disc ml-6 mb-2',
-    ol: 'list-decimal ml-6 mb-2',
-    listitem: 'mb-1',
+    ul: 'list-disc ml-6 mb-2 text-white',
+    ol: 'list-decimal ml-6 mb-2 text-white',
+    listitem: 'mb-1 text-white',
   },
   text: {
     bold: 'font-bold',
     italic: 'italic',
     underline: 'underline',
     strikethrough: 'line-through', // If used
-    code: 'bg-gray-100 text-sm font-mono px-1 py-0.5 rounded mx-0.5', // For inline code
+    code: 'bg-dark-700 text-sm font-mono px-1 py-0.5 rounded mx-0.5 text-accent-blue', // For inline code - updated for dark theme
   },
-  link: 'text-blue-600 hover:underline cursor-pointer',
-  quote: 'border-l-4 border-gray-300 pl-4 italic my-4',
-  // code: 'bg-gray-100 block p-2 my-2 font-mono text-sm overflow-x-auto rounded border', // For code blocks (if using CodeNode)
+  link: 'text-accent-purple hover:underline cursor-pointer',
+  quote: 'border-l-4 border-dark-500 pl-4 italic my-4 text-gray-300',
+  // code: 'bg-dark-700 block p-2 my-2 font-mono text-sm overflow-x-auto rounded border border-dark-600 text-accent-blue', // For code blocks (if using CodeNode)
   // ... other theme keys needed
 };
 
@@ -127,7 +127,7 @@ const LexicalEditor = ({
   return (
     // Pass the dynamically created initialConfig
     <LexicalComposer initialConfig={initialConfig}>
-      <div className="editor-container border border-gray-300 rounded-lg shadow-sm bg-white">
+      <div className="editor-container border border-dark-600 rounded-lg shadow-sm bg-dark-800">
         <Toolbar />{' '}
         {/* Assumes Toolbar uses useLexicalComposerContext correctly */}
         {/* Apply padding to the inner div containing ContentEditable */}
@@ -135,11 +135,11 @@ const LexicalEditor = ({
           <RichTextPlugin
             contentEditable={
               // Apply editor styling here, no padding needed as parent has it
-              <ContentEditable className="editor-input min-h-[200px] focus:outline-none block w-full text-left resize-y" /> // Added resize-y example
+              <ContentEditable className="editor-input min-h-[200px] focus:outline-none block w-full text-left resize-y text-white" /> // Added text-white for content
             }
             placeholder={
               // Align placeholder with the parent's padding (top-4, left-4 matches p-4)
-              <div className="editor-placeholder text-gray-400 absolute top-4 left-4 pointer-events-none select-none">
+              <div className="editor-placeholder text-gray-500 absolute top-4 left-4 pointer-events-none select-none">
                 Enter content here...
               </div>
             }

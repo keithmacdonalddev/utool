@@ -1,147 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import LexicalEditor from '../components/Editor/LexicalEditor';
+import { useSelector } from 'react-redux';
 import api from '../utils/api';
-import FormInput from '../components/common/FormInput';
+import KbForm from '../components/kb/KbForm';
 import Button from '../components/common/Button';
-import Card from '../components/common/Card';
-import PageHeader from '../components/common/PageHeader';
-import Alert from '../components/common/Alert';
+import { ArrowLeft } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 const KbCreatePage = () => {
-  const [formData, setFormData] = useState({
-    title: '',
-    tags: '',
-    categories: '',
-  });
-  const [editorContent, setEditorContent] = useState('');
-
   const navigate = useNavigate();
-  const [isError, setIsError] = useState(false);
-  const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const onChange = (e) => {
-    setFormData((prevState) => ({
-      ...prevState,
-      [e.target.name]: e.target.value,
-    }));
-  };
+  // Get user from Redux store
+  const { user } = useSelector((state) => state.auth);
 
-  // This function will receive serialized editor content
-  const handleEditorContentChange = (content) => {
-    setEditorContent(content);
-  };
-
-  const onSubmit = async (e) => {
-    e.preventDefault();
-
-    // Check if the editor content is empty or invalid
-    if (
-      !editorContent ||
-      editorContent.trim() === '' ||
-      editorContent === '{}'
-    ) {
-      setIsError(true);
-      setMessage('Content is required.');
-      return;
+  useEffect(() => {
+    // Check if user is admin, if not redirect to KB list page
+    if (user && user.role !== 'Admin') {
+      navigate('/kb');
+      toast.error('You do not have permission to create KB articles');
     }
+  }, [user, navigate]);
 
-    const { title, tags, categories } = formData;
-
-    const newArticle = {
-      title,
-      content: editorContent, // This is now a serialized JSON string
-      tags: tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter((tag) => tag !== ''),
-      categories: categories
-        .split(',')
-        .map((cat) => cat.trim())
-        .filter((cat) => cat !== ''),
-    };
-
+  const handleSubmit = async (formData) => {
     try {
-      await api.post('/kb', newArticle);
-      navigate('/kb'); // Redirect to KB list after creation
+      setIsSubmitting(true);
+      const response = await api.post('/api/kb', formData);
+      navigate(`/kb/${response.data.data._id}`);
+      toast.success('Article created successfully');
     } catch (error) {
-      setIsError(true);
-      setMessage(
-        error.response?.data?.message ||
-          'Failed to create knowledge base article.'
-      );
+      console.error('Error creating article:', error);
+      toast.error(error.response?.data?.message || 'Failed to create article');
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="container mx-auto p-4">
-      <PageHeader title="Create Knowledge Base Article" backLink="/kb" />
+      {/* Header Row: Back Button and Title */}
+      <div className="flex items-center mb-6">
+        <Button
+          variant="ghost"
+          onClick={() => navigate('/kb')}
+          className="mr-4"
+        >
+          <ArrowLeft size={18} />
+        </Button>
+        <h1 className="text-2xl font-bold text-white">Create New Article</h1>
+      </div>
 
-      {isError && (
-        <Alert
-          type="error"
-          message={message}
-          onClose={() => setIsError(false)}
-        />
-      )}
-
-      <Card>
-        <form onSubmit={onSubmit} className="px-2">
-          <FormInput
-            id="title"
-            label="Title"
-            placeholder="Article Title"
-            name="title"
-            value={formData.title}
-            onChange={onChange}
-            required
-          />
-
-          <div className="mb-4">
-            <label
-              className="block text-text text-sm font-bold mb-2"
-              htmlFor="content"
-            >
-              Content
-            </label>
-            <div className="border border-dark-600 rounded-lg">
-              <LexicalEditor onContentChange={handleEditorContentChange} />
-            </div>
-            {isError && message === 'Content is required.' && (
-              <p className="text-red-500 text-xs italic mt-1">
-                Content is required
-              </p>
-            )}
-          </div>
-
-          <FormInput
-            id="tags"
-            label="Tags (comma separated)"
-            placeholder="tag1, tag2, tag3"
-            name="tags"
-            value={formData.tags}
-            onChange={onChange}
-            helpText="Separate multiple tags with commas"
-          />
-
-          <FormInput
-            id="categories"
-            label="Categories (comma separated)"
-            placeholder="category1, category2"
-            name="categories"
-            value={formData.categories}
-            onChange={onChange}
-            helpText="Separate multiple categories with commas"
-            className="mb-6"
-          />
-
-          <div className="flex items-center justify-center">
-            <Button type="submit" variant="primary">
-              Create Article
-            </Button>
-          </div>
-        </form>
-      </Card>
+      <KbForm onSubmit={handleSubmit} isSubmitting={isSubmitting} />
     </div>
   );
 };

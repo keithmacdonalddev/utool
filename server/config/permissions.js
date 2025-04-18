@@ -1,10 +1,10 @@
 // Define permission levels constants (optional but good practice)
 const ACCESS_LEVELS = {
-  FULL: 'full',         // Can perform all actions (CRUD) on all items
+  FULL: 'full', // Can perform all actions (CRUD) on all items
   CREATE_EDIT: 'create_edit', // Can create new items and edit/delete *any* item (like KB for Pro)
-  OWN: 'own',           // Can perform all actions (CRUD) but only on items they created/own
-  READ: 'read',         // Can only view items
-  NONE: 'none',         // No access
+  OWN: 'own', // Can perform all actions (CRUD) but only on items they created/own
+  READ: 'read', // Can only view items
+  NONE: 'none', // No access
 };
 
 // Define permissions based on roles using access level strings
@@ -20,7 +20,7 @@ const permissions = {
   'Pro User': {
     userManagement: ACCESS_LEVELS.NONE,
     blogPosts: ACCESS_LEVELS.OWN, // Requirement: Create/Edit Own -> Maps to 'own'
-    knowledgeBase: ACCESS_LEVELS.CREATE_EDIT, // Requirement: Create/Edit -> Maps to 'create_edit' (can edit others' KB)
+    knowledgeBase: ACCESS_LEVELS.READ, // Changed from CREATE_EDIT to READ - only admin can create/edit KB articles
     projects: ACCESS_LEVELS.FULL, // Requirement: Full -> Maps to 'full'
     tasks: ACCESS_LEVELS.FULL, // Requirement: Full -> Maps to 'full'
   },
@@ -43,7 +43,6 @@ const featureFlags = {
   auditLogs: true,
 };
 
-
 // Helper function (optional) to check if a user has *at least* a certain level of access
 // This simplifies checks in the authorize middleware
 const hasAccess = (userLevel, requiredLevel) => {
@@ -54,20 +53,26 @@ const hasAccess = (userLevel, requiredLevel) => {
     return true; // Full access grants all levels
   }
   if (userLevel === ACCESS_LEVELS.CREATE_EDIT) {
-    return requiredLevel === ACCESS_LEVELS.CREATE_EDIT || requiredLevel === ACCESS_LEVELS.OWN || requiredLevel === ACCESS_LEVELS.READ;
+    return (
+      requiredLevel === ACCESS_LEVELS.CREATE_EDIT ||
+      requiredLevel === ACCESS_LEVELS.OWN ||
+      requiredLevel === ACCESS_LEVELS.READ
+    );
   }
   if (userLevel === ACCESS_LEVELS.OWN) {
     // 'own' implies ability to read own, create, update own, delete own.
     // It does NOT imply ability to read others' items unless requiredLevel is specifically 'read'.
     // This logic might need refinement in the middleware based on the specific action (read vs write).
     // For simplicity here, let's assume 'own' allows 'read' and 'own' actions.
-     return requiredLevel === ACCESS_LEVELS.OWN || requiredLevel === ACCESS_LEVELS.READ;
+    return (
+      requiredLevel === ACCESS_LEVELS.OWN ||
+      requiredLevel === ACCESS_LEVELS.READ
+    );
   }
   if (userLevel === ACCESS_LEVELS.READ) {
     return requiredLevel === ACCESS_LEVELS.READ;
   }
   return false;
 };
-
 
 module.exports = { permissions, featureFlags, ACCESS_LEVELS, hasAccess };

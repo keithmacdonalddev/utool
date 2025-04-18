@@ -114,10 +114,12 @@ const Toolbar = () => {
   };
 
   const buttonClasses = (isActive) =>
-    `p-1 rounded hover:bg-gray-100 ${isActive ? 'bg-gray-200' : ''}`;
+    `p-1 rounded hover:bg-dark-600 text-gray-200 ${
+      isActive ? 'bg-dark-600' : ''
+    }`;
 
   return (
-    <div className="flex flex-wrap gap-2 border-b px-2 py-1 bg-gray-50 sticky top-0 z-10">
+    <div className="flex flex-wrap gap-2 border-b border-dark-600 px-2 py-1 bg-dark-700 sticky top-0 z-10">
       {/* Text formatting */}
       <button
         onClick={() => applyFormat('bold')}
@@ -141,7 +143,7 @@ const Toolbar = () => {
         <Underline size={18} />
       </button>
 
-      <div className="h-6 w-px mx-1 bg-gray-200" />
+      <div className="h-6 w-px mx-1 bg-dark-500" />
 
       {/* Headings */}
       <button
@@ -166,7 +168,7 @@ const Toolbar = () => {
         <Heading2 size={18} />
       </button>
 
-      <div className="h-6 w-px mx-1 bg-gray-200" />
+      <div className="h-6 w-px mx-1 bg-dark-500" />
 
       {/* Lists */}
       <button
@@ -191,7 +193,7 @@ const Toolbar = () => {
         <X size={18} />
       </button>
 
-      <div className="h-6 w-px mx-1 bg-gray-200" />
+      <div className="h-6 w-px mx-1 bg-dark-500" />
 
       {/* Link */}
       <button
@@ -202,7 +204,7 @@ const Toolbar = () => {
         <LinkIcon size={18} />
       </button>
 
-      <div className="h-6 w-px mx-1 bg-gray-200" />
+      <div className="h-6 w-px mx-1 bg-dark-500" />
 
       {/* Undo/Redo */}
       <button

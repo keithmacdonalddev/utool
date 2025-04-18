@@ -8,7 +8,8 @@ const KnowledgeBaseArticle = require('../models/KnowledgeBaseArticle');
 // @access  Private
 exports.getKbArticles = async (req, res, next) => {
   try {
-    const kbArticles = await KnowledgeBaseArticle.find();
+    // Get all articles and sort by views (descending)
+    const kbArticles = await KnowledgeBaseArticle.find().sort({ views: -1 });
     res.status(200).json({ success: true, data: kbArticles });
   } catch (err) {
     console.error(err);
@@ -61,12 +62,19 @@ exports.createKbArticle = async (req, res, next) => {
 // @access  Private
 exports.getKbArticle = async (req, res, next) => {
   try {
+    // Find the article first
     const kbArticle = await KnowledgeBaseArticle.findById(req.params.id);
+
     if (!kbArticle) {
       return res
         .status(404)
         .json({ success: false, message: 'Article not found' });
     }
+
+    // Increment the view counter
+    kbArticle.views += 1;
+    await kbArticle.save();
+
     res.status(200).json({ success: true, data: kbArticle });
   } catch (err) {
     console.error(err);
@@ -168,6 +176,17 @@ exports.deleteKbArticle = async (req, res, next) => {
       tags: kbArticle.tags,
     };
 
+    // Import Comment model
+    const Comment = require('../models/Comment');
+
+    // Delete all comments associated with the article
+    const deleteResult = await Comment.deleteMany({ article: req.params.id });
+
+    // Log the number of comments deleted
+    console.log(
+      `Deleted ${deleteResult.deletedCount} comments associated with article ${req.params.id}`
+    );
+
     // Delete the article
     await KnowledgeBaseArticle.findByIdAndDelete(req.params.id);
 
@@ -177,9 +196,14 @@ exports.deleteKbArticle = async (req, res, next) => {
       articleId: articleInfo.id,
       articleTitle: articleInfo.title,
       articleInfo: articleInfo,
+      commentsDeleted: deleteResult.deletedCount, // Add info about deleted comments to audit log
     });
 
-    res.status(200).json({ success: true, data: {} });
+    res.status(200).json({
+      success: true,
+      data: {},
+      message: `Article deleted successfully along with ${deleteResult.deletedCount} related comments`,
+    });
   } catch (err) {
     console.error(err);
 
@@ -333,7 +357,10 @@ exports.searchKbArticles = async (req, res, next) => {
       searchConditions.categories = { $in: categories };
     }
 
-    const kbArticles = await KnowledgeBaseArticle.find(searchConditions);
+    const kbArticles = await KnowledgeBaseArticle.find(searchConditions).sort({
+      views: -1,
+    }); // Sort by views (most to least)
+
     res.status(200).json({ success: true, data: kbArticles });
   } catch (err) {
     console.error(err);

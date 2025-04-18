@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux'; // Import useSelector
 import api from '../utils/api';
 import FormInput from '../components/common/FormInput';
 import LexicalEditor from '../components/Editor/LexicalEditor';
@@ -9,6 +10,18 @@ import socket from '../utils/socket'; // Import the socket utility
 
 const KbEditPage = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [article, setArticle] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  // Add state for delete confirmation modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Get user from Redux store
+  const { user } = useSelector((state) => state.auth);
+
   // State for standard form fields
   const [formData, setFormData] = useState({
     title: '',
@@ -25,14 +38,17 @@ const KbEditPage = () => {
   const socketInitialized = useRef(false);
 
   // Loading and Error States
-  const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false); // Tracks general page errors (fetch or update)
   const [message, setMessage] = useState('');
 
-  const navigate = useNavigate();
-
   // --- Fetch existing article data ---
   useEffect(() => {
+    // Check if user is admin, if not redirect to KB details page
+    if (user && user.role !== 'Admin') {
+      navigate(`/kb/${id}`);
+      return;
+    }
+
     const fetchArticle = async () => {
       // Reset states for new fetch
       setIsLoading(true);
@@ -129,7 +145,7 @@ const KbEditPage = () => {
     }
 
     // --- End Socket Connection Lifecycle ---
-  }, [id]); // Effect depends on article ID
+  }, [id, navigate, user]); // Effect depends on article ID and user
 
   // --- Handle changes in standard form inputs ---
   const handleFormChange = useCallback((e) => {
@@ -217,6 +233,24 @@ const KbEditPage = () => {
   };
   // --- End Cancel Handler ---
 
+  // --- Handle Delete Article ---
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    setIsError(false);
+    setMessage('');
+
+    try {
+      await api.delete(`/kb/${id}`);
+      // Close modal and navigate to KB list after successful deletion
+      setShowDeleteModal(false);
+      navigate('/kb');
+    } catch (error) {
+      setIsError(true);
+      setMessage(error.response?.data?.message || 'Failed to delete article.');
+      setIsDeleting(false);
+    }
+  };
+
   // --- Render Logic ---
 
   if (isLoading) {
@@ -244,13 +278,15 @@ const KbEditPage = () => {
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-2">Edit Knowledge Base Article</h1>
+      <h1 className="text-2xl font-bold mb-2 text-white">
+        Edit Knowledge Base Article
+      </h1>
       {/* Socket Connection Status Indicator */}
-      <div className="mb-4 text-xs">
+      <div className="mb-4 text-xs text-gray-300">
         Collaboration Status:
         <span
           className={`ml-2 font-semibold ${
-            isSocketConnected ? 'text-green-600' : 'text-red-600'
+            isSocketConnected ? 'text-green-400' : 'text-red-400'
           }`}
         >
           {isSocketConnected ? 'Connected' : 'Disconnected'}
@@ -275,7 +311,7 @@ const KbEditPage = () => {
       {isEditorReady && (
         <form
           onSubmit={onSubmit}
-          className="bg-white shadow-xl rounded-lg px-8 pt-6 pb-8 mb-4"
+          className="bg-card border border-dark-700 shadow-card rounded-lg px-8 pt-6 pb-8 mb-4"
         >
           {/* Title Input */}
           <div className="mb-4">
@@ -294,7 +330,7 @@ const KbEditPage = () => {
           {/* Lexical Editor for Content */}
           <div className="mb-4">
             <label
-              className="block text-gray-700 text-sm font-bold mb-2"
+              className="block text-white text-sm font-bold mb-2"
               htmlFor="content-editor" // Changed htmlFor to avoid conflict if needed, though not strictly necessary
             >
               Content
@@ -307,7 +343,7 @@ const KbEditPage = () => {
               />
             ) : (
               // Shouldn't be reached if isEditorReady logic is correct, but good fallback
-              <div className="border rounded min-h-[240px] relative p-4 text-gray-500 bg-gray-100 flex items-center justify-center">
+              <div className="border border-dark-700 rounded min-h-[240px] relative p-4 text-gray-300 bg-dark-800 flex items-center justify-center">
                 <span>Initializing editor...</span>
               </div>
             )}
@@ -339,26 +375,70 @@ const KbEditPage = () => {
             />
           </div>
 
-          {/* Submit/Cancel Button Container */}
-          <div className="flex items-center justify-center pt-4 gap-4">
-            {' '}
-            {/* Update Button */}
-            <button
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
-              type="submit"
-            >
-              Update Article
-            </button>
-            {/* Cancel Button */}
-            <button
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
-              type="button" // Important: type="button" to prevent form submission
-              onClick={handleCancel}
-            >
-              Cancel
-            </button>
+          {/* Action Buttons Container */}
+          <div className="flex items-center justify-between pt-4">
+            {/* Update & Cancel Buttons */}
+            <div className="flex items-center gap-4">
+              <button
+                className="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+                type="submit"
+              >
+                Update Article
+              </button>
+              <button
+                className="bg-dark-700 hover:bg-dark-600 text-gray-200 font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+                type="button" // Important: type="button" to prevent form submission
+                onClick={handleCancel}
+              >
+                Cancel
+              </button>
+            </div>
+
+            {/* Delete Button - Only visible for Admin users */}
+            {user && user.role === 'Admin' && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out"
+              >
+                Delete Article
+              </button>
+            )}
           </div>
         </form>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-dark-800 rounded-lg p-6 max-w-md w-full border border-dark-700">
+            <h3 className="text-xl font-bold text-white mb-4">
+              Delete Article
+            </h3>
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete this article? This action cannot
+              be undone.
+            </p>
+            <div className="flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="bg-dark-700 hover:bg-dark-600 text-gray-200 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

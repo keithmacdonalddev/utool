@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux'; // Import useSelector
 import api from '../utils/api';
-import { Tag, Layers, Trash2, AlertTriangle, ArrowLeft } from 'lucide-react'; // Added ArrowLeft
+import { Tag, Layers, ArrowLeft, Eye } from 'lucide-react'; // Removed Trash2 and AlertTriangle since we're removing the delete functionality
 import KbSearchBar from '../components/kb/KbSearchBar';
 import Button from '../components/common/Button';
 
@@ -13,10 +14,11 @@ const KbListPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState('');
-  const [showConfirmModal, setShowConfirmModal] = useState(false); // State for delete confirmation modal
-  const [articleToDeleteId, setArticleToDeleteId] = useState(null); // ID of article to delete
-  const [isDeleting, setIsDeleting] = useState(false); // State for delete operation loading
-  const [deleteError, setDeleteError] = useState(''); // State for delete errors
+
+  // Get user from Redux store
+  const { user } = useSelector((state) => state.auth);
+  // Helper function to check if user is an admin
+  const isAdmin = user && user.role === 'Admin';
 
   const navigate = useNavigate();
 
@@ -82,41 +84,6 @@ const KbListPage = () => {
     fetchOrSearchArticles(searchParams); // Trigger fetch/search
   };
 
-  // --- Delete Handler ---
-  const handleDelete = async () => {
-    if (!articleToDeleteId) {
-      setDeleteError('Article ID is missing.');
-      return;
-    }
-    setIsDeleting(true);
-    setDeleteError('');
-    try {
-      await api.delete(`/kb/${articleToDeleteId}`);
-      // Remove article from state
-      setArticles((prevArticles) =>
-        prevArticles.filter((article) => article._id !== articleToDeleteId)
-      );
-      setShowConfirmModal(false);
-      setArticleToDeleteId(null); // Reset ID
-    } catch (error) {
-      console.error('Delete Error:', error);
-      setDeleteError(
-        error.response?.data?.message || 'Failed to delete article.'
-      );
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  // --- Open Modal Handler ---
-  const openDeleteModal = (e, articleId) => {
-    e.preventDefault(); // Prevent the Link navigation
-    e.stopPropagation(); // Stop event bubbling up
-    setArticleToDeleteId(articleId);
-    setShowConfirmModal(true);
-    setDeleteError(''); // Clear previous errors
-  };
-
   // --- Render Logic ---
 
   if (isLoading) {
@@ -155,14 +122,17 @@ const KbListPage = () => {
           </Link>
           <h1 className="text-2xl font-bold text-[#F8FAFC]">Knowledge Base</h1>
         </div>
-        <Button
-          variant="primary"
-          className="py-2 px-6 text-base font-bold shadow"
-          style={{ color: '#F8FAFC' }}
-          onClick={() => (window.location.href = '/kb/new')}
-        >
-          + New Article
-        </Button>
+        {/* Only show New Article button to admin users */}
+        {isAdmin && (
+          <Button
+            variant="primary"
+            className="py-2 px-6 text-base font-bold shadow"
+            style={{ color: '#F8FAFC' }}
+            onClick={() => (window.location.href = '/kb/new')}
+          >
+            + New Article
+          </Button>
+        )}
       </div>
       {/* Search Bar - Standalone, no background */}
       <div className="px-4 md:px-0 mt-2">
@@ -209,6 +179,11 @@ const KbListPage = () => {
                   >
                     {article.title}
                   </h2>
+                  {/* View count */}
+                  <div className="flex items-center text-xs text-gray-400 mb-2">
+                    <Eye size={14} className="mr-1" />
+                    <span>{article.views || 0} views</span>
+                  </div>
                   {/* Tags */}
                   {article.tags?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2 text-xs items-center">
@@ -252,20 +227,9 @@ const KbListPage = () => {
                 {/* Action Buttons Area */}
                 <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end items-center">
                   {/* Subtle View Cue */}
-                  <span className="text-xs text-gray-400 mr-auto">
+                  <span className="text-xs text-gray-400">
                     Click card to view
                   </span>
-                  {/* Delete Button */}
-                  <button
-                    type="button"
-                    onClick={(e) => openDeleteModal(e, article._id)}
-                    className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1"
-                    aria-label={`Delete article ${article.title}`}
-                    title="Delete Article"
-                    disabled={isDeleting && articleToDeleteId === article._id} // Disable only the specific button being processed
-                  >
-                    <Trash2 size={18} />
-                  </button>
                 </div>
               </Link>
             ))}
@@ -273,54 +237,6 @@ const KbListPage = () => {
         )}
       </div>{' '}
       {/* Closing tag for scrollable content area */}
-      {/* Delete Confirmation Modal - Remains outside */}
-      {showConfirmModal && articleToDeleteId && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full z-50 flex justify-center items-center p-4">
-          {' '}
-          {/* Added padding, increased opacity */}
-          <div className="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
-            <div className="mt-3 text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                <AlertTriangle size={24} className="text-red-600" />
-              </div>
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">
-                Delete Article
-              </h3>
-              <div className="mt-2 px-7 py-3">
-                <p className="text-sm text-gray-500">
-                  Are you sure you want to delete this article? This action
-                  cannot be undone.
-                </p>
-              </div>
-              {deleteError && (
-                <div className="mt-2 px-7 py-1 text-sm text-red-600">
-                  Error: {deleteError}
-                </div>
-              )}
-              <div className="items-center px-4 py-3 mt-4 flex justify-center gap-4">
-                <button
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  {isDeleting ? 'Deleting...' : 'Confirm Delete'}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowConfirmModal(false);
-                    setArticleToDeleteId(null);
-                    setDeleteError('');
-                  }}
-                  disabled={isDeleting}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div> // Closing tag for the main flex container
   );
 };
