@@ -5,14 +5,16 @@ import {
   LayoutDashboard,
   FolderKanban,
   Library,
-  Users,
+  Users, // Keep this import
   Settings,
   User,
   ChevronsLeft,
   ChevronsRight,
   Wrench,
   Star,
-} from 'lucide-react'; // Removed LineChart import
+  StickyNote, // Added for Notes
+  Trash2, // Added for Trash
+} from 'lucide-react'; // Removed UserGroup import which isn't available
 
 const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
   const { user } = useSelector((state) => state.auth);
@@ -146,7 +148,7 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
             onClick={toggleSidebar}
             title="Notes"
           >
-            <Library size={20} className="flex-shrink-0" />
+            <StickyNote size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Notes</span>
           </NavLink>
           <NavLink
@@ -161,6 +163,33 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
           >
             <Star size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Favorite Quotes</span>
+          </NavLink>
+          <NavLink
+            to="/tasks"
+            className={({ isActive }) =>
+              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
+                isActive ? activeLinkClasses : inactiveLinkClasses
+              }`
+            }
+            onClick={toggleSidebar}
+            title="Tasks"
+          >
+            <FolderKanban size={20} className="flex-shrink-0" />
+            <span className={linkTextClasses}>Tasks</span>
+          </NavLink>
+          {/* Add Friends Link */}
+          <NavLink
+            to="/friends"
+            className={({ isActive }) =>
+              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
+                isActive ? activeLinkClasses : inactiveLinkClasses
+              }`
+            }
+            onClick={toggleSidebar}
+            title="Friends"
+          >
+            <Users size={20} className="flex-shrink-0" /> {/* Use Users icon */}
+            <span className={linkTextClasses}>Friends</span>
           </NavLink>
           {/* TODO: Add Tasks link */}
           {/* Admin Links */}

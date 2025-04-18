@@ -5,6 +5,7 @@ import taskReducer from '../features/tasks/taskSlice';
 import noteReducer from '../features/notes/noteSlice';
 import kbReducer from '../features/kb/kbSlice';
 import projectReducer from '../features/projects/projectSlice'; // Import the project reducer
+import friendReducer from '../features/friends/friendSlice'; // Import the friend reducer
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     notes: noteReducer,
     kb: kbReducer,
     projects: projectReducer, // Add the project reducer to the store
+    friends: friendReducer, // Add the friend reducer to the store
   },
   // Middleware can be added here if needed (e.g., for async actions)
   // devTools: process.env.NODE_ENV !== 'production', // Enable DevTools only in development

@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LexicalEditor from '../components/Editor/LexicalEditor';
 import api from '../utils/api';
+import FormInput from '../components/common/FormInput';
+import Button from '../components/common/Button';
+import Card from '../components/common/Card';
+import PageHeader from '../components/common/PageHeader';
+import Alert from '../components/common/Alert';
 
 const KbCreatePage = () => {
   const [formData, setFormData] = useState({
@@ -70,91 +75,73 @@ const KbCreatePage = () => {
 
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Create Knowledge Base Article</h1>
+      <PageHeader title="Create Knowledge Base Article" backLink="/kb" />
+
       {isError && (
-        <div
-          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
-          role="alert"
-        >
-          <strong className="font-bold">Error!</strong> {message}
-        </div>
+        <Alert
+          type="error"
+          message={message}
+          onClose={() => setIsError(false)}
+        />
       )}
-      <form
-        onSubmit={onSubmit}
-        className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4"
-      >
-        <div className="mb-4">
-          <label
-            className="block text-gray-700 text-sm font-bold mb-2"
-            htmlFor="title"
-          >
-            Title
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+
+      <Card>
+        <form onSubmit={onSubmit} className="px-2">
+          <FormInput
             id="title"
-            type="text"
+            label="Title"
             placeholder="Article Title"
             name="title"
             value={formData.title}
             onChange={onChange}
             required
           />
-        </div>
-        <div className="mb-4">
-          <label
-            className="block text-gray-700 text-sm font-bold mb-2"
-            htmlFor="content"
-          >
-            Content
-          </label>
-          <div className="border rounded min-h-60 relative">
-            <LexicalEditor onContentChange={handleEditorContentChange} />
+
+          <div className="mb-4">
+            <label
+              className="block text-text text-sm font-bold mb-2"
+              htmlFor="content"
+            >
+              Content
+            </label>
+            <div className="border border-dark-600 rounded-lg">
+              <LexicalEditor onContentChange={handleEditorContentChange} />
+            </div>
+            {isError && message === 'Content is required.' && (
+              <p className="text-red-500 text-xs italic mt-1">
+                Content is required
+              </p>
+            )}
           </div>
-        </div>
-        <div className="mb-4">
-          <label
-            className="block text-gray-700 text-sm font-bold mb-2"
-            htmlFor="tags"
-          >
-            Tags (comma separated)
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+
+          <FormInput
             id="tags"
-            type="text"
+            label="Tags (comma separated)"
             placeholder="tag1, tag2, tag3"
             name="tags"
             value={formData.tags}
             onChange={onChange}
+            helpText="Separate multiple tags with commas"
           />
-        </div>
-        <div className="mb-6">
-          <label
-            className="block text-gray-700 text-sm font-bold mb-2"
-            htmlFor="categories"
-          >
-            Categories (comma separated)
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+
+          <FormInput
             id="categories"
-            type="text"
+            label="Categories (comma separated)"
             placeholder="category1, category2"
             name="categories"
             value={formData.categories}
             onChange={onChange}
+            helpText="Separate multiple categories with commas"
+            className="mb-6"
           />
-        </div>
-        <div className="flex items-center justify-center">
-          <button
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-            type="submit"
-          >
-            Create
-          </button>
-        </div>
-      </form>
+
+          <div className="flex items-center justify-center">
+            <Button type="submit" variant="primary">
+              Create Article
+            </Button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 };

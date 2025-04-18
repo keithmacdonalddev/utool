@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux'; // Import Redux hooks
-import { useNavigate, Link } from 'react-router-dom'; // Import Link for navigation
-import { loginUser, resetAuthStatus } from '../features/auth/authSlice'; // Import Redux actions
+import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate, Link } from 'react-router-dom';
+import { loginUser, resetAuthStatus } from '../features/auth/authSlice';
+import FormInput from '../components/common/FormInput';
+import Button from '../components/common/Button';
+import Card from '../components/common/Card';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -45,34 +48,21 @@ const LoginPage = () => {
 
   return (
     <div className="container mx-auto p-4 max-w-md">
-      {' '}
-      {/* Added max-width */}
-      <h1 className="text-3xl font-bold mb-6 text-center">Login</h1>{' '}
-      {/* Centered and styled */}
-      {/* Display Loading State */}
+      <h1 className="text-3xl font-bold mb-6 text-center text-text">Login</h1>
+
       {isLoading && <p className="text-center text-blue-500">Loading...</p>}
-      {/* Display API Errors from Redux State */}
+
       {isError && message && (
-        <p className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
+        <div className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
           {message}
-        </p>
+        </div>
       )}
-      <form
-        onSubmit={onSubmit}
-        className="bg-card text-text shadow-card rounded-xl px-8 pt-6 pb-8 mb-4"
-      >
-        <div className="mb-4">
-          <label
-            className="block text-[#F8FAFC] text-sm font-bold mb-2"
-            htmlFor="email"
-          >
-            Email <span className="text-red-500">*</span>
-          </label>
-          <input
-            className={`shadow appearance-none border border-dark-600 rounded w-full py-2 px-3 bg-dark-700 text-text leading-tight focus:outline-none focus:shadow-outline ${
-              isError ? 'border-red-500' : ''
-            } ${isLoading ? 'opacity-60' : ''}`}
+
+      <Card>
+        <form onSubmit={onSubmit} className="px-2">
+          <FormInput
             id="email"
+            label="Email"
             type="email"
             placeholder="your.email@example.com"
             name="email"
@@ -80,20 +70,12 @@ const LoginPage = () => {
             onChange={onChange}
             required
             disabled={isLoading}
+            error={isError ? message : null}
           />
-        </div>
-        <div className="mb-6">
-          <label
-            className="block text-[#F8FAFC] text-sm font-bold mb-2"
-            htmlFor="password"
-          >
-            Password <span className="text-red-500">*</span>
-          </label>
-          <input
-            className={`shadow appearance-none border border-dark-600 rounded w-full py-2 px-3 bg-dark-700 text-text mb-3 leading-tight focus:outline-none focus:shadow-outline ${
-              isError ? 'border-red-500' : ''
-            } ${isLoading ? 'opacity-60' : ''}`}
+
+          <FormInput
             id="password"
+            label="Password"
             type="password"
             placeholder="******************"
             name="password"
@@ -101,33 +83,26 @@ const LoginPage = () => {
             onChange={onChange}
             required
             disabled={isLoading}
+            className="mb-6"
           />
-          {/* TODO: Add link for "Forgot Password?" later */}
-        </div>
-        <div className="flex items-center justify-center">
-          {' '}
-          {/* Centered button */}
-          <button
-            className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full ${
-              isLoading ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-            type="submit"
-            disabled={isLoading} // Disable button when loading
-          >
-            {isLoading ? 'Logging in...' : 'Login'}
-          </button>
-        </div>
-        <p className="text-center text-[#C7C9D1] text-xs mt-4">
-          Don't have an account?{' '}
-          <Link
-            className="text-accent-purple font-bold hover:text-accent-blue hover:underline"
-            to="/register"
-          >
-            Register here
-          </Link>
-        </p>
-      </form>{' '}
-      {/* Correctly closes the form */}
+
+          <div className="flex items-center justify-center">
+            <Button type="submit" disabled={isLoading} className="w-full">
+              {isLoading ? 'Logging in...' : 'Login'}
+            </Button>
+          </div>
+
+          <p className="text-center text-text-muted text-xs mt-4">
+            Don't have an account?{' '}
+            <Link
+              className="text-accent-purple font-bold hover:text-accent-blue hover:underline"
+              to="/register"
+            >
+              Register here
+            </Link>
+          </p>
+        </form>
+      </Card>
     </div>
   );
 };

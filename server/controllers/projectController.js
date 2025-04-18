@@ -13,10 +13,23 @@ exports.getProjects = async (req, res, next) => {
       // .populate('members', 'name email') // Optional: populate all members
       .sort({ createdAt: -1 });
 
+    // Calculate progress for each project
+    const projectsWithProgress = await Promise.all(
+      projects.map(async (proj) => {
+        const total = await Task.countDocuments({ project: proj._id });
+        const completed = await Task.countDocuments({
+          project: proj._id,
+          status: 'Completed',
+        });
+        const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+        return { ...proj._doc, progress };
+      })
+    );
+
     res.status(200).json({
       success: true,
-      count: projects.length,
-      data: projects,
+      count: projectsWithProgress.length,
+      data: projectsWithProgress,
     });
   } catch (err) {
     console.error('Get Projects Error:', err);
@@ -36,7 +49,8 @@ exports.createProject = async (req, res, next) => {
     // The owner is automatically added to members by pre-save hook in model
 
     // Extract allowed fields
-    const { name, description, status, startDate, endDate, members } = req.body;
+    const { name, description, status, startDate, endDate, priority, members } =
+      req.body;
 
     // Basic validation
     if (!name) {
@@ -52,6 +66,7 @@ exports.createProject = async (req, res, next) => {
       ...(status && { status }),
       ...(startDate && { startDate }),
       ...(endDate && { endDate }),
+      ...(priority && { priority }), // Add priority
       // If members are provided in request, ensure owner is included
       members: members
         ? [...new Set([req.user.id.toString(), ...members])]
@@ -106,12 +121,10 @@ exports.getProject = async (req, res, next) => {
       .populate('members', 'name email'); // Populate details
 
     if (!project) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id of ${req.params.id}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id of ${req.params.id}`,
+      });
     }
 
     // Check if the logged-in user is a member of the project
@@ -119,25 +132,30 @@ exports.getProject = async (req, res, next) => {
       member._id.equals(req.user.id)
     );
     if (!isMember) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to access this project',
-        });
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to access this project',
+      });
     }
+
+    // Compute progress for this project
+    const totalTasks = await Task.countDocuments({ project: project._id });
+    const completedTasks = await Task.countDocuments({
+      project: project._id,
+      status: 'Completed',
+    });
+    project._doc.progress =
+      totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
     res.status(200).json({ success: true, data: project });
   } catch (err) {
     console.error('Get Project Error:', err);
     // Handle invalid ObjectId format
     if (err.name === 'CastError') {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id of ${req.params.id}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id of ${req.params.id}`,
+      });
     }
     res
       .status(500)
@@ -153,23 +171,19 @@ exports.updateProject = async (req, res, next) => {
     let project = await Project.findById(req.params.id);
 
     if (!project) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id of ${req.params.id}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id of ${req.params.id}`,
+      });
     }
 
     // Check if the logged-in user is the owner (or has specific update permissions later)
     if (project.owner.toString() !== req.user.id) {
       // TODO: Add more granular permission checks later (e.g., allow members to update certain fields)
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to update this project',
-        });
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to update this project',
+      });
     }
 
     // Keep track of original values for audit log
@@ -179,17 +193,20 @@ exports.updateProject = async (req, res, next) => {
       status: project.status,
       startDate: project.startDate,
       endDate: project.endDate,
+      priority: project.priority, // Add priority
       memberCount: project.members ? project.members.length : 0,
     };
 
     // Extract only allowed fields for update
-    const { name, description, status, startDate, endDate, members } = req.body;
+    const { name, description, status, startDate, endDate, priority, members } =
+      req.body;
     const updateData = {
       ...(name && { name }),
       ...(description && { description }),
       ...(status && { status }),
       ...(startDate && { startDate }),
       ...(endDate && { endDate }),
+      ...(priority && { priority }), // Add priority
       // Ensure owner remains a member if members array is updated
       ...(members && {
         members: [...new Set([project.owner.toString(), ...members])],
@@ -223,12 +240,10 @@ exports.updateProject = async (req, res, next) => {
     });
 
     if (err.name === 'CastError') {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id of ${req.params.id}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id of ${req.params.id}`,
+      });
     }
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((val) => val.message);
@@ -250,22 +265,18 @@ exports.deleteProject = async (req, res, next) => {
     const project = await Project.findById(req.params.id);
 
     if (!project) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id of ${req.params.id}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id of ${req.params.id}`,
+      });
     }
 
     // Check if the logged-in user is the owner
     if (project.owner.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to delete this project',
-        });
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to delete this project',
+      });
     }
 
     // Save project info for audit log before deletion
@@ -306,12 +317,10 @@ exports.deleteProject = async (req, res, next) => {
     });
 
     if (err.name === 'CastError') {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id of ${req.params.id}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id of ${req.params.id}`,
+      });
     }
     res
       .status(500)

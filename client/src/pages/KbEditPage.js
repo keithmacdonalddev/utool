@@ -1,8 +1,9 @@
 // src/pages/KbEditPage.jsx (or .js)
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import FormInput from '../components/common/FormInput';
 import LexicalEditor from '../components/Editor/LexicalEditor';
 import socket from '../utils/socket'; // Import the socket utility
 
@@ -268,20 +269,14 @@ const KbEditPage = () => {
         >
           {/* Title Input */}
           <div className="mb-4">
-            <label
-              className="block text-gray-700 text-sm font-bold mb-2"
-              htmlFor="title"
-            >
-              Title
-            </label>
-            <input
-              className="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent" // Enhanced focus style
+            <FormInput
               id="title"
+              label="Title"
               type="text"
-              placeholder="Article Title"
               name="title"
               value={formData.title}
               onChange={handleFormChange}
+              placeholder="Article Title"
               required
             />
           </div>
@@ -310,39 +305,27 @@ const KbEditPage = () => {
 
           {/* Tags Input */}
           <div className="mb-4">
-            <label
-              className="block text-gray-700 text-sm font-bold mb-2"
-              htmlFor="tags"
-            >
-              Tags (comma separated)
-            </label>
-            <input
-              className="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+            <FormInput
               id="tags"
+              label="Tags (comma separated)"
               type="text"
-              placeholder="e.g., react, lexical, guide"
               name="tags"
               value={formData.tags}
               onChange={handleFormChange}
+              placeholder="e.g., react, lexical, guide"
             />
           </div>
 
           {/* Categories Input */}
           <div className="mb-6">
-            <label
-              className="block text-gray-700 text-sm font-bold mb-2"
-              htmlFor="categories"
-            >
-              Categories (comma separated)
-            </label>
-            <input
-              className="shadow-sm appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+            <FormInput
               id="categories"
+              label="Categories (comma separated)"
               type="text"
-              placeholder="e.g., Frontend, Documentation"
               name="categories"
               value={formData.categories}
               onChange={handleFormChange}
+              placeholder="e.g., Frontend, Documentation"
             />
           </div>
 

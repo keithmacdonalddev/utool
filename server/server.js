@@ -57,6 +57,7 @@ const {
 const personalNotesRouter = require('./routes/personalNotes');
 const quoteRoutes = require('./routes/quotes'); // Import quotes routes
 const stockRoutes = require('./routes/stocks'); // Import stock routes
+const friendRoutes = require('./routes/friends'); // Import friend routes
 
 // Middleware
 // Enhanced CORS configuration for Vercel frontend
@@ -143,6 +144,7 @@ app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/comments', commentActionsRouter);
 app.use('/api/v1/quotes', quoteRoutes); // Mount quotes routes
 app.use('/api/v1/stocks', stockRoutes); // Mount stock routes
+app.use('/api/v1/friends', friendRoutes); // Mount friend routes
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -179,6 +181,10 @@ async function connectToDatabase() {
       'MongoDB Connected - readyState:',
       mongoose.connection.readyState
     );
+
+    // Start scheduled reminders for tasks
+    const { scheduleTaskReminders } = require('./utils/reminderScheduler');
+    scheduleTaskReminders();
 
     // Start server only after DB connection
     server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));

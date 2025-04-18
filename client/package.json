@@ -1,8 +1,9 @@
 {
-  "name": "client",
+  "name": "utool-client",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@headlessui/react": "^1.7.17",
     "@lexical/link": "^0.30.0",
     "@lexical/list": "^0.30.0",
     "@lexical/react": "^0.30.0",

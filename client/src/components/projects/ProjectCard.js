@@ -1,20 +1,27 @@
-import React, { memo } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 
-const ProjectCard = memo(({ project }) => {
-    return (
-        <div className="bg-[#23242B] shadow-2xl rounded-xl overflow-hidden">
-            <div className="p-4">
-                <h3 className="text-xl font-bold mb-2 text-[#F8FAFC]">{project.name}</h3>
-                <p className="text-[#F8FAFC] text-sm">{project.description}</p>
-            </div>
-            <div className="px-4 py-2 bg-[#23242B] border-t border-[#393A41]">
-                <Link to={`/projects/${project._id}`} className="text-accent-purple font-bold hover:text-accent-blue hover:underline text-sm">
-                    View Details
-                </Link>
-            </div>
-        </div>
-    );
-});
+const ProjectCard = ({ project }) => {
+  const { _id, name, status, progress } = project;
+  return (
+    <Link
+      to={`/projects/${_id}`}
+      className="block bg-[#1E1E2E] rounded-lg shadow p-4 hover:shadow-lg transition"
+    >
+      <h3 className="text-xl font-semibold text-[#F8FAFC] truncate">{name}</h3>
+      <div className="h-2 bg-gray-600 rounded-full mt-2 overflow-hidden">
+        <div
+          className="bg-green-500 h-2 rounded-full"
+          style={{ width: `${progress}%` }}
+          title={`${progress}%`}
+        />
+      </div>
+      <div className="flex justify-between items-center mt-2 text-sm text-[#C7C9D1]">
+        <span>Status: {status}</span>
+        <span>{progress}%</span>
+      </div>
+    </Link>
+  );
+};
 
 export default ProjectCard;

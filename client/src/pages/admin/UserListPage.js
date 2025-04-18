@@ -11,6 +11,9 @@ import {
   AlertTriangle,
   ArrowLeft,
 } from 'lucide-react';
+import FormInput from '../../components/common/FormInput';
+import FormSelect from '../../components/common/FormSelect';
+import FormCheckbox from '../../components/common/FormCheckbox';
 
 const UserListPage = () => {
   const [users, setUsers] = useState([]);
@@ -219,65 +222,58 @@ const UserListPage = () => {
               </h3>
               <div className="mt-2 px-7 py-3">
                 <div className="space-y-4">
-                  <div className="text-left">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Name
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="Full name"
-                      value={newUser.name}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, name: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="text-left">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="Email address"
-                      value={newUser.email}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, email: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="text-left">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Password
-                    </label>
-                    <input
-                      type="password"
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="Password"
-                      value={newUser.password}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, password: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="text-left">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Role
-                    </label>
-                    <select
-                      className="w-full px-3 py-2 border rounded-md"
-                      value={newUser.role}
-                      onChange={(e) =>
-                        setNewUser({ ...newUser, role: e.target.value })
-                      }
-                    >
-                      <option value="">Select Role</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Pro User">Pro User</option>
-                      <option value="Regular User">Regular User</option>
-                    </select>
-                  </div>
+                  <FormInput
+                    id="newUserName"
+                    label="Name"
+                    type="text"
+                    name="name"
+                    value={newUser.name}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, name: e.target.value })
+                    }
+                    placeholder="Full name"
+                    required
+                  />
+                  <FormInput
+                    id="newUserEmail"
+                    label="Email"
+                    type="email"
+                    name="email"
+                    value={newUser.email}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, email: e.target.value })
+                    }
+                    placeholder="Email address"
+                    required
+                  />
+                  <FormInput
+                    id="newUserPassword"
+                    label="Password"
+                    type="password"
+                    name="password"
+                    value={newUser.password}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, password: e.target.value })
+                    }
+                    placeholder="Password"
+                    required
+                  />
+                  <FormSelect
+                    id="newUserRole"
+                    label="Role"
+                    name="role"
+                    value={newUser.role}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, role: e.target.value })
+                    }
+                    required
+                    options={[
+                      {value: "", label: "Select Role"},
+                      {value: "Admin", label: "Admin"},
+                      {value: "Pro User", label: "Pro User"},
+                      {value: "Regular User", label: "Regular User"}
+                    ]}
+                  />
                 </div>
                 {createError && (
                   <div className="mt-2 text-sm text-red-600">{createError}</div>

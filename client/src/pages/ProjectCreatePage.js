@@ -1,77 +1,106 @@
 import React, { useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { createProject } from '../features/projects/projectSlice';
+import FormInput from '../components/common/FormInput';
+import FormTextarea from '../components/common/FormTextarea';
+import Button from '../components/common/Button';
+import PageHeader from '../components/common/PageHeader';
+import Card from '../components/common/Card';
+import Alert from '../components/common/Alert';
+import Loading from '../components/common/Loading';
 
 const ProjectCreatePage = () => {
-    const [formData, setFormData] = useState({
-        name: '',
-        description: '',
-    });
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+  });
+  const [error, setError] = useState('');
 
-    const dispatch = useDispatch();
-    const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const { isLoading, isError, message } = useSelector(
+    (state) => state.projects
+  );
 
-    const { name, description } = formData;
+  const { name, description } = formData;
 
-    const onChange = (e) => {
-        setFormData((prevState) => ({
-            ...prevState,
-            [e.target.name]: e.target.value,
-        }));
-    };
+  const onChange = (e) => {
+    setFormData((prevState) => ({
+      ...prevState,
+      [e.target.name]: e.target.value,
+    }));
+    setError('');
+  };
 
-    const onSubmit = async (e) => {
-        e.preventDefault();
-        const newProject = { name, description };
-        dispatch(createProject(newProject));
-        navigate('/projects'); // Redirect to projects list after creation
-    };
+  const onSubmit = async (e) => {
+    e.preventDefault();
 
-    return (
-        <div className="container mx-auto p-4">
-            <h1 className="text-2xl font-bold mb-4">Create Project</h1>
-            <form onSubmit={onSubmit} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-                <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="name">
-                        Project Name
-                    </label>
-                    <input
-                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        id="name"
-                        type="text"
-                        placeholder="Project Name"
-                        name="name"
-                        value={name}
-                        onChange={onChange}
-                        required
-                    />
-                </div>
-                <div className="mb-6">
-                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
-                        Description
-                    </label>
-                    <textarea
-                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        id="description"
-                        placeholder="Project Description"
-                        name="description"
-                        value={description}
-                        onChange={onChange}
-                        rows="3"
-                    />
-                </div>
-                <div className="flex items-center justify-center">
-                    <button
-                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                        type="submit"
-                    >
-                        Create
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
+    // Basic validation
+    if (!name.trim()) {
+      setError('Project name is required');
+      return;
+    }
+
+    const newProject = { name, description };
+    try {
+      await dispatch(createProject(newProject)).unwrap();
+      navigate('/projects'); // Redirect to projects list after creation
+    } catch (err) {
+      setError(err || 'Failed to create project');
+    }
+  };
+
+  return (
+    <div className="container mx-auto p-4">
+      <PageHeader title="Create Project" backLink="/projects" />
+
+      {isLoading && <Loading message="Creating project..." />}
+
+      {(error || isError) && (
+        <Alert
+          type="error"
+          message={error || message}
+          onClose={() => setError('')}
+        />
+      )}
+
+      <Card>
+        <form onSubmit={onSubmit} className="px-2">
+          <FormInput
+            id="name"
+            label="Project Name"
+            type="text"
+            placeholder="Enter project name"
+            name="name"
+            value={name}
+            onChange={onChange}
+            required
+            error={error && !name.trim() ? 'Project name is required' : null}
+            disabled={isLoading}
+          />
+
+          <FormTextarea
+            id="description"
+            label="Description"
+            placeholder="Describe your project"
+            name="description"
+            value={description}
+            onChange={onChange}
+            rows="4"
+            disabled={isLoading}
+            className="mb-6"
+          />
+
+          <div className="flex items-center justify-center">
+            <Button type="submit" variant="primary" disabled={isLoading}>
+              Create Project
+            </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
 };
 
 export default ProjectCreatePage;

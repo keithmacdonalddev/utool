@@ -4,20 +4,10 @@
   "outputDirectory": "client/build",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
-  "functions": {
-    "api/**/*.js": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
-  },
   "env": {
     "CI": "false",
     "DISABLE_ESLINT_PLUGIN": "true"

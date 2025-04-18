@@ -27,6 +27,9 @@ const KbEditPage = lazy(() => import('./pages/KbEditPage'));
 const KbVersionHistoryPage = lazy(() => import('./pages/KbVersionHistoryPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const FavoriteQuotesPage = lazy(() => import('./pages/FavoriteQuotesPage'));
+const TasksPage = lazy(() => import('./pages/TasksPage'));
+const TaskDetailsPage = lazy(() => import('./pages/TaskDetailsPage'));
+const FriendsPage = lazy(() => import('./pages/FriendsPage')); // Import FriendsPage
 // Notes Feature
 const NotesPage = lazy(() => import('./pages/NotesPage'));
 const TrashPage = lazy(() => import('./pages/TrashPage'));
@@ -80,11 +83,14 @@ function App() {
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/notes/trash" element={<TrashPage />} />
+                  <Route path="/tasks" element={<TasksPage />} />
+                  <Route path="/tasks/:id" element={<TaskDetailsPage />} />
                   <Route
                     path="/favorite-quotes"
                     element={<FavoriteQuotesPage />}
                   />
-
+                  <Route path="/friends" element={<FriendsPage />} />{' '}
+                  {/* Add FriendsPage Route */}
                   {/* Admin Only Routes */}
                   <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
                     {/* Can nest under /admin or keep flat */}

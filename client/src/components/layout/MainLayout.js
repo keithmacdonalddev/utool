@@ -50,7 +50,7 @@ const MainLayout = () => {
   }, [userMenuRef]);
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-dark">
       {/* Sidebar */}
       <Sidebar
         isOpen={isSidebarOpen}
@@ -62,7 +62,7 @@ const MainLayout = () => {
       {/* Main Content Area Wrapper */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Header */}
-        <header className="bg-dark text-text shadow-md z-20 flex-shrink-0">
+        <header className="bg-dark-800 text-text shadow-md z-20 flex-shrink-0">
           <div className="px-4 py-3 flex justify-between items-center">
             {/* Mobile Menu Toggle */}
             <button
@@ -136,7 +136,7 @@ const MainLayout = () => {
         </header>
 
         {/* Page Content */}
-        <main className="flex-grow bg-dark p-2 md:p-4 lg:p-6 overflow-auto">
+        <main className="flex-grow p-2 md:p-4 lg:p-6 overflow-auto">
           <Outlet />
         </main>
       </div>

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux'; // Import Redux hooks
-import { useNavigate } from 'react-router-dom'; // For redirection
-import { registerUser, resetAuthStatus } from '../features/auth/authSlice'; // Import Redux actions
+import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate, Link } from 'react-router-dom';
+import { registerUser, resetAuthStatus } from '../features/auth/authSlice';
+import FormInput from '../components/common/FormInput';
+import Button from '../components/common/Button';
+import Card from '../components/common/Card';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -10,7 +13,7 @@ const RegisterPage = () => {
     password: '',
     confirmPassword: '',
   });
-  const [localError, setLocalError] = useState(''); // For local form errors like password mismatch
+  const [localError, setLocalError] = useState('');
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -23,24 +26,12 @@ const RegisterPage = () => {
   useEffect(() => {
     // Handle redirection or display messages after registration attempt
     if (isError) {
-      // Display error message (e.g., using a toast library later)
-      // Optionally reset status after showing message
-      // dispatch(resetAuthStatus());
+      // Display error message handled by UI
     }
 
     if (isSuccess) {
-      // Display success message (e.g., "Check your email")
-      // Optionally redirect or clear form
-      // navigate('/login'); // Redirect to login after successful registration message
-      // Reset form?
-      // Reset status after handling
-      // dispatch(resetAuthStatus());
+      // Display success message (handled by UI)
     }
-
-    // Reset status on component unmount or before next attempt
-    // return () => {
-    //     dispatch(resetAuthStatus());
-    // };
   }, [user, isError, isSuccess, message, navigate, dispatch]);
 
   const onChange = (e) => {
@@ -52,82 +43,63 @@ const RegisterPage = () => {
 
   const onSubmit = (e) => {
     e.preventDefault();
-    setLocalError(''); // Clear previous local errors
-    dispatch(resetAuthStatus()); // Reset Redux status before new attempt
+    setLocalError('');
+    dispatch(resetAuthStatus());
 
     if (password !== confirmPassword) {
       setLocalError('Passwords do not match');
     } else {
       const userData = {
-        name: name || undefined, // Send name only if provided
+        name: name || undefined,
         email,
         password,
       };
-      dispatch(registerUser(userData)); // Dispatch the register action
+      dispatch(registerUser(userData));
     }
   };
 
   return (
     <div className="container mx-auto p-4 max-w-md">
-      {' '}
-      {/* Added max-width */}
-      <h1 className="text-3xl font-bold mb-6 text-center">Register</h1>{' '}
-      {/* Centered and styled */}
-      {/* Display Loading State */}
+      <h1 className="text-3xl font-bold mb-6 text-center text-text">
+        Register
+      </h1>
+
       {isLoading && <p className="text-center text-blue-500">Loading...</p>}
-      {/* Display Local Form Errors */}
+
       {localError && (
-        <p className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
+        <div className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
           {localError}
-        </p>
+        </div>
       )}
-      {/* Display API Errors from Redux State */}
+
       {isError && message && (
-        <p className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
+        <div className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
           {message}
-        </p>
+        </div>
       )}
-      {/* Display Success Message from Redux State */}
+
       {isSuccess && message && !isError && (
-        <p className="text-center text-green-500 bg-green-100 p-2 rounded mb-4">
+        <div className="text-center text-green-500 bg-green-100 p-2 rounded mb-4">
           {message}
-        </p>
+        </div>
       )}
-      <form
-        onSubmit={onSubmit}
-        className="bg-card text-text shadow-card rounded-xl px-8 pt-6 pb-8 mb-4"
-      >
-        <div className="mb-4">
-          <label
-            className="block text-[#F8FAFC] text-sm font-bold mb-2"
-            htmlFor="name"
-          >
-            Name <span className="text-[#C7C9D1] text-sm">(Optional)</span>
-          </label>
-          <input
-            className={`shadow appearance-none border border-dark-600 rounded w-full py-2 px-3 bg-dark-700 text-text leading-tight focus:outline-none focus:shadow-outline ${
-              isLoading ? 'opacity-60' : ''
-            }`}
+
+      <Card>
+        <form onSubmit={onSubmit} className="px-2">
+          <FormInput
             id="name"
+            label="Name (Optional)"
             type="text"
             placeholder="Your Name"
             name="name"
             value={name}
             onChange={onChange}
-            disabled={isLoading} // Disable input when loading
+            disabled={isLoading}
           />
-        </div>
-        {/* Removed duplicated/incorrect email input block above */}
-        <div className="mb-4">
-          <label
-            className="block text-[#F8FAFC] text-sm font-bold mb-2"
-            htmlFor="email"
-          >
-            Email
-          </label>
-          <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-[#F8FAFC] leading-tight focus:outline-none focus:shadow-outline"
+
+          <FormInput
             id="email"
+            label="Email"
             type="email"
             placeholder="your.email@example.com"
             name="email"
@@ -135,23 +107,16 @@ const RegisterPage = () => {
             onChange={onChange}
             required
             disabled={isLoading}
+            error={
+              isError && message.toLowerCase().includes('email')
+                ? message
+                : null
+            }
           />
-        </div>
-        <div className="mb-4">
-          <label
-            className="block text-[#F8FAFC] text-sm font-bold mb-2"
-            htmlFor="password"
-          >
-            Password <span className="text-red-500">*</span>
-          </label>
-          <input
-            className={`shadow appearance-none border rounded w-full py-2 px-3 text-[#F8FAFC] mb-3 leading-tight focus:outline-none focus:shadow-outline ${
-              localError ||
-              (isError && message.toLowerCase().includes('password'))
-                ? 'border-red-500'
-                : ''
-            } ${isLoading ? 'bg-gray-200' : ''}`}
+
+          <FormInput
             id="password"
+            label="Password"
             type="password"
             placeholder="******************"
             name="password"
@@ -160,21 +125,18 @@ const RegisterPage = () => {
             required
             minLength="8"
             disabled={isLoading}
+            error={
+              localError ||
+              (isError && message.toLowerCase().includes('password'))
+                ? localError || message
+                : null
+            }
+            helpText="Minimum 8 characters."
           />
-          <p className="text-xs text-[#C7C9D1]">Minimum 8 characters.</p>
-        </div>
-        <div className="mb-6">
-          <label
-            className="block text-[#F8FAFC] text-sm font-bold mb-2"
-            htmlFor="confirmPassword"
-          >
-            Confirm Password <span className="text-red-500">*</span>
-          </label>
-          <input
-            className={`shadow appearance-none border rounded w-full py-2 px-3 text-[#F8FAFC] mb-3 leading-tight focus:outline-none focus:shadow-outline ${
-              localError ? 'border-red-500' : ''
-            } ${isLoading ? 'bg-gray-200' : ''}`}
+
+          <FormInput
             id="confirmPassword"
+            label="Confirm Password"
             type="password"
             placeholder="******************"
             name="confirmPassword"
@@ -182,33 +144,27 @@ const RegisterPage = () => {
             onChange={onChange}
             required
             disabled={isLoading}
+            error={localError ? localError : null}
+            className="mb-6"
           />
-        </div>
-        <div className="flex items-center justify-center">
-          {' '}
-          {/* Centered button */}
-          <button
-            className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full ${
-              isLoading ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-            type="submit"
-            disabled={isLoading} // Disable button when loading
-          >
-            {isLoading ? 'Registering...' : 'Register'}
-          </button>
-        </div>
-        {/* Login Link Paragraph - Moved inside form, after button div */}
-        <p className="text-center text-[#C7C9D1] text-xs mt-4">
-          Already have an account? {/* TODO: Replace with Link component */}
-          <a
-            className="text-accent-purple font-bold hover:text-accent-blue hover:underline"
-            href="/login"
-          >
-            Login here
-          </a>
-        </p>
-      </form>{' '}
-      {/* Correctly closes the form */}
+
+          <div className="flex items-center justify-center">
+            <Button type="submit" disabled={isLoading} className="w-full">
+              {isLoading ? 'Registering...' : 'Register'}
+            </Button>
+          </div>
+
+          <p className="text-center text-text-muted text-xs mt-4">
+            Already have an account?{' '}
+            <Link
+              className="text-accent-purple font-bold hover:text-accent-blue hover:underline"
+              to="/login"
+            >
+              Login here
+            </Link>
+          </p>
+        </form>
+      </Card>
     </div>
   );
 };

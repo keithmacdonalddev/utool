@@ -8,6 +8,12 @@ import {
   restoreNote,
   hardDeleteNote,
 } from '../../features/notes/noteSlice';
+import FormInput from '../common/FormInput';
+import FormTextarea from '../common/FormTextarea';
+import FormCheckbox from '../common/FormCheckbox';
+import Button from '../common/Button';
+import Card from '../common/Card';
+import { X } from 'lucide-react';
 
 const COLORS = [
   '',
@@ -41,7 +47,11 @@ const NoteEditorModal = ({ onClose }) => {
       setContent(selectedNote.content || '');
       setTags(selectedNote.tags || []);
       setColor(selectedNote.color || '');
-      setReminder(selectedNote.reminder ? new Date(selectedNote.reminder).toISOString().slice(0, 16) : '');
+      setReminder(
+        selectedNote.reminder
+          ? new Date(selectedNote.reminder).toISOString().slice(0, 16)
+          : ''
+      );
       setPinned(selectedNote.pinned || false);
       setFavorite(selectedNote.favorite || false);
       setArchived(selectedNote.archived || false);
@@ -79,7 +89,10 @@ const NoteEditorModal = ({ onClose }) => {
   };
 
   const handlePermanentDelete = async () => {
-    if (selectedNote && window.confirm('Permanently delete this note? This cannot be undone.')) {
+    if (
+      selectedNote &&
+      window.confirm('Permanently delete this note? This cannot be undone.')
+    ) {
       await dispatch(hardDeleteNote(selectedNote._id));
       dispatch(fetchNotes());
       dispatch(setSelectedNote(null));
@@ -99,6 +112,7 @@ const NoteEditorModal = ({ onClose }) => {
       favorite,
       archived,
     };
+
     if (selectedNote) {
       await dispatch(updateNote({ id: selectedNote._id, updates: noteData }));
     } else {
@@ -113,20 +127,21 @@ const NoteEditorModal = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-      <div className="bg-card text-text rounded-2xl shadow-2xl w-full max-w-lg p-8 relative border-2 border-blue-200">
+      <Card className="w-full max-w-lg p-6 relative border-2 border-dark-700">
         <button
-          className="absolute top-2 right-2 text-gray-400 hover:text-blue-600 text-2xl font-bold"
+          className="absolute top-4 right-4 text-text-muted hover:text-text focus:outline-none"
           onClick={onClose}
           aria-label="Close"
         >
-          ×
+          <X size={24} />
         </button>
-        <h2 className="text-2xl font-bold mb-6 text-[#F8FAFC] flex items-center gap-2">
+
+        <h2 className="text-2xl font-bold mb-6 text-text flex items-center gap-2">
           {selectedNote ? (
             <>
               <span>Edit Note</span>
               {isTrashed && (
-                <span className="inline-block bg-red-100 text-red-700 text-xs font-semibold px-2 py-1 rounded ml-2 animate-pulse">
+                <span className="inline-block bg-red-100 text-red-700 text-xs font-semibold px-2 py-1 rounded animate-pulse">
                   In Trash
                 </span>
               )}
@@ -135,42 +150,38 @@ const NoteEditorModal = ({ onClose }) => {
             'New Note'
           )}
         </h2>
+
         <form onSubmit={handleSubmit}>
-          <div className="mb-3">
-            <label className="block font-bold mb-1 text-[#F8FAFC]" htmlFor="title">
-              Title<span className="text-red-500">*</span>
+          <FormInput
+            id="title"
+            label="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            maxLength={120}
+            disabled={isTrashed}
+            placeholder="Note title"
+          />
+
+          <FormTextarea
+            id="content"
+            label="Content"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            disabled={isTrashed}
+            rows={4}
+            placeholder="Note content"
+          />
+
+          <div className="mb-4">
+            <label className="block text-text text-sm font-bold mb-2">
+              Tags
             </label>
-            <input
-              id="title"
-              className="w-full border-2 border-blue-200 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              maxLength={120}
-              aria-label="Note title"
-              disabled={isTrashed}
-            />
-          </div>
-          <div className="mb-3">
-            <label className="block font-bold mb-1 text-[#F8FAFC]" htmlFor="content">
-              Content
-            </label>
-            <textarea
-              id="content"
-              className="w-full border-2 border-blue-200 rounded px-3 py-2 min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-50"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              aria-label="Note content"
-              disabled={isTrashed}
-            />
-          </div>
-          <div className="mb-3">
-            <label className="block font-bold mb-1 text-[#F8FAFC]">Tags</label>
-            <div className="flex gap-2 mb-1 flex-wrap">
+            <div className="flex gap-2 mb-2 flex-wrap">
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="bg-gradient-to-r from-blue-100 to-blue-200 text-blue-700 px-2 py-0.5 rounded-full text-xs flex items-center shadow"
+                  className="bg-dark-800 border border-dark-600 text-text px-2 py-0.5 rounded-full text-xs flex items-center"
                 >
                   #{tag}
                   <button
@@ -185,35 +196,46 @@ const NoteEditorModal = ({ onClose }) => {
                 </span>
               ))}
             </div>
-            <form onSubmit={handleTagAdd} className="flex gap-2">
-              <input
-                className="border-2 border-blue-200 rounded px-2 py-1 flex-1 bg-blue-50"
+            <div className="flex gap-2">
+              <FormInput
                 value={tagInput}
-                onChange={(e) => setTagInput(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
+                onChange={(e) =>
+                  setTagInput(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))
+                }
                 placeholder="Add tag"
                 maxLength={20}
-                aria-label="Add tag"
                 disabled={isTrashed}
+                className="mb-0 flex-grow"
               />
-              <button
-                type="submit"
-                className="btn btn-sm btn-secondary"
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleTagAdd}
                 disabled={!tagInput || isTrashed}
-                aria-label="Add tag"
+                className="flex-shrink-0"
               >
                 Add
-              </button>
-            </form>
+              </Button>
+            </div>
           </div>
-          <div className="mb-3">
-            <label className="block font-bold mb-1 text-[#F8FAFC]">Color</label>
+
+          <div className="mb-4">
+            <label className="block text-text text-sm font-bold mb-2">
+              Color
+            </label>
             <div className="flex gap-2">
               {COLORS.map((c, idx) => (
                 <button
                   key={idx}
                   type="button"
-                  className={`w-6 h-6 rounded-full border-2 transition-all duration-150 ${color === c ? 'border-accent-purple scale-110 ring-2 ring-accent-purple/40' : 'border-[#393A41]'}`}
-                  style={c ? { backgroundColor: c } : { backgroundColor: '#23242B' }}
+                  className={`w-8 h-8 rounded-full border-2 transition-all duration-150 ${
+                    color === c
+                      ? 'border-accent-purple scale-110 ring-2 ring-accent-purple/40'
+                      : 'border-dark-600'
+                  }`}
+                  style={
+                    c ? { backgroundColor: c } : { backgroundColor: '#23242B' }
+                  }
                   onClick={() => setColor(c)}
                   aria-label={c ? `Set color ${c}` : 'No color'}
                   disabled={isTrashed}
@@ -221,87 +243,73 @@ const NoteEditorModal = ({ onClose }) => {
               ))}
             </div>
           </div>
-          <div className="mb-3">
-            <label className="block font-bold mb-1 text-[#F8FAFC]" htmlFor="reminder">
-              Reminder
-            </label>
-            <input
-              id="reminder"
-              type="datetime-local"
-              className="border-2 border-blue-200 rounded px-2 py-1 bg-blue-50"
-              value={reminder}
-              onChange={(e) => setReminder(e.target.value)}
-              aria-label="Reminder"
+
+          <FormInput
+            id="reminder"
+            label="Reminder"
+            type="datetime-local"
+            value={reminder}
+            onChange={(e) => setReminder(e.target.value)}
+            disabled={isTrashed}
+          />
+
+          <div className="grid grid-cols-3 gap-2 mb-6">
+            <FormCheckbox
+              id="pinned"
+              label="📌 Pin"
+              checked={pinned}
+              onChange={() => setPinned((v) => !v)}
               disabled={isTrashed}
+              labelClassName="text-yellow-500"
+            />
+
+            <FormCheckbox
+              id="favorite"
+              label="★ Favorite"
+              checked={favorite}
+              onChange={() => setFavorite((v) => !v)}
+              disabled={isTrashed}
+              labelClassName="text-pink-500"
+            />
+
+            <FormCheckbox
+              id="archived"
+              label="🗄️ Archive"
+              checked={archived}
+              onChange={() => setArchived((v) => !v)}
+              disabled={isTrashed}
+              labelClassName="text-gray-500"
             />
           </div>
-          <div className="flex gap-4 mb-4">
-            <label className="flex items-center gap-1 font-bold text-[#F8FAFC]">
-              <input
-                type="checkbox"
-                checked={pinned}
-                onChange={() => setPinned((v) => !v)}
-                aria-label="Pin note"
-                disabled={isTrashed}
-              />
-              <span className="text-yellow-500">📌 Pin</span>
-            </label>
-            <label className="flex items-center gap-1 font-bold text-[#F8FAFC]">
-              <input
-                type="checkbox"
-                checked={favorite}
-                onChange={() => setFavorite((v) => !v)}
-                aria-label="Favorite note"
-                disabled={isTrashed}
-              />
-              <span className="text-pink-500">★ Favorite</span>
-            </label>
-            <label className="flex items-center gap-1 font-bold text-[#F8FAFC]">
-              <input
-                type="checkbox"
-                checked={archived}
-                onChange={() => setArchived((v) => !v)}
-                aria-label="Archive note"
-                disabled={isTrashed}
-              />
-              <span className="text-gray-500">🗄️ Archive</span>
-            </label>
-          </div>
+
           <div className="flex justify-end gap-2 mt-6">
             {isTrashed ? (
               <>
-                <button
+                <Button
                   type="button"
-                  className="bg-green-100 text-green-800 font-semibold px-4 py-2 rounded hover:bg-green-200 transition"
+                  variant="secondary"
                   onClick={handleRestore}
                   disabled={isLoading}
-                  aria-label="Restore note"
                 >
                   <span className="mr-1">♻️</span> Restore
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="bg-red-100 text-red-800 font-semibold px-4 py-2 rounded hover:bg-red-200 transition"
+                  variant="danger"
                   onClick={handlePermanentDelete}
                   disabled={isLoading}
-                  aria-label="Delete permanently"
                 >
                   <span className="mr-1">🗑️</span> Delete Permanently
-                </button>
+                </Button>
               </>
             ) : (
-              <button
-                type="submit"
-                className="bg-blue-600 text-white font-semibold px-6 py-2 rounded shadow hover:bg-blue-700 transition"
-                disabled={isLoading}
-                aria-label={selectedNote ? 'Save changes' : 'Create note'}
-              >
-                {selectedNote ? 'Save' : 'Create'}
-              </button>
+              <Button type="submit" variant="primary" disabled={isLoading}>
+                {selectedNote ? 'Save Changes' : 'Create Note'}
+              </Button>
             )}
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };

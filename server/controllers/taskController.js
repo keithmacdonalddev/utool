@@ -55,20 +55,16 @@ exports.createTask = async (req, res, next) => {
     // Check if the project exists and the user is a member
     const project = await Project.findById(projectId);
     if (!project) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id ${projectId}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id ${projectId}`,
+      });
     }
     if (!project.members.includes(req.user.id)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'Not authorized to add tasks to this project',
-        });
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to add tasks to this project',
+      });
     }
 
     const taskData = {
@@ -123,36 +119,58 @@ exports.createTask = async (req, res, next) => {
 };
 
 // @desc    Get tasks for a specific project
-// @route   GET /api/v1/projects/:projectId/tasks
+// @route   GET /api/v1/projects/:id/tasks
 // @access  Private
 exports.getTasksForProject = async (req, res, next) => {
   try {
-    const projectId = req.params.projectId;
+    // Get the project ID from the route parameter - in projects.js route it's defined as :id
+    const projectId = req.params.id;
 
-    // Optional: Check if project exists and user is a member first
+    // Log request parameters for debugging
+    console.log('Request parameters:', req.params);
+    console.log('Auth user:', req.user ? req.user.id : 'Not authenticated');
+
+    if (!projectId) {
+      console.log('Missing project ID in request');
+      return res.status(400).json({
+        success: false,
+        message: 'Project ID is required',
+      });
+    }
+
+    console.log(`Fetching tasks for project: ${projectId}`);
+
+    // Check if project exists and user is a member
     const project = await Project.findById(projectId);
     if (!project) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `Project not found with id ${projectId}`,
-        });
+      console.log(`Project not found with id: ${projectId}`);
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id ${projectId}`,
+      });
     }
-    if (!project.members.includes(req.user.id)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'Not authorized to view tasks for this project',
-        });
+
+    // Check if user is a member of the project using proper MongoDB ObjectId comparison
+    const isMember = project.members.some(
+      (memberId) => memberId.toString() === req.user.id
+    );
+
+    if (!isMember) {
+      console.log(
+        `User ${req.user.id} not authorized for project ${projectId}`
+      );
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view tasks for this project',
+      });
     }
 
     // Find tasks belonging to the specified project
-    // Optionally filter further (e.g., only tasks assigned to the current user within that project)
     const tasks = await Task.find({ project: projectId })
       .populate('assignee', 'name email') // Populate assignee details
       .sort({ createdAt: -1 });
+
+    console.log(`Found ${tasks.length} tasks for project ${projectId}`);
 
     res.status(200).json({
       success: true,
@@ -161,6 +179,17 @@ exports.getTasksForProject = async (req, res, next) => {
     });
   } catch (err) {
     console.error('Get Tasks for Project Error:', err);
+
+    // Additional error information for debugging
+    console.error('Request params:', req.params);
+    console.error('Project ID from params:', req.params.id);
+
+    if (err.name === 'CastError') {
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id ${req.params.id} (invalid ID format)`,
+      });
+    }
     res
       .status(500)
       .json({ success: false, message: 'Server Error fetching project tasks' });
@@ -173,9 +202,35 @@ exports.getTasksForProject = async (req, res, next) => {
 // @route   GET /api/v1/tasks/:id
 // @access  Private
 exports.getTask = async (req, res, next) => {
-  res
-    .status(501)
-    .json({ success: false, message: 'Get single task not implemented yet' });
+  try {
+    let task = await Task.findById(req.params.id)
+      .populate('assignee', 'name email')
+      .populate('project', 'name status')
+      .populate('dependencies', 'title status');
+    if (!task)
+      return res.status(404).json({
+        success: false,
+        message: `Task not found with id ${req.params.id}`,
+      });
+    // Check project membership
+    const project = await Project.findById(task.project);
+    if (!project.members.includes(req.user.id)) {
+      return res
+        .status(403)
+        .json({ success: false, message: 'Not authorized to view this task' });
+    }
+    res.status(200).json({ success: true, data: task });
+  } catch (err) {
+    console.error(err);
+    if (err.name === 'CastError')
+      return res.status(404).json({
+        success: false,
+        message: `Task not found with id ${req.params.id}`,
+      });
+    res
+      .status(500)
+      .json({ success: false, message: 'Server Error fetching task' });
+  }
 };
 
 // @desc    Update task
@@ -235,6 +290,10 @@ exports.updateTask = async (req, res, next) => {
       ...(dueDate !== undefined && { dueDate }),
       ...(estimatedTime !== undefined && { estimatedTime }),
     };
+
+    // Handle dependencies if provided
+    const { dependencies } = req.body;
+    if (dependencies !== undefined) updateData.dependencies = dependencies;
 
     // Perform update
     task = await Task.findByIdAndUpdate(req.params.id, updateData, {
@@ -386,12 +445,10 @@ exports.getUserTasks = async (req, res, next) => {
     // Optional: Check if user exists
     const targetUserExists = await User.findById(targetUserId);
     if (!targetUserExists) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `User not found with id ${targetUserId}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `User not found with id ${targetUserId}`,
+      });
     }
 
     // Find tasks assigned to the target user
@@ -409,5 +466,30 @@ exports.getUserTasks = async (req, res, next) => {
     res
       .status(500)
       .json({ success: false, message: 'Server Error fetching user tasks' });
+  }
+};
+
+// @desc    Bulk update tasks
+// @route   PUT /api/v1/tasks/bulk-update
+// @access  Private
+exports.bulkUpdateTasks = async (req, res) => {
+  try {
+    const { taskIds, update } = req.body;
+    if (!Array.isArray(taskIds) || !update) {
+      return res.status(400).json({
+        success: false,
+        message: 'taskIds array and update object are required',
+      });
+    }
+    // Optionally validate permissions per task
+    const result = await Task.updateMany({ _id: { $in: taskIds } }, update, {
+      runValidators: true,
+    });
+    res.status(200).json({ success: true, modifiedCount: result.nModified });
+  } catch (err) {
+    console.error('Bulk update error:', err);
+    res
+      .status(500)
+      .json({ success: false, message: 'Server Error bulk updating tasks' });
   }
 };
