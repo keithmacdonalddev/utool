@@ -1,6 +1,6 @@
 // src/components/Editor/LexicalEditor.jsx
 
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -63,60 +63,66 @@ const editorNodes = [
   // ... Add other nodes like CodeNode if used
 ];
 
-// Helper function to safely prepare the initial state string for Lexical
-const editorStateFromJSON = (jsonString) => {
-  try {
-    // Check if it's a non-empty string that looks like it might be JSON state
-    if (
-      jsonString &&
-      typeof jsonString === 'string' &&
-      jsonString.trim() !== '' &&
-      jsonString !== '{}' &&
-      jsonString !== 'null'
-    ) {
-      // Lexical's initialConfig.editorState will handle the actual parsing/validation
-      return jsonString;
-    }
-  } catch (e) {
-    console.error('Error processing initial editor state string:', e);
+// Helper function to safely parse editor state
+function editorStateFromJSON(jsonString) {
+  if (!jsonString || typeof jsonString !== 'string') {
+    console.warn('Invalid editor state provided:', jsonString);
+    return '';
   }
-  // Return null if input is invalid/empty, so Lexical starts with a default empty state
-  return null;
-};
+
+  try {
+    // Attempt to parse to validate JSON format
+    JSON.parse(jsonString);
+    return jsonString;
+  } catch (error) {
+    console.error('Error parsing editor state JSON:', error);
+    console.warn('Falling back to empty editor');
+    return '';
+  }
+}
 
 // --- LexicalEditor Component ---
 const LexicalEditor = ({
+  initialEditorStateString = '',
   onContentChange,
-  initialEditorStateString = null, // Prop to receive initial content JSON string
+  ...rest
 }) => {
-  // Define initialConfig INSIDE the component function to access props
+  // Validate and process the initial state
+  const validatedInitialState = useMemo(() => {
+    return editorStateFromJSON(initialEditorStateString);
+  }, [initialEditorStateString]);
+
+  // --- Initial Configuration ---
   const initialConfig = {
-    // Use a dynamic namespace to help ensure clean state, especially if multiple editors could exist
+    // Use a unique namespace with some randomness to prevent conflicts
     namespace: 'KbEditor-' + Math.random().toString(36).substring(7),
     theme: theme, // Use the consistent theme object
-    onError: (error) =>
-      console.error('Lexical Initialization/Runtime Error:', error),
+    onError: (error) => {
+      console.error('Lexical Initialization/Runtime Error:', error);
+      // Optionally add more robust error handling here
+    },
     nodes: editorNodes, // Use the consistent node list
     // Pass the validated initial state string to LexicalComposer
-    editorState: editorStateFromJSON(initialEditorStateString),
+    editorState: validatedInitialState,
   };
 
   // State Change Handler
-  const handleEditorChange = (editorState, editor) => {
-    const currentJsonString = JSON.stringify(editorState);
+  const handleEditorChange = useCallback(
+    (editorState, editor) => {
+      try {
+        const currentJsonString = JSON.stringify(editorState);
 
-    // Get the string representation of the initial state that was passed in
-    const initialJsonString = editorStateFromJSON(initialEditorStateString);
-
-    // Call onContentChange only if the state is actually different from the initial state
-    // or if there was no valid initial state provided (i.e., it started empty).
-    // This prevents firing the callback immediately on load with the initial content.
-    if (currentJsonString !== initialJsonString || !initialJsonString) {
-      if (onContentChange) {
-        onContentChange(currentJsonString);
+        // Only call onContentChange if the callback exists
+        if (typeof onContentChange === 'function') {
+          onContentChange(currentJsonString);
+        }
+      } catch (error) {
+        console.error('Error serializing editor state:', error);
+        // Prevent crashing the component
       }
-    }
-  };
+    },
+    [onContentChange]
+  );
 
   return (
     // Pass the dynamically created initialConfig

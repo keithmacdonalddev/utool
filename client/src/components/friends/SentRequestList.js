@@ -18,8 +18,13 @@ function SentRequestList() {
     }
   };
 
-  if (isLoading && requestsSent.length === 0) {
+  if (isLoading && (!requestsSent || requestsSent.length === 0)) {
     return <Spinner message="Loading sent requests..." />;
+  }
+
+  if (!requestsSent || !Array.isArray(requestsSent)) {
+    console.warn('Invalid requestsSent data:', requestsSent);
+    return <p className="text-red-500">Error loading sent requests data</p>;
   }
 
   if (!isLoading && requestsSent.length === 0) {
@@ -37,38 +42,41 @@ function SentRequestList() {
       </h2>
       <ul className="divide-y divide-border rounded-md border border-border bg-card-alt">
         {requestsSent.map((request) => {
-          // Add null check for the receiver object
-          if (!request || !request.receiver) {
+          // Handle both direct user objects and proper request objects with receiver property
+          const user = request.receiver || request;
+          const userId = user._id;
+
+          if (!userId) {
             console.warn(
-              'Found friend request with missing receiver data:',
+              'Found invalid friend request without user ID:',
               request
             );
-            return null; // Skip rendering this item
+            return null;
           }
 
           return (
             <li
-              key={request._id}
+              key={userId}
               className="flex items-center justify-between p-3 hover:bg-muted/50"
             >
               <div className="flex items-center space-x-3">
-                <UserAvatar user={request.receiver} size="sm" />
+                <UserAvatar user={user} size="sm" />
                 <div>
                   <p className="font-medium text-foreground">
-                    {request.receiver.name || 'Unknown User'}
+                    {user.name || 'Unknown User'}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {request.receiver.email || 'No email available'}
+                    {user.email || 'No email available'}
                   </p>
                 </div>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleCancelRequest(request.receiver._id)}
-                disabled={isLoading || !request.receiver._id}
+                onClick={() => handleCancelRequest(userId)}
+                disabled={isLoading}
                 aria-label={`Cancel friend request sent to ${
-                  request.receiver.name || 'Unknown User'
+                  user.name || 'Unknown User'
                 }`}
               >
                 <XCircle size={16} className="mr-1" /> Cancel Request

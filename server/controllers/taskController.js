@@ -34,7 +34,7 @@ exports.createTask = async (req, res, next) => {
     // Add logged-in user as the assignee
     req.body.assignee = req.user.id;
 
-    // Extract only allowed fields from req.body to prevent unwanted data injection
+    // Extract fields from req.body for validation and security
     const {
       title,
       description,
@@ -45,11 +45,24 @@ exports.createTask = async (req, res, next) => {
       project: projectId,
     } = req.body;
 
+    // Validate required fields
+    if (!title || title.trim() === '') {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Task title is required' });
+    }
+
     // Validate project ID
     if (!projectId) {
       return res
         .status(400)
         .json({ success: false, message: 'Project ID is required' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid project ID format' });
     }
 
     // Check if the project exists and the user is a member
@@ -60,17 +73,52 @@ exports.createTask = async (req, res, next) => {
         message: `Project not found with id ${projectId}`,
       });
     }
-    if (!project.members.includes(req.user.id)) {
+
+    // Verify user is a member of the project
+    const isMember = project.members.some(
+      (memberId) => memberId.toString() === req.user.id
+    );
+
+    if (!isMember) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to add tasks to this project',
       });
     }
 
+    // Validate status if provided
+    const validStatuses = ['To Do', 'In Progress', 'In Review', 'Completed'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+      });
+    }
+
+    // Validate priority if provided
+    const validPriorities = ['Low', 'Medium', 'High'];
+    if (priority && !validPriorities.includes(priority)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid priority. Must be one of: ${validPriorities.join(
+          ', '
+        )}`,
+      });
+    }
+
+    // Validate dueDate if provided (must be a valid date)
+    if (dueDate && isNaN(new Date(dueDate).getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid due date format',
+      });
+    }
+
+    // Create task with validated data
     const taskData = {
       title,
-      assignee: req.user.id, // Ensure assignee is set correctly
-      project: projectId, // Set the project ID
+      assignee: req.user.id,
+      project: projectId,
       ...(description && { description }),
       ...(status && { status }),
       ...(priority && { priority }),
@@ -86,18 +134,13 @@ exports.createTask = async (req, res, next) => {
       taskId: task._id,
       taskTitle: task.title,
       projectId: task.project,
-      priority: task.priority,
-      status: task.status,
     });
 
-    res.status(201).json({
-      success: true,
-      data: task,
-    });
+    res.status(201).json({ success: true, data: task });
   } catch (err) {
     console.error('Create Task Error:', err);
 
-    // Add audit log for failed task creation
+    // Add audit log for failed task create
     const { auditLog } = require('../middleware/auditLogMiddleware');
     await auditLog(req, 'task_create', 'failed', {
       error: err.message,

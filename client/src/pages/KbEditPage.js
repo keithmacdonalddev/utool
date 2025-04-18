@@ -22,6 +22,7 @@ const KbEditPage = () => {
 
   // Ref to prevent emitting changes received from socket
   const isRemoteUpdate = useRef(false);
+  const socketInitialized = useRef(false);
 
   // Loading and Error States
   const [isLoading, setIsLoading] = useState(true);
@@ -84,11 +85,12 @@ const KbEditPage = () => {
     fetchArticle();
 
     // --- Socket Connection Lifecycle ---
-    if (id) {
-      // Connect socket and join room
+    if (id && !socketInitialized.current) {
+      // Connect socket and join room only once per ID
       socket.connect();
       socket.emit('join_document', id);
-      setIsSocketConnected(true); // Assume connection attempt is successful initially
+      setIsSocketConnected(socket.connected);
+      socketInitialized.current = true;
 
       // Listener for receiving changes from others
       const handleReceiveChanges = (receivedState) => {
@@ -100,24 +102,32 @@ const KbEditPage = () => {
           isRemoteUpdate.current = false;
         }, 0);
       };
-      socket.on('receive_changes', handleReceiveChanges);
 
-      // Listen for connection status changes (optional but good for UI feedback)
-      const handleConnect = () => setIsSocketConnected(true);
+      // Listen for connection status changes
+      const handleConnect = () => {
+        setIsSocketConnected(true);
+        // Rejoin room when reconnected
+        socket.emit('join_document', id);
+      };
+
       const handleDisconnect = () => setIsSocketConnected(false);
+
+      socket.on('receive_changes', handleReceiveChanges);
       socket.on('connect', handleConnect);
       socket.on('disconnect', handleDisconnect);
 
       // Cleanup on component unmount or ID change
       return () => {
-        // No specific leave room event needed if disconnect handles server cleanup
         socket.off('receive_changes', handleReceiveChanges);
         socket.off('connect', handleConnect);
         socket.off('disconnect', handleDisconnect);
+        socket.emit('leave_document', id); // Explicitly leave the room
         socket.disconnect();
         setIsSocketConnected(false);
+        socketInitialized.current = false;
       };
     }
+
     // --- End Socket Connection Lifecycle ---
   }, [id]); // Effect depends on article ID
 

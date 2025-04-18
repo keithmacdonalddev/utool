@@ -337,7 +337,7 @@ const ProjectDetailsPage = () => {
       )}
 
       {/* Tasks Section */}
-      <div className="bg-card border border-dark-700 rounded-lg shadow p-6">
+      <div className="bg-app-card border border-dark-700 rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold text-foreground mb-4">Tasks</h2>
         {/* Task creation form */}
         <form
@@ -345,21 +345,27 @@ const ProjectDetailsPage = () => {
           onSubmit={(e) => {
             e.preventDefault();
             if (!newTaskTitle.trim()) return; // Prevent empty tasks
-            dispatch(createTask({ title: newTaskTitle, projectId: id }));
-            setNewTaskTitle('');
+            setNewTaskTitle(''); // Clear input immediately for better UX
+            dispatch(createTask({ title: newTaskTitle, project: id })) // Use 'project' instead of 'projectId'
+              .unwrap()
+              .catch((error) => {
+                console.error('Failed to create task:', error);
+                // Re-populate the input if task creation fails
+                setNewTaskTitle(newTaskTitle.trim());
+              });
           }}
         >
           <input
             type="text"
-            placeholder="Add a new task..."
             value={newTaskTitle}
             onChange={(e) => setNewTaskTitle(e.target.value)}
-            className="flex-grow px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
-            required
+            placeholder="New task title..."
+            className="flex-grow p-2 border rounded bg-dark-700 text-foreground border-dark-600"
           />
           <button
             type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition-colors"
+            className="bg-primary text-white px-4 py-2 rounded"
+            disabled={!newTaskTitle.trim()}
           >
             Add Task
           </button>

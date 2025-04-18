@@ -37,6 +37,7 @@ const TrashPage = lazy(() => import('./pages/TrashPage'));
 const AdminUserListPage = lazy(() => import('./pages/admin/UserListPage'));
 const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 function App() {
   return (
@@ -108,8 +109,8 @@ function App() {
               </Route>
               <Route path="/unauthorized" element={<UnauthorizedPage />} />
               <Route path="/" element={<Navigate replace to="/dashboard" />} />
-              {/* TODO: Check auth state here */}
-              {/* TODO: Add a 404 Not Found route */}
+              {/* 404 Not Found route */}
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>
         </div>

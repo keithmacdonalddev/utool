@@ -1,6 +1,8 @@
 const User = require('../models/User');
+const mongoose = require('mongoose');
 const asyncHandler = require('../middleware/async');
 const ErrorResponse = require('../utils/errorResponse');
+const { auditLog } = require('../middleware/auditLogMiddleware');
 
 // @desc    Search users by name or email
 // @route   GET /api/v1/friends/search
@@ -128,20 +130,45 @@ exports.acceptFriendRequest = asyncHandler(async (req, res, next) => {
   res.status(200).json({ success: true, message: 'Friend request accepted' });
 });
 
-// @desc    Reject or Cancel a friend request
-// @route   DELETE /api/v1/friends/request/:userId
+// @desc    Reject or cancel a friend request
+// @route   DELETE /api/v1/friends/requests/:userId
 // @access  Private
 exports.rejectOrCancelFriendRequest = asyncHandler(async (req, res, next) => {
-  const otherUserId = req.params.userId;
   const currentUserId = req.user.id;
+  const otherUserId = req.params.userId;
 
-  const currentUser = await User.findById(currentUserId);
-  const otherUser = await User.findById(otherUserId);
-
-  if (!currentUser || !otherUser) {
-    return next(new ErrorResponse('User not found', 404));
+  // Validate that the userId parameter is a valid ObjectId
+  if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
+    return next(
+      new ErrorResponse(`Invalid user ID format: ${otherUserId}`, 400)
+    );
   }
 
+  // Don't allow self-rejection
+  if (currentUserId === otherUserId) {
+    return next(
+      new ErrorResponse('Cannot reject or cancel your own request', 400)
+    );
+  }
+
+  // Find both users
+  const [currentUser, otherUser] = await Promise.all([
+    User.findById(currentUserId),
+    User.findById(otherUserId),
+  ]);
+
+  // Check if both users exist
+  if (!otherUser) {
+    return next(
+      new ErrorResponse(`User not found with id ${otherUserId}`, 404)
+    );
+  }
+
+  if (!currentUser) {
+    return next(new ErrorResponse('Current user not found', 404));
+  }
+
+  // Track if we found a request to handle
   let requestFound = false;
 
   // Case 1: Current user is rejecting a received request
@@ -170,10 +197,22 @@ exports.rejectOrCancelFriendRequest = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Friend request not found', 404));
   }
 
-  await currentUser.save();
-  await otherUser.save();
+  try {
+    await Promise.all([currentUser.save(), otherUser.save()]);
 
-  // TODO: Implement notification system (optional for rejection/cancel)
+    // Log the action
+    await auditLog(req, 'friend_request_cancel', 'success', {
+      targetUserId: otherUserId,
+      action: currentUser.friendRequestsReceived.includes(otherUserId)
+        ? 'reject'
+        : 'cancel',
+    });
+  } catch (err) {
+    console.error('Error updating friend request status:', err);
+    return next(
+      new ErrorResponse('Failed to update friend request status', 500)
+    );
+  }
 
   res
     .status(200)
