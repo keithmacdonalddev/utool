@@ -40,9 +40,9 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
         onClick={toggleSidebar} // Close sidebar when overlay is clicked
       ></div>
 
-      {/* Sidebar - Adjust width based on isMinimized for desktop */}
+      {/* Sidebar - Updated to use app.sidebar color */}
       <aside
-        className={`fixed inset-y-0 left-0 bg-[#23242B] text-[#F8FAFC] border-r border-[#181A20] space-y-6 py-7 px-2 z-40 transform ${
+        className={`fixed inset-y-0 left-0 bg-app-sidebar text-[#F8FAFC] border-r border-sidebar-border space-y-6 py-7 px-2 z-40 transform ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } md:relative md:translate-x-0 transition-all duration-200 ease-in-out flex flex-col shadow-lg ${
           isMinimized ? 'md:w-20' : 'md:w-64'

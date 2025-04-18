@@ -1,23 +1,34 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: 'class',
-  content: [
-    "./src/**/*.{js,jsx,ts,tsx}",
-  ],
+  content: ['./src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
       colors: {
         // Dark theme palette
         dark: {
-          DEFAULT: '#1A1A1A',  // Matches navbar
+          DEFAULT: '#1A1A1A', // Matches navbar
           900: '#1A1A1A',
-          800: '#252525',      // Slightly darker than navbar
+          800: '#2C3036', // Updated to a slightly darker shade (was #333940)
           700: '#333333',
           600: '#444444',
         },
-        // Card surfaces
+        // App-specific background surfaces
+        app: {
+          navbar: '#2C3036', // Navbar background
+          page: '#2C3036', // Main page background
+          sidebar: '#23242B', // Sidebar background
+          card: '#23242B', // Card background
+          input: '#333940', // Input field background
+        },
+        // Keeping these for backward compatibility
+        sidebar: {
+          bg: '#23242B', // Sidebar background - use this for widgets and cards too
+          border: '#181A20',
+        },
+        // Card surfaces - updated to match sidebar
         card: {
-          DEFAULT: '#1E293B',
+          DEFAULT: '#23242B', // Updated to match sidebar.bg for consistency
           hover: '#334155',
         },
         // Accent colors
@@ -55,34 +66,35 @@ module.exports = {
         },
       },
       spacing: {
-        'xs': '0.25rem',
-        'sm': '0.5rem',
-        'md': '1rem',
-        'lg': '1.5rem',
-        'xl': '2rem',
+        xs: '0.25rem',
+        sm: '0.5rem',
+        md: '1rem',
+        lg: '1.5rem',
+        xl: '2rem',
         '2xl': '3rem',
       },
       borderRadius: {
-        'sm': '0.25rem',
-        'DEFAULT': '0.5rem',
-        'lg': '1rem',
-        'xl': '1.5rem',
-        'full': '9999px',
+        sm: '0.25rem',
+        DEFAULT: '0.5rem',
+        lg: '1rem',
+        xl: '1.5rem',
+        full: '9999px',
       },
       boxShadow: {
-        'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-        'DEFAULT': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-        'md': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-        'lg': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-        'xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        'inner': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
+        sm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        DEFAULT:
+          '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+        md: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        lg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        xl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        inner: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
       },
       fontSize: {
-        'xs': '0.75rem',
-        'sm': '0.875rem',
-        'base': '1rem',
-        'lg': '1.125rem',
-        'xl': '1.25rem',
+        xs: '0.75rem',
+        sm: '0.875rem',
+        base: '1rem',
+        lg: '1.125rem',
+        xl: '1.25rem',
         '2xl': '1.5rem',
         '3xl': '1.875rem',
         '4xl': '2.25rem',
@@ -90,4 +102,4 @@ module.exports = {
     },
   },
   plugins: [],
-}
+};

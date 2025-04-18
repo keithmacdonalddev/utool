@@ -35,7 +35,7 @@ const NotesPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-dark text-text pb-12">
+    <div className="min-h-screen bg-dark-800 text-text pb-12">
       {/* Minimal Header */}
       <div className="max-w-5xl mx-auto px-4 pb-4 flex flex-col sm:flex-row items-center justify-between">
         <h1 className="text-3xl font-bold text-[#F8FAFC] flex items-center gap-2">

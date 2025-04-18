@@ -11,9 +11,9 @@ const Card = ({
   variant = 'default', // 'default', 'elevated', 'outline'
 }) => {
   const variantClasses = {
-    default: 'bg-card border border-dark-700',
-    elevated: 'bg-card shadow-lg border border-dark-800',
-    outline: 'bg-transparent border border-dark-600'
+    default: 'bg-app-card border border-dark-700',
+    elevated: 'bg-app-card shadow-lg border border-dark-800',
+    outline: 'bg-transparent border border-dark-600',
   };
 
   return (
@@ -32,7 +32,13 @@ const Card = ({
 
       <div className={`${bodyClassName}`}>{children}</div>
 
-      {footer && <div className={`mt-4 pt-4 border-t border-dark-700 ${footerClassName}`}>{footer}</div>}
+      {footer && (
+        <div
+          className={`mt-4 pt-4 border-t border-dark-700 ${footerClassName}`}
+        >
+          {footer}
+        </div>
+      )}
     </div>
   );
 };

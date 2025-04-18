@@ -1,18 +1,17 @@
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ShieldX } from 'lucide-react';
 
 const UnauthorizedPage = () => {
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-50">
-      <div className="text-center p-8 max-w-md">
+    <div className="flex items-center justify-center h-screen bg-dark-800">
+      <div className="text-center">
         <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-4">
-          <AlertTriangle className="h-8 w-8 text-yellow-600" />
+          <ShieldX className="h-8 w-8 text-yellow-600" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Access Denied</h1>
-        <p className="text-gray-600 mb-6">
-          You don't have permission to access this page. Please contact an
-          administrator if you believe this is an error.
+        <h1 className="text-2xl font-bold text-text mb-2">Access Denied</h1>
+        <p className="text-text-muted mb-6">
+          You do not have permission to access this page.
         </p>
         <Link
           to="/dashboard"
