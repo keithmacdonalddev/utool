@@ -15,6 +15,7 @@ import TaskList from '../components/tasks/TaskList';
 import api from '../utils/api';
 import { PlusCircle, X, Edit } from 'lucide-react'; // Import Edit icon
 import { useNotification } from '../context/NotificationContext';
+import useFriends from '../hooks/useFriends'; // Import our custom hook
 
 // ... existing helper functions (getStatusPillClasses, getPriorityPillClasses, formatDate) ...
 
@@ -38,32 +39,15 @@ const ProjectDetailsPage = () => {
   } = useSelector((state) => state.tasks);
 
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [users, setUsers] = useState([]);
-  const [usersLoading, setUsersLoading] = useState(true);
-  const [usersError, setUsersError] = useState('');
   const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false);
   const [selectedUserToAdd, setSelectedUserToAdd] = useState('');
 
-  // ... existing useEffect hooks for fetching users, project, and tasks ...
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setUsersLoading(true);
-        const res = await api.get('/users');
-        if (res.data.success) {
-          setUsers(res.data.data);
-        } else {
-          throw new Error(res.data.message || 'Failed to fetch users');
-        }
-      } catch (err) {
-        console.error('Failed to fetch users:', err);
-        setUsersError(err.message || 'Could not load users for selection.');
-      } finally {
-        setUsersLoading(false);
-      }
-    };
-    fetchUsers();
-  }, []);
+  // Use our custom hook to get friends list instead of all users
+  const {
+    friends,
+    isLoading: friendsLoading,
+    error: friendsError,
+  } = useFriends();
 
   useEffect(() => {
     if (id) {
@@ -144,60 +128,92 @@ const ProjectDetailsPage = () => {
     }
   };
 
-  // ... existing availableUsersToAdd calculation ...
-  const availableUsersToAdd = users.filter(
-    (user) => !project?.members?.some((member) => member._id === user._id)
+  // Get friends who aren't already project members
+  const availableUsersToAdd = friends.filter(
+    (friend) => !project?.members?.some((member) => member._id === friend._id)
   );
 
   // ... existing loading and error checks ...
-  if (isLoading || tasksLoading || usersLoading)
+  if (isLoading || tasksLoading || friendsLoading)
     return (
-      <div className="container mx-auto p-4">Loading project details...</div>
-    );
-
-  if (isError)
-    return (
-      <div className="container mx-auto p-4 text-red-600">Error: {message}</div>
-    );
-
-  if (usersError)
-    return (
-      <div className="container mx-auto p-4 text-red-600">
-        Error loading users: {usersError}
+      <div className="container mx-auto p-4 flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-foreground">Loading project details...</p>
+        </div>
       </div>
     );
 
-  if (!project)
-    return <div className="container mx-auto p-4">Project not found.</div>;
+  if (isError) {
+    return (
+      <div className="container mx-auto p-4 flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="text-red-500 text-lg">Error: {message}</div>
+          <Link to="/projects" className="mt-4 text-primary hover:underline">
+            Back to projects
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-  // Calculate progress bar color
-  const getProgressBarColor = (progress) => {
-    if (progress < 30) return 'bg-red-500';
-    if (progress < 70) return 'bg-yellow-500';
-    return 'bg-green-500';
-  };
+  if (!project) {
+    return (
+      <div className="container mx-auto p-4 flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="text-foreground text-lg">
+            Project not found or you don't have permission to view it.
+          </div>
+          <Link to="/projects" className="mt-4 text-primary hover:underline">
+            Back to projects
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="container mx-auto p-4 space-y-6">
-      {/* Header Section */}
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-3xl font-bold text-foreground">{project.name}</h1>
+    <div className="container mx-auto p-4 bg-background text-foreground space-y-6">
+      {/* Project Header Section with more comprehensive details */}
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 text-primary">
+            {project.name}
+          </h1>
+          <div className="text-muted-foreground text-sm mb-2">
+            Created{' '}
+            {new Date(project.createdAt).toLocaleString(undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+            })}
+          </div>
+        </div>
         <Link
-          to={`/projects/${project._id}/edit`}
-          className="inline-flex items-center bg-accent-purple hover:bg-accent-blue text-white font-bold py-2 px-4 rounded transition-colors"
-          title="Edit Project"
+          to={`/projects/${id}/edit`}
+          className="flex items-center justify-center bg-dark-700 hover:bg-dark-600 text-primary px-4 py-2 rounded-md transition-colors"
         >
-          <Edit size={16} className="mr-2" />
-          Edit Project
+          <Edit size={18} className="mr-2" /> Edit Project
         </Link>
       </div>
 
-      {/* Overview Card */}
-      <div className="bg-card border border-dark-700 rounded-lg shadow p-6 space-y-4">
-        <h2 className="text-xl font-semibold text-foreground mb-3">Overview</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {' '}
-          {/* Changed to 4 columns on large screens */}
+      {/* Project description if it exists */}
+      {project.description && (
+        <div className="bg-card rounded-lg p-4 shadow">
+          <h2 className="text-lg font-semibold mb-2 text-primary">
+            Description
+          </h2>
+          <p className="text-foreground whitespace-pre-wrap">
+            {project.description}
+          </p>
+        </div>
+      )}
+
+      {/* Key project metadata in a well-organized grid */}
+      <div className="bg-card rounded-lg p-4 shadow">
+        <h2 className="text-lg font-semibold mb-4 text-primary">
+          Project Details
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {/* Status */}
           <div>
             <span className="text-sm text-foreground opacity-80 block mb-1">
@@ -255,7 +271,7 @@ const ProjectDetailsPage = () => {
                     {/* ... dropdown content ... */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-foreground">
-                        Add Member
+                        Add Friend as Member
                       </span>
                       <button
                         onClick={() => setShowAddMemberDropdown(false)}
@@ -271,7 +287,7 @@ const ProjectDetailsPage = () => {
                           onChange={(e) => setSelectedUserToAdd(e.target.value)}
                           className="w-full px-2 py-1.5 rounded-md border bg-dark-700 text-foreground border-dark-600 focus:outline-none focus:ring-1 focus:ring-primary mb-2 text-sm"
                         >
-                          <option value="">Select user...</option>
+                          <option value="">Select friend...</option>
                           {availableUsersToAdd.map((user) => (
                             <option key={user._id} value={user._id}>
                               {user.name} ({user.email})
@@ -288,7 +304,7 @@ const ProjectDetailsPage = () => {
                       </>
                     ) : (
                       <p className="text-xs text-gray-400">
-                        No more users to add.
+                        No more friends to add.
                       </p>
                     )}
                   </div>
@@ -319,33 +335,40 @@ const ProjectDetailsPage = () => {
             </div>
           </div>
         </div>
-
-        {/* Progress Bar (Remains below the grid) */}
-        <div className="pt-2">{/* ... progress bar code ... */}</div>
       </div>
 
-      {/* Description Section */}
-      {project.description && (
-        <div className="bg-card border border-dark-700 rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-foreground mb-3">
-            Description
+      {/* Progress bar with better styling */}
+      <div className="bg-card rounded-lg p-4 shadow">
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="text-lg font-semibold text-primary">
+            Progress: {project.progress || 0}%
           </h2>
-          <p className="text-foreground whitespace-pre-wrap">
-            {project.description}
-          </p>
+          {project.progress === 100 && (
+            <span className="text-green-500 text-sm font-medium">
+              Complete!
+            </span>
+          )}
         </div>
-      )}
+        <div className="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
+          <div
+            className="bg-primary h-4 rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${project.progress || 0}%` }}
+          ></div>
+        </div>
+      </div>
 
-      {/* Tasks Section */}
-      <div className="bg-app-card border border-dark-700 rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-foreground mb-4">Tasks</h2>
-        {/* Task creation form */}
+      {/* Tasks section with improved styling */}
+      <div className="bg-card rounded-lg p-4 shadow">
+        <h2 className="text-xl font-semibold mb-4 text-primary">Tasks</h2>
+
+        {/* New task form */}
         <form
-          className="mb-6 flex gap-2"
+          className="flex gap-2 mb-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!newTaskTitle.trim()) return; // Prevent empty tasks
-            setNewTaskTitle(''); // Clear input immediately for better UX
+            if (!newTaskTitle.trim()) return;
+
+            setNewTaskTitle(''); // Clear input first for better UX
             dispatch(createTask({ title: newTaskTitle, project: id })) // Use 'project' instead of 'projectId'
               .unwrap()
               .catch((error) => {
@@ -378,13 +401,9 @@ const ProjectDetailsPage = () => {
         {tasksError && (
           <p className="text-red-500">Error loading tasks: {tasksMessage}</p>
         )}
-        {!tasksLoading &&
-          !tasksError &&
-          (tasks.length > 0 ? (
-            <TaskList tasks={tasks} />
-          ) : (
-            <p className="text-foreground opacity-70">No tasks added yet.</p>
-          ))}
+        {!tasksLoading && !tasksError && (
+          <TaskList projectId={id} tasks={tasks} />
+        )}
       </div>
     </div>
   );

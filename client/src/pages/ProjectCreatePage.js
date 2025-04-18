@@ -9,11 +9,13 @@ import PageHeader from '../components/common/PageHeader';
 import Card from '../components/common/Card';
 import Alert from '../components/common/Alert';
 import Loading from '../components/common/Loading';
+import useFriends from '../hooks/useFriends'; // Import our custom hook
 
 const ProjectCreatePage = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    members: [], // Add members array
   });
   const [error, setError] = useState('');
 
@@ -23,13 +25,33 @@ const ProjectCreatePage = () => {
     (state) => state.projects
   );
 
-  const { name, description } = formData;
+  // Use our custom hook to get friends list
+  const {
+    friends,
+    isLoading: friendsLoading,
+    error: friendsError,
+  } = useFriends();
+
+  const { name, description, members } = formData;
 
   const onChange = (e) => {
-    setFormData((prevState) => ({
-      ...prevState,
-      [e.target.name]: e.target.value,
-    }));
+    const { name, value, options, type } = e.target;
+
+    // Special handling for multi-select
+    if (type === 'select-multiple') {
+      const selectedIds = Array.from(options)
+        .filter((option) => option.selected)
+        .map((option) => option.value);
+      setFormData((prevState) => ({
+        ...prevState,
+        [name]: selectedIds,
+      }));
+    } else {
+      setFormData((prevState) => ({
+        ...prevState,
+        [name]: value,
+      }));
+    }
     setError('');
   };
 
@@ -42,7 +64,12 @@ const ProjectCreatePage = () => {
       return;
     }
 
-    const newProject = { name, description };
+    const newProject = {
+      name,
+      description,
+      members, // Include selected friends as members
+    };
+
     try {
       await dispatch(createProject(newProject)).unwrap();
       navigate('/projects'); // Redirect to projects list after creation
@@ -55,12 +82,14 @@ const ProjectCreatePage = () => {
     <div className="container mx-auto p-4">
       <PageHeader title="Create Project" backLink="/projects" />
 
-      {isLoading && <Loading message="Creating project..." />}
+      {(isLoading || friendsLoading) && (
+        <Loading message="Preparing project creation..." />
+      )}
 
-      {(error || isError) && (
+      {(error || isError || friendsError) && (
         <Alert
           type="error"
-          message={error || message}
+          message={error || message || friendsError}
           onClose={() => setError('')}
         />
       )}
@@ -91,6 +120,44 @@ const ProjectCreatePage = () => {
             disabled={isLoading}
             className="mb-6"
           />
+
+          {/* Members selection from friends list */}
+          <div className="mb-6">
+            <label
+              htmlFor="members"
+              className="block text-foreground text-sm font-medium mb-1.5"
+            >
+              Project Members (From Friends)
+            </label>
+            <select
+              id="members"
+              name="members"
+              multiple
+              value={members}
+              onChange={onChange}
+              disabled={isLoading || friendsLoading}
+              className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200 h-32"
+            >
+              {friends && friends.length > 0 ? (
+                friends.map((friend) => (
+                  <option key={friend._id} value={friend._id}>
+                    {friend.name} ({friend.email})
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>
+                  {friendsLoading
+                    ? 'Loading friends...'
+                    : friends && friends.length === 0
+                    ? 'No friends available'
+                    : 'Unable to load friends'}
+                </option>
+              )}
+            </select>
+            <p className="text-text-muted text-xs mt-1.5">
+              Hold Ctrl (or Cmd on Mac) to select multiple friends as members.
+            </p>
+          </div>
 
           <div className="flex items-center justify-center">
             <Button type="submit" variant="primary" disabled={isLoading}>
