@@ -1,5 +1,7 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { NotificationProvider } from './context/NotificationContext';
+import { useDispatch, useSelector } from 'react-redux';
+import { connectWithAuth, disconnectSocket } from './utils/socket';
 import {
   BrowserRouter as Router,
   Routes,
@@ -38,8 +40,27 @@ const AdminUserListPage = lazy(() => import('./pages/admin/UserListPage'));
 const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const TaskCreatePage = lazy(() => import('./pages/TaskCreatePage')); // Import TaskCreatePage
 
 function App() {
+  const { user, token } = useSelector((state) => state.auth);
+
+  // Connect socket when user is logged in
+  useEffect(() => {
+    if (token) {
+      // Connect to socket with auth
+      connectWithAuth();
+    } else {
+      // Disconnect socket when no token is present
+      disconnectSocket();
+    }
+
+    // Clean up on unmount
+    return () => {
+      disconnectSocket();
+    };
+  }, [token]);
+
   return (
     <NotificationProvider>
       <Router>
@@ -85,6 +106,8 @@ function App() {
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/notes/trash" element={<TrashPage />} />
                   <Route path="/tasks" element={<TasksPage />} />
+                  <Route path="/tasks/new" element={<TaskCreatePage />} />{' '}
+                  {/* New route for task creation */}
                   <Route path="/tasks/:id" element={<TaskDetailsPage />} />
                   <Route
                     path="/favorite-quotes"

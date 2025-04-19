@@ -1,6 +1,7 @@
 const Task = require('../models/Task');
 const Project = require('../models/Project'); // Need Project model
 const User = require('../models/User');
+const mongoose = require('mongoose'); // Add mongoose import for ObjectId validation
 
 // @desc    Get tasks for logged-in user
 // @route   GET /api/v1/tasks
@@ -9,9 +10,11 @@ exports.getTasks = async (req, res, next) => {
   try {
     // Find tasks where the assignee is the logged-in user
     // req.user is attached by the 'protect' middleware
-    const tasks = await Task.find({ assignee: req.user.id }).sort({
-      createdAt: -1,
-    }); // Sort by newest first
+    const tasks = await Task.find({ assignee: req.user.id })
+      .populate('project', 'name status') // Add population of project field
+      .sort({
+        createdAt: -1,
+      }); // Sort by newest first
 
     res.status(200).json({
       success: true,
@@ -211,6 +214,7 @@ exports.getTasksForProject = async (req, res, next) => {
     // Find tasks belonging to the specified project
     const tasks = await Task.find({ project: projectId })
       .populate('assignee', 'name email') // Populate assignee details
+      .populate('project', 'name status') // Add populate for project details
       .sort({ createdAt: -1 });
 
     console.log(`Found ${tasks.length} tasks for project ${projectId}`);

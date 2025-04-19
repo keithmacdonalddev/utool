@@ -9,13 +9,13 @@ import {
 import {
   getTasksForProject,
   resetTaskStatus,
-  createTask,
 } from '../features/tasks/taskSlice';
 import TaskList from '../components/tasks/TaskList';
+import TaskCreateModal from '../components/tasks/TaskCreateModal'; // Import the new modal
 import api from '../utils/api';
-import { PlusCircle, X, Edit } from 'lucide-react'; // Import Edit icon
-import { useNotification } from '../context/NotificationContext';
-import useFriends from '../hooks/useFriends'; // Import our custom hook
+import { PlusCircle, X, Edit } from 'lucide-react';
+import { useNotifications } from '../context/NotificationContext';
+import useFriends from '../hooks/useFriends';
 
 // ... existing helper functions (getStatusPillClasses, getPriorityPillClasses, formatDate) ...
 
@@ -24,7 +24,7 @@ const ProjectDetailsPage = () => {
   const { id } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { showNotification } = useNotification();
+  const { showNotification } = useNotifications();
   const {
     currentProject: project,
     isLoading,
@@ -38,7 +38,7 @@ const ProjectDetailsPage = () => {
     message: tasksMessage,
   } = useSelector((state) => state.tasks);
 
-  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [showTaskModal, setShowTaskModal] = useState(false); // Add state for task modal
   const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false);
   const [selectedUserToAdd, setSelectedUserToAdd] = useState('');
 
@@ -359,40 +359,23 @@ const ProjectDetailsPage = () => {
 
       {/* Tasks section with improved styling */}
       <div className="bg-card rounded-lg p-4 shadow">
-        <h2 className="text-xl font-semibold mb-4 text-primary">Tasks</h2>
-
-        {/* New task form */}
-        <form
-          className="flex gap-2 mb-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!newTaskTitle.trim()) return;
-
-            setNewTaskTitle(''); // Clear input first for better UX
-            dispatch(createTask({ title: newTaskTitle, project: id })) // Use 'project' instead of 'projectId'
-              .unwrap()
-              .catch((error) => {
-                console.error('Failed to create task:', error);
-                // Re-populate the input if task creation fails
-                setNewTaskTitle(newTaskTitle.trim());
-              });
-          }}
-        >
-          <input
-            type="text"
-            value={newTaskTitle}
-            onChange={(e) => setNewTaskTitle(e.target.value)}
-            placeholder="New task title..."
-            className="flex-grow p-2 border rounded bg-dark-700 text-foreground border-dark-600"
-          />
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-primary">Tasks</h2>
           <button
-            type="submit"
-            className="bg-primary text-white px-4 py-2 rounded"
-            disabled={!newTaskTitle.trim()}
+            onClick={() => setShowTaskModal(true)}
+            className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded flex items-center gap-2"
           >
+            <PlusCircle size={18} />
             Add Task
           </button>
-        </form>
+        </div>
+
+        {/* Task Modal */}
+        <TaskCreateModal
+          isOpen={showTaskModal}
+          onClose={() => setShowTaskModal(false)}
+          projectId={id}
+        />
 
         {/* Task list */}
         {tasksLoading && (

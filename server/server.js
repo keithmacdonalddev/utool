@@ -4,6 +4,9 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const morgan = require('morgan'); // Add morgan for HTTP request logging
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 // Import models and utils
@@ -14,8 +17,25 @@ const {
   handleConnection,
 } = require('./utils/socketManager');
 
+// Create logs directory if it doesn't exist
+const logsDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
+
+// Create an access log file stream
+const accessLogStream = fs.createWriteStream(path.join(logsDir, 'access.log'), {
+  flags: 'a',
+});
+
 const app = express();
 const server = http.createServer(app);
+
+// Print startup banner with more readable format
+logger.info('┌──────────────────────────────────────────┐');
+logger.info(`│ Server starting at ${new Date().toLocaleTimeString()} │`);
+logger.info(`│ Environment: ${process.env.NODE_ENV || 'development'} │`);
+logger.info('└──────────────────────────────────────────┘');
 
 // Initialize Socket.IO with auth middleware
 const io = new Server(server, {
@@ -30,12 +50,26 @@ const io = new Server(server, {
   },
 });
 
-// Socket authentication middleware
-io.use(authenticateSocket);
+// Socket authentication middleware with verbose logging
+io.use((socket, next) => {
+  logger.verbose(`Socket authentication attempt for socket ${socket.id}`);
+  authenticateSocket(socket, next);
+});
 
-// Socket connection handler
+// Socket connection handler with verbose logging
 io.on('connection', (socket) => {
+  logger.info(`Socket connected: ${socket.id}`, {
+    socketId: socket.id,
+    userId: socket.user?.id,
+    userAgent: socket.handshake.headers['user-agent'],
+  });
+
   handleConnection(io, socket);
+
+  // Log socket disconnections
+  socket.on('disconnect', (reason) => {
+    logger.verbose(`Socket disconnected: ${socket.id}, reason: ${reason}`);
+  });
 });
 
 const PORT = process.env.PORT || 5000;
@@ -58,6 +92,7 @@ const personalNotesRouter = require('./routes/personalNotes');
 const quoteRoutes = require('./routes/quotes'); // Import quotes routes
 const stockRoutes = require('./routes/stocks'); // Import stock routes
 const friendRoutes = require('./routes/friends'); // Import friend routes
+const notificationRoutes = require('./routes/notifications'); // Import notification routes
 
 // Middleware
 // Enhanced CORS configuration for Vercel frontend
@@ -77,37 +112,98 @@ app.use(
         allowedOrigins.indexOf(origin) !== -1 ||
         process.env.NODE_ENV !== 'production'
       ) {
+        logger.verbose(`CORS allowed origin: ${origin}`);
         callback(null, true);
       } else {
-        console.log('CORS blocked origin:', origin);
+        logger.warn(`CORS blocked origin: ${origin}`);
         callback(null, true); // Allow all origins in case env variables aren't set properly
       }
     },
     credentials: true,
   })
 );
+
+// Setup Morgan for HTTP request logging - use combined format for file and dev format for console
+app.use(morgan('combined', { stream: accessLogStream }));
+app.use(morgan('dev', { stream: logger.stream }));
+
 app.use(express.json());
 
-// Add middleware to log all incoming requests
+// Add middleware to log all incoming requests with verbose details
 app.use((req, res, next) => {
   // Start timing the request
   req._startTime = Date.now();
 
-  // Log the incoming request
-  logger.http(`${req.method} ${req.originalUrl}`, { req });
+  // Log the incoming request with body in development
+  if (process.env.NODE_ENV === 'development') {
+    logger.verbose(`Request received: ${req.method} ${req.originalUrl}`, {
+      body: req.body,
+      query: req.query,
+      params: req.params,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'content-type': req.headers['content-type'],
+        referer: req.headers.referer,
+      },
+    });
+  } else {
+    // In production, just log standard info
+    logger.http(`${req.method} ${req.originalUrl}`, { req });
+  }
 
-  // Log response completion
+  // Capture the original res.json to intercept and log responses
+  const originalJson = res.json;
+  res.json = function (body) {
+    res.body = body; // Save for logging
+
+    // Log response in verbose mode (development only)
+    if (process.env.NODE_ENV === 'development') {
+      const responseTime = Date.now() - req._startTime;
+      logger.verbose(
+        `Response for: ${req.method} ${req.originalUrl} - ${res.statusCode} - ${responseTime}ms`,
+        {
+          statusCode: res.statusCode,
+          responseTime,
+          // Only log non-sensitive parts or truncate large responses
+          responseBody: body
+            ? typeof body === 'object'
+              ? {
+                  success: body.success,
+                  message: body.message,
+                  dataSize: body.data
+                    ? `${JSON.stringify(body.data).length} chars`
+                    : 'none',
+                }
+              : 'non-object response'
+            : 'empty',
+        }
+      );
+    }
+
+    // Call the original json method
+    return originalJson.call(this, body);
+  };
+
+  // Log response completion with timing
   res.on('finish', () => {
     const responseTime = Date.now() - req._startTime;
+
+    // Log slow requests as warnings
+    if (responseTime > 1000) {
+      logger.warn(
+        `SLOW REQUEST: ${req.method} ${req.originalUrl} ${res.statusCode} - ${responseTime}ms`
+      );
+    }
+
     logger.logRequest(req, res, responseTime);
   });
 
   next();
 });
 
-// Status endpoint for health checks
+// Status endpoint for health checks with added logging
 app.get('/api/v1/status', (req, res) => {
-  res.json({
+  const status = {
     status: 'API is running',
     environment: process.env.NODE_ENV,
     mongoConnected: mongoose.connection.readyState === 1,
@@ -115,7 +211,11 @@ app.get('/api/v1/status', (req, res) => {
     hasJwtSecret: Boolean(process.env.JWT_SECRET),
     dbConnectionState: mongoose.connection.readyState,
     timestamp: new Date().toISOString(),
-  });
+    serverUptime: process.uptime() + ' seconds',
+  };
+
+  logger.info('Health check requested', { status });
+  res.json(status);
 });
 
 // Mount Routers
@@ -145,16 +245,28 @@ app.use('/api/v1/comments', commentActionsRouter);
 app.use('/api/v1/quotes', quoteRoutes); // Mount quotes routes
 app.use('/api/v1/stocks', stockRoutes); // Mount stock routes
 app.use('/api/v1/friends', friendRoutes); // Mount friend routes
+app.use('/api/v1/notifications', notificationRoutes); // Mount notification routes
 
-// Basic Route
+// Basic Route with logging
 app.get('/', (req, res) => {
+  logger.info('Root route accessed');
   res.send('API is running...');
 });
 
-// Error handling middleware
+// Error handling middleware with enhanced logging
 app.use((err, req, res, next) => {
-  // Log the error
-  logger.error(err.message, { error: err, req });
+  // Log the error with stack trace and request details
+  logger.error(
+    `Error processing ${req.method} ${req.originalUrl}: ${err.message}`,
+    {
+      error: err,
+      req,
+      stack: err.stack,
+      body: req.body,
+      params: req.params,
+      query: req.query,
+    }
+  );
 
   // Send appropriate response
   const statusCode = err.statusCode || 500;
@@ -165,12 +277,20 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Connect to MongoDB with better error handling
+// Connect to MongoDB with better error handling and logging
 async function connectToDatabase() {
   if (!MONGO_URI) {
     logger.error('FATAL ERROR: MONGO_URI is not defined.');
     process.exit(1);
   }
+
+  // Log connection attempt
+  logger.info(
+    `Attempting to connect to MongoDB at ${MONGO_URI.substring(
+      0,
+      MONGO_URI.indexOf('@') + 1
+    )}...`
+  );
 
   try {
     await mongoose.connect(MONGO_URI, {
@@ -178,18 +298,45 @@ async function connectToDatabase() {
       socketTimeoutMS: 45000,
     });
     logger.info(
-      'MongoDB Connected - readyState:',
-      mongoose.connection.readyState
+      `MongoDB Connected - readyState: ${mongoose.connection.readyState}`,
+      {
+        database: mongoose.connection.name,
+        host: mongoose.connection.host,
+        port: mongoose.connection.port,
+      }
     );
 
-    // Start scheduled reminders for tasks
-    const { scheduleTaskReminders } = require('./utils/reminderScheduler');
+    // Make io available to routes
+    app.set('io', io);
+
+    // Start scheduled reminders with logging
+    const {
+      scheduleTaskReminders,
+      scheduleNoteReminders,
+      scheduleNotificationProcessor,
+    } = require('./utils/reminderScheduler');
+
+    logger.info('Starting scheduled task reminders');
     scheduleTaskReminders();
 
+    logger.info('Starting scheduled note reminders');
+    scheduleNoteReminders();
+
+    logger.info('Starting notification processor');
+    scheduleNotificationProcessor(io); // Pass io to notification processor
+
     // Start server only after DB connection
-    server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+    server.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`API available at http://localhost:${PORT}/api/v1`);
+    });
   } catch (err) {
-    logger.error('MongoDB Connection Error:', err);
+    logger.error('MongoDB Connection Error:', {
+      error: err,
+      mongoURI: MONGO_URI.substring(0, MONGO_URI.indexOf('@') + 1) + '***',
+      message: err.message,
+      stack: err.stack,
+    });
     process.exit(1);
   }
 }
@@ -200,17 +347,32 @@ mongoose.connection.on('connected', () => {
 });
 
 mongoose.connection.on('error', (err) => {
-  logger.error('Mongoose connection error:', err);
+  logger.error('Mongoose connection error:', { error: err });
 });
 
 mongoose.connection.on('disconnected', () => {
   logger.warn('Mongoose disconnected from DB');
 });
 
-// Handle process termination
+// Handle process termination with logging
 process.on('SIGINT', async () => {
+  logger.info('SIGINT signal received. Shutting down gracefully...');
   await mongoose.connection.close();
+  logger.info('MongoDB connection closed');
   process.exit(0);
+});
+
+// Log unhandled rejections and exceptions
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection:', { reason, promise });
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught Exception:', { error: err });
+  // Exit with error in production to restart the process
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
 });
 
 // Start the application

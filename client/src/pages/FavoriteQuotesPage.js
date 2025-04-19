@@ -1,13 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import { Star, Trash2, RefreshCw } from 'lucide-react';
-import { useNotification } from '../context/NotificationContext';
+import { useNotifications } from '../context/NotificationContext';
 
 const FavoriteQuotesPage = () => {
   const [favoriteQuotes, setFavoriteQuotes] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { showNotification } = useNotification();
+  const { handleNotificationClick } = useNotifications();
+
+  // Using handleNotificationClick as a replacement for showNotification
+  const showNotification = (message, type = 'info') => {
+    const notificationObj = {
+      _id: Date.now().toString(),
+      title: type === 'error' ? 'Error' : 'Success',
+      message,
+      type,
+    };
+    handleNotificationClick(notificationObj);
+  };
 
   useEffect(() => {
     fetchFavoriteQuotes();

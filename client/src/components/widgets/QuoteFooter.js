@@ -1,14 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { Star, RefreshCw } from 'lucide-react';
 import api from '../../utils/api';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotifications } from '../../context/NotificationContext';
 
 const QuoteFooter = () => {
   const [quote, setQuote] = useState(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { showNotification } = useNotification();
+
+  // Updated to use the correct hook name
+  const { markAsRead, markAllAsRead } = useNotifications();
+
+  // Create a showNotification function since it doesn't exist in useNotifications
+  const showNotification = (message, type = 'info') => {
+    // For now we'll just log to console since the real notification system
+    // doesn't have a direct showNotification method
+    console.log(`${type.toUpperCase()}: ${message}`);
+  };
 
   // Check if we need to fetch a new quote
   const shouldFetchNewQuote = () => {

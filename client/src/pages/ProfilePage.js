@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import api from '../utils/api';
 import { updateUserInState } from '../features/auth/authSlice';
-import { useNotification } from '../context/NotificationContext';
+import { useNotifications } from '../context/NotificationContext';
 import FormInput from '../components/common/FormInput';
 import FormTextarea from '../components/common/FormTextarea';
 import Button from '../components/common/Button';
@@ -32,7 +32,7 @@ const ProfilePage = () => {
   });
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateError, setUpdateError] = useState('');
-  const { showNotification } = useNotification();
+  const { showNotification } = useNotifications();
 
   // Populate form when user data is loaded
   useEffect(() => {

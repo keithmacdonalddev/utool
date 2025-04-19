@@ -6,7 +6,7 @@ const ProjectCard = ({ project }) => {
   return (
     <Link
       to={`/projects/${_id}`}
-      className="block bg-[#1E1E2E] rounded-lg shadow p-4 hover:shadow-lg transition"
+      className="block bg-card rounded-lg shadow p-4 hover:shadow-lg transition"
     >
       <h3 className="text-xl font-semibold text-[#F8FAFC] truncate">{name}</h3>
       <div className="h-2 bg-gray-600 rounded-full mt-2 overflow-hidden">

@@ -1,42 +1,251 @@
 const cron = require('node-cron');
 const Task = require('../models/Task');
+const Note = require('../models/Note');
 const User = require('../models/User');
 const { sendEmail } = require('./mailer');
 const { logger } = require('./logger');
+const {
+  createReminderNotification,
+  processUnsentNotifications,
+} = require('../controllers/notificationController');
 
-// Schedule job to run every day at 08:00 AM server time
-function scheduleTaskReminders() {
-  cron.schedule(
-    '0 8 * * *',
-    async () => {
-      try {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const start = new Date(tomorrow.setHours(0, 0, 0, 0));
-        const end = new Date(tomorrow.setHours(23, 59, 59, 999));
+// Schedule for running task reminders (every hour)
+const scheduleTaskReminders = () => {
+  logger.info('Setting up task reminder scheduler - runs every hour');
 
-        // Find tasks due tomorrow
-        const tasks = await Task.find({
-          dueDate: { $gte: start, $lte: end },
-        }).populate('assignee', 'name email');
+  cron.schedule('0 * * * *', async () => {
+    const startTime = Date.now();
+    logger.info('Task reminder scheduler started');
 
-        for (const task of tasks) {
-          const { name, email } = task.assignee;
-          const subject = `Reminder: Task "${
-            task.title
-          }" due on ${task.dueDate.toDateString()}`;
-          const text = `Hi ${name},\n\nYour task "${
-            task.title
-          }" is due on ${task.dueDate.toDateString()}. Please ensure it's completed by then.\n\nThanks.`;
-          await sendEmail({ to: email, subject, text });
-          logger.info(`Sent reminder for task ${task._id} to ${email}`);
+    try {
+      const now = new Date();
+      // Find tasks due in the next hour that haven't had reminder sent
+      const tasks = await Task.find({
+        dueDate: {
+          $gte: now,
+          $lte: new Date(now.getTime() + 60 * 60 * 1000), // +1 hour
+        },
+        reminderSent: false,
+      }).populate('user', 'name email');
+
+      logger.verbose(
+        `Found ${tasks.length} tasks due in the next hour that need reminders`
+      );
+
+      for (const task of tasks) {
+        try {
+          // Skip tasks with no user (shouldn't happen, but just in case)
+          if (!task.user) {
+            logger.warn(
+              `Task ${task._id} has no associated user, skipping reminder`
+            );
+            continue;
+          }
+
+          logger.verbose(`Processing reminder for task: ${task._id}`, {
+            taskId: task._id,
+            userId: task.user._id,
+            title: task.title,
+            dueDate: task.dueDate,
+          });
+
+          // Create notification
+          const notification = await createReminderNotification(
+            task.user,
+            'Task Due Soon',
+            `Your task "${task.title}" is due soon.`,
+            task._id,
+            'Task',
+            `/tasks/${task._id}`
+          );
+
+          // Send email notification
+          const emailSent = await sendEmail({
+            to: task.user.email,
+            subject: 'Task Due Soon',
+            text: `Your task "${task.title}" is due soon.`,
+            html: `
+              <h2>Task Reminder</h2>
+              <p>Hello ${task.user.name},</p>
+              <p>Your task <strong>${task.title}</strong> is due soon.</p>
+              <p>Due Date: ${task.dueDate.toLocaleString()}</p>
+              <p>Description: ${
+                task.description || 'No description provided'
+              }</p>
+              <p>Status: ${task.status}</p>
+              <p>Priority: ${task.priority || 'Not set'}</p>
+              <p><a href="${process.env.FRONTEND_URL}/tasks/${
+              task._id
+            }">View Task</a></p>
+            `,
+          });
+
+          // Mark reminder as sent
+          task.reminderSent = true;
+          await task.save();
+
+          logger.info(`Task reminder sent for task ${task._id}`, {
+            taskId: task._id,
+            userId: task.user._id,
+            title: task.title,
+            notificationId: notification._id,
+            emailSent: Boolean(emailSent),
+          });
+        } catch (err) {
+          logger.error(`Error processing reminder for task ${task._id}:`, {
+            error: err.message,
+            stack: err.stack,
+            taskId: task._id,
+          });
         }
-      } catch (err) {
-        logger.error('Task reminder job error:', err);
       }
-    },
-    { timezone: process.env.SERVER_TIMEZONE || 'UTC' }
-  );
-}
 
-module.exports = { scheduleTaskReminders };
+      const processingTime = Date.now() - startTime;
+      logger.info(`Task reminder scheduler completed in ${processingTime}ms`, {
+        processedTasks: tasks.length,
+        processingTimeMs: processingTime,
+      });
+    } catch (err) {
+      logger.error('Error in task reminder scheduler:', {
+        error: err.message,
+        stack: err.stack,
+      });
+    }
+  });
+};
+
+// Schedule for running note reminders (every hour)
+const scheduleNoteReminders = () => {
+  logger.info('Setting up note reminder scheduler - runs every hour');
+
+  cron.schedule('30 * * * *', async () => {
+    const startTime = Date.now();
+    logger.info('Note reminder scheduler started');
+
+    try {
+      const now = new Date();
+      // Find notes with reminders due in the next hour that haven't had reminder sent
+      const notes = await Note.find({
+        'reminder.date': {
+          $gte: now,
+          $lte: new Date(now.getTime() + 60 * 60 * 1000), // +1 hour
+        },
+        'reminder.sent': false,
+      }).populate('user', 'name email');
+
+      logger.verbose(
+        `Found ${notes.length} notes with reminders due in the next hour`
+      );
+
+      for (const note of notes) {
+        try {
+          // Skip notes with no user (shouldn't happen, but just in case)
+          if (!note.user) {
+            logger.warn(
+              `Note ${note._id} has no associated user, skipping reminder`
+            );
+            continue;
+          }
+
+          logger.verbose(`Processing reminder for note: ${note._id}`, {
+            noteId: note._id,
+            userId: note.user._id,
+            title: note.title,
+            reminderDate: note.reminder.date,
+          });
+
+          // Create notification
+          const notification = await createReminderNotification(
+            note.user,
+            'Note Reminder',
+            `Reminder for your note: "${note.title}"`,
+            note._id,
+            'Note',
+            `/notes/${note._id}`
+          );
+
+          // Send email notification
+          const emailSent = await sendEmail({
+            to: note.user.email,
+            subject: 'Note Reminder',
+            text: `Reminder for your note: "${note.title}"`,
+            html: `
+              <h2>Note Reminder</h2>
+              <p>Hello ${note.user.name},</p>
+              <p>This is a reminder for your note: <strong>${
+                note.title
+              }</strong></p>
+              <p>Reminder set for: ${note.reminder.date.toLocaleString()}</p>
+              <p><a href="${process.env.FRONTEND_URL}/notes/${
+              note._id
+            }">View Note</a></p>
+            `,
+          });
+
+          // Mark reminder as sent
+          note.reminder.sent = true;
+          await note.save();
+
+          logger.info(`Note reminder sent for note ${note._id}`, {
+            noteId: note._id,
+            userId: note.user._id,
+            title: note.title,
+            notificationId: notification._id,
+            emailSent: Boolean(emailSent),
+          });
+        } catch (err) {
+          logger.error(`Error processing reminder for note ${note._id}:`, {
+            error: err.message,
+            stack: err.stack,
+            noteId: note._id,
+          });
+        }
+      }
+
+      const processingTime = Date.now() - startTime;
+      logger.info(`Note reminder scheduler completed in ${processingTime}ms`, {
+        processedNotes: notes.length,
+        processingTimeMs: processingTime,
+      });
+    } catch (err) {
+      logger.error('Error in note reminder scheduler:', {
+        error: err.message,
+        stack: err.stack,
+      });
+    }
+  });
+};
+
+// Schedule for checking and sending unsent notifications (every minute)
+const scheduleNotificationProcessor = (io) => {
+  logger.info('Setting up notification processor - runs every minute');
+
+  // Store the io instance for later use
+  let socketIO = io;
+
+  // Allow the io instance to be updated later if needed
+  const updateSocketIO = (newIO) => {
+    logger.info('Updating socket.io instance in notification processor');
+    socketIO = newIO;
+  };
+
+  cron.schedule('* * * * *', async () => {
+    logger.verbose('Notification processor scheduled job starting');
+    try {
+      await processUnsentNotifications(socketIO);
+    } catch (err) {
+      logger.error('Error in notification processor scheduler:', {
+        error: err.message,
+        stack: err.stack,
+      });
+    }
+  });
+
+  return { updateSocketIO };
+};
+
+module.exports = {
+  scheduleTaskReminders,
+  scheduleNoteReminders,
+  scheduleNotificationProcessor,
+};

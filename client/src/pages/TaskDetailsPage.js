@@ -1,12 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
+import { ArrowLeft } from 'lucide-react';
 import {
   getTask,
   updateTask,
   deleteTask,
   resetTaskStatus,
 } from '../features/tasks/taskSlice';
+import {
+  getProjects,
+  resetProjectStatus,
+} from '../features/projects/projectSlice';
 
 const TaskDetailsPage = () => {
   const { id } = useParams();
@@ -18,18 +23,31 @@ const TaskDetailsPage = () => {
     isError,
     message,
   } = useSelector((state) => state.tasks);
+  const {
+    projects,
+    isLoading: projectsLoading,
+    isError: projectsError,
+    message: projectsMessage,
+  } = useSelector((state) => state.projects);
+
   const [form, setForm] = useState({
     title: '',
     description: '',
     status: '',
     priority: '',
     dueDate: '',
+    project: '', // Add project field
   });
 
   useEffect(() => {
+    // Fetch the task and all available projects
     dispatch(getTask(id));
+    dispatch(getProjects());
+
+    // Cleanup functions
     return () => {
       dispatch(resetTaskStatus());
+      dispatch(resetProjectStatus());
     };
   }, [dispatch, id]);
 
@@ -43,6 +61,7 @@ const TaskDetailsPage = () => {
         dueDate: task.dueDate
           ? new Date(task.dueDate).toISOString().substr(0, 10)
           : '',
+        project: task.project?._id || '', // Set the project ID if it exists
       });
     }
   }, [task]);
@@ -52,7 +71,12 @@ const TaskDetailsPage = () => {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    await dispatch(updateTask({ taskId: id, updates: form })).unwrap();
+    await dispatch(
+      updateTask({
+        taskId: id,
+        updates: form,
+      })
+    ).unwrap();
     navigate('/tasks');
   };
 
@@ -63,8 +87,8 @@ const TaskDetailsPage = () => {
     }
   };
 
-  if (isLoading)
-    return <div className="container mx-auto p-4">Loading task...</div>;
+  if (isLoading || projectsLoading)
+    return <div className="container mx-auto p-4">Loading...</div>;
   if (isError)
     return (
       <div className="container mx-auto p-4 text-red-600">Error: {message}</div>
@@ -74,6 +98,17 @@ const TaskDetailsPage = () => {
 
   return (
     <div className="container mx-auto p-4">
+      {/* Back Link */}
+      <div className="mb-4">
+        <Link
+          to="/tasks"
+          className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline transition duration-150 ease-in-out"
+        >
+          <ArrowLeft size={16} className="mr-1" />
+          Back to Task List
+        </Link>
+      </div>
+
       <h1 className="text-2xl font-bold mb-4">Edit Task</h1>
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
@@ -82,7 +117,7 @@ const TaskDetailsPage = () => {
             name="title"
             value={form.title}
             onChange={onChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
           />
         </div>
         <div>
@@ -91,64 +126,120 @@ const TaskDetailsPage = () => {
             name="description"
             value={form.description}
             onChange={onChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             rows={3}
           />
         </div>
-        <div className="flex space-x-4">
-          <div>
+
+        {/* Project Selection - New field */}
+        <div>
+          <label className="block text-sm font-medium">Project</label>
+          <select
+            name="project"
+            value={form.project}
+            onChange={onChange}
+            className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
+          >
+            <option value="">-- No Project (Standalone Task) --</option>
+            {projects &&
+              projects.map((project) => (
+                <option key={project._id} value={project._id}>
+                  {project.name}
+                </option>
+              ))}
+          </select>
+        </div>
+
+        <div className="flex flex-wrap gap-4">
+          <div className="w-full sm:w-auto flex-1">
             <label className="block text-sm font-medium">Status</label>
             <select
               name="status"
               value={form.status}
               onChange={onChange}
-              className="p-2 border rounded"
+              className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             >
               <option value="Not Started">Not Started</option>
               <option value="In Progress">In Progress</option>
               <option value="Completed">Completed</option>
             </select>
           </div>
-          <div>
+          <div className="w-full sm:w-auto flex-1">
             <label className="block text-sm font-medium">Priority</label>
             <select
               name="priority"
               value={form.priority}
               onChange={onChange}
-              className="p-2 border rounded"
+              className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             >
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
               <option value="High">High</option>
             </select>
           </div>
-          <div>
+          <div className="w-full sm:w-auto flex-1">
             <label className="block text-sm font-medium">Due Date</label>
             <input
               type="date"
               name="dueDate"
               value={form.dueDate}
               onChange={onChange}
-              className="p-2 border rounded"
+              className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             />
           </div>
         </div>
-        <div className="flex space-x-2">
-          <button
-            type="submit"
-            className="bg-blue-500 hover:bg-blue-700 text-white px-4 py-2 rounded"
-          >
-            Save
-          </button>
+
+        {/* Button Row */}
+        <div className="flex justify-between items-center pt-4">
+          {/* Save and Cancel Buttons Group */}
+          <div className="flex space-x-2">
+            <button
+              type="submit"
+              className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/tasks')}
+              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+            >
+              Cancel
+            </button>
+          </div>
+          {/* Delete Button (aligned to the right) */}
           <button
             type="button"
             onClick={onDelete}
-            className="bg-red-500 hover:bg-red-700 text-white px-4 py-2 rounded"
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
           >
             Delete
           </button>
         </div>
       </form>
+
+      {/* Project Context Information */}
+      {task.project && (
+        <div className="mt-8 p-4 bg-card rounded-lg border border-dark-700">
+          <h3 className="text-lg font-medium mb-2">Project Information</h3>
+          <p>
+            This task is part of project:{' '}
+            <span className="font-semibold text-primary">
+              {task.project.name}
+            </span>
+          </p>
+          <p className="text-sm text-gray-400 mt-1">
+            Change the project using the dropdown above or click
+            <Link
+              to={`/projects/${task.project._id}`}
+              className="text-accent-purple hover:text-accent-blue ml-1"
+            >
+              here
+            </Link>{' '}
+            to view the project details.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

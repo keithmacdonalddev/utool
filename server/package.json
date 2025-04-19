@@ -8,7 +8,13 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed:admin": "node scripts/seedAdmin.js"
   },
-  "keywords": ["utool", "productivity", "mern", "tasks", "projects"],
+  "keywords": [
+    "utool",
+    "productivity",
+    "mern",
+    "tasks",
+    "projects"
+  ],
   "author": "",
   "license": "ISC",
   "description": "Backend server for uTool productivity platform",
@@ -20,6 +26,7 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.13.2",
+    "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.10.1",
     "socket.io": "^4.8.1",

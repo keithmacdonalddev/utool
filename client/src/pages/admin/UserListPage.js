@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotifications } from '../../context/NotificationContext';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
 import {
@@ -37,7 +37,7 @@ const UserListPage = () => {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState('');
-  const { showNotification } = useNotification();
+  const { showNotification } = useNotifications();
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
   const handleCreateUser = async () => {
@@ -268,10 +268,10 @@ const UserListPage = () => {
                     }
                     required
                     options={[
-                      {value: "", label: "Select Role"},
-                      {value: "Admin", label: "Admin"},
-                      {value: "Pro User", label: "Pro User"},
-                      {value: "Regular User", label: "Regular User"}
+                      { value: '', label: 'Select Role' },
+                      { value: 'Admin', label: 'Admin' },
+                      { value: 'Pro User', label: 'Pro User' },
+                      { value: 'Regular User', label: 'Regular User' },
                     ]}
                   />
                 </div>

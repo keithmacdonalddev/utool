@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNotification } from '../../context/NotificationContext';
+import { useNotifications } from '../../context/NotificationContext';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../../utils/api';
 import { ArrowLeft } from 'lucide-react';
@@ -29,7 +29,18 @@ const UserEditPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState(''); // For both fetch and update errors
-  const { showNotification } = useNotification();
+  const { handleNotificationClick } = useNotifications();
+
+  // Using handleNotificationClick as a replacement for showNotification
+  const showNotification = (message, type = 'info') => {
+    const notificationObj = {
+      _id: Date.now().toString(),
+      title: type === 'error' ? 'Error' : 'Success',
+      message,
+      type,
+    };
+    handleNotificationClick(notificationObj);
+  };
 
   // Fetch user data
   useEffect(() => {
@@ -204,9 +215,9 @@ const UserEditPage = () => {
           onChange={onChange}
           required
           options={[
-            {value: "Regular User", label: "Regular User"},
-            {value: "Pro User", label: "Pro User"}, 
-            {value: "Admin", label: "Admin"}
+            { value: 'Regular User', label: 'Regular User' },
+            { value: 'Pro User', label: 'Pro User' },
+            { value: 'Admin', label: 'Admin' },
           ]}
         />
         {/* Verified Status */}

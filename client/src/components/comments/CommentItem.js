@@ -138,7 +138,7 @@ const CommentItem = ({ comment, articleId, onCommentAction }) => {
   };
 
   return (
-    <div className="py-3 border-b last:border-b-0">
+    <div className="py-3 bg-dark-700 p-3 rounded-md shadow-sm mb-3">
       <div className="flex items-start space-x-3">
         {/* Display Avatar or Placeholder */}
         <img
@@ -153,7 +153,7 @@ const CommentItem = ({ comment, articleId, onCommentAction }) => {
         />
         <div className="flex-1">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-800">
+            <p className="text-sm font-semibold text-foreground">
               {comment.author?.name || 'Anonymous'}
             </p>
             <p className="text-xs text-gray-400">
@@ -162,7 +162,7 @@ const CommentItem = ({ comment, articleId, onCommentAction }) => {
             </p>
           </div>
           {!showEditForm ? (
-            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">
+            <p className="text-sm text-gray-300 mt-1 whitespace-pre-wrap">
               {comment.content}
             </p>
           ) : (

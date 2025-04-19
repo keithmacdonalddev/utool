@@ -26,7 +26,9 @@ export const fetchNotes = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -43,7 +45,9 @@ export const createNote = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -60,7 +64,9 @@ export const fetchNote = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -77,7 +83,9 @@ export const updateNote = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -91,10 +99,13 @@ export const softDeleteNote = createAsyncThunk(
   async (id, thunkAPI) => {
     try {
       const response = await api.delete(`${NOTE_URL}/${id}`);
-      return response.data.data;
+      console.log('Soft delete response:', response.data);
+      return response.data.data; // This should contain the deleted note
     } catch (error) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -111,7 +122,9 @@ export const restoreNote = createAsyncThunk(
       return response.data.data;
     } catch (error) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -128,7 +141,9 @@ export const hardDeleteNote = createAsyncThunk(
       return id;
     } catch (error) {
       const message =
-        (error.response && error.response.data && error.response.data.message) ||
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
         error.message ||
         error.toString();
       return thunkAPI.rejectWithValue(message);
@@ -161,9 +176,15 @@ export const noteSlice = createSlice({
         state.isSuccess = true;
         state.notes = action.payload.filter((n) => !n.archived && !n.deletedAt);
         state.trash = action.payload.filter((n) => n.deletedAt);
-        state.archived = action.payload.filter((n) => n.archived && !n.deletedAt);
-        state.favorites = action.payload.filter((n) => n.favorite && !n.deletedAt && !n.archived);
-        state.pinned = action.payload.filter((n) => n.pinned && !n.deletedAt && !n.archived);
+        state.archived = action.payload.filter(
+          (n) => n.archived && !n.deletedAt
+        );
+        state.favorites = action.payload.filter(
+          (n) => n.favorite && !n.deletedAt && !n.archived
+        );
+        state.pinned = action.payload.filter(
+          (n) => n.pinned && !n.deletedAt && !n.archived
+        );
       })
       .addCase(fetchNotes.rejected, (state, action) => {
         state.isLoading = false;
@@ -205,12 +226,25 @@ export const noteSlice = createSlice({
       .addCase(updateNote.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.notes = state.notes.map((n) => (n._id === action.payload._id ? action.payload : n));
-        state.archived = state.archived.map((n) => (n._id === action.payload._id ? action.payload : n));
-        state.favorites = state.favorites.map((n) => (n._id === action.payload._id ? action.payload : n));
-        state.pinned = state.pinned.map((n) => (n._id === action.payload._id ? action.payload : n));
-        state.trash = state.trash.map((n) => (n._id === action.payload._id ? action.payload : n));
-        if (state.selectedNote && state.selectedNote._id === action.payload._id) {
+        state.notes = state.notes.map((n) =>
+          n._id === action.payload._id ? action.payload : n
+        );
+        state.archived = state.archived.map((n) =>
+          n._id === action.payload._id ? action.payload : n
+        );
+        state.favorites = state.favorites.map((n) =>
+          n._id === action.payload._id ? action.payload : n
+        );
+        state.pinned = state.pinned.map((n) =>
+          n._id === action.payload._id ? action.payload : n
+        );
+        state.trash = state.trash.map((n) =>
+          n._id === action.payload._id ? action.payload : n
+        );
+        if (
+          state.selectedNote &&
+          state.selectedNote._id === action.payload._id
+        ) {
           state.selectedNote = action.payload;
         }
       })
@@ -226,12 +260,35 @@ export const noteSlice = createSlice({
       .addCase(softDeleteNote.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        // Move to trash
-        state.trash.unshift(action.payload);
-        state.notes = state.notes.filter((n) => n._id !== action.payload._id);
-        state.archived = state.archived.filter((n) => n._id !== action.payload._id);
-        state.favorites = state.favorites.filter((n) => n._id !== action.payload._id);
-        state.pinned = state.pinned.filter((n) => n._id !== action.payload._id);
+        console.log('Soft delete success payload:', action.payload);
+
+        // Make sure we have payload data before processing
+        if (action.payload) {
+          // Add to trash
+          state.trash.unshift(action.payload);
+
+          // Remove from all other arrays
+          state.notes = state.notes.filter((n) => n._id !== action.payload._id);
+          state.archived = state.archived.filter(
+            (n) => n._id !== action.payload._id
+          );
+          state.favorites = state.favorites.filter(
+            (n) => n._id !== action.payload._id
+          );
+          state.pinned = state.pinned.filter(
+            (n) => n._id !== action.payload._id
+          );
+
+          // If this is the selected note, clear it
+          if (
+            state.selectedNote &&
+            state.selectedNote._id === action.payload._id
+          ) {
+            state.selectedNote = null;
+          }
+        } else {
+          console.error('No payload data in softDeleteNote.fulfilled action');
+        }
       })
       .addCase(softDeleteNote.rejected, (state, action) => {
         state.isLoading = false;

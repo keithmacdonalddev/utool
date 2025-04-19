@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { logoutUser, resetAuthStatus } from '../../features/auth/authSlice';
 import Sidebar from './Sidebar';
 import NavbarClockStockWeather from './NavbarClockStockWeather';
+import NotificationBell from './NotificationBell';
 import { Menu, X, LogOut } from 'lucide-react';
 
 const MainLayout = () => {
@@ -84,6 +85,9 @@ const MainLayout = () => {
             <div className="flex items-center space-x-4">
               {/* Clock & Weather */}
               <NavbarClockStockWeather />
+
+              {/* Notification Bell */}
+              {user && <NotificationBell />}
 
               {/* Avatar Button & Dropdown */}
               {user && (

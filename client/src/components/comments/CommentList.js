@@ -149,8 +149,8 @@ const CommentList = ({ articleId }) => {
   );
 
   return (
-    <div className="mt-8 pt-6 border-t">
-      <h3 className="text-xl font-semibold mb-4">
+    <div className="mt-8 p-6 bg-card border border-dark-700 shadow-card rounded-lg">
+      <h3 className="text-xl font-semibold mb-4 text-white">
         Comments ({comments.length})
       </h3>
 
