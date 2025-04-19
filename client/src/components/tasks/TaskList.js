@@ -6,6 +6,9 @@ const TaskList = ({
   showCheckbox = false,
   selectedTasks = [],
   onSelectTask = () => {},
+  onTaskClick = () => {},
+  activeTaskId = null,
+  simplified = false,
 }) => {
   return (
     <ul className="space-y-2">
@@ -16,6 +19,9 @@ const TaskList = ({
           showCheckbox={showCheckbox}
           selected={selectedTasks.includes(task._id)}
           onSelect={onSelectTask}
+          onClick={() => onTaskClick(task._id)}
+          isActive={activeTaskId === task._id}
+          simplified={simplified}
         />
       ))}
     </ul>

@@ -1,8 +1,8 @@
 import React from 'react';
 import { useDispatch } from 'react-redux';
-import { Link } from 'react-router-dom'; // Import Link
-import { updateTask, deleteTask } from '../../features/tasks/taskSlice';
-import { Trash2, Edit } from 'lucide-react'; // Import icons
+import { Link } from 'react-router-dom';
+import { deleteTask } from '../../features/tasks/taskSlice';
+import { Trash2, Calendar } from 'lucide-react';
 
 // Helper function for status badge styling
 const getStatusClasses = (status) => {
@@ -40,96 +40,123 @@ const formatDate = (dateString) => {
   });
 };
 
+// Helper to format created date
+const formatCreatedDate = (dateString) => {
+  if (!dateString) return 'Unknown';
+  const date = new Date(dateString);
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
 const TaskItem = ({
   task,
-  showCheckbox = false, // Re-add showCheckbox prop
-  selected = false, // Re-add selected prop
-  onSelect, // Re-add onSelect prop
+  showCheckbox = false,
+  selected = false,
+  onSelect,
+  onClick,
+  isActive = false,
+  simplified = false,
 }) => {
   const dispatch = useDispatch();
-  const { _id, title, status, priority, dueDate, project } = task; // Assuming task might have a project ID
+  const { _id, title, status, priority, dueDate, project, createdAt } = task;
 
   const handleDelete = (e) => {
-    e.stopPropagation(); // Prevent link navigation when clicking delete
+    e.stopPropagation();
     e.preventDefault();
     if (window.confirm('Delete this task?')) {
       dispatch(deleteTask(_id));
     }
   };
 
-  // Placeholder for navigation to an edit view
-  const handleEdit = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    // TODO: Implement navigation to edit page, e.g., navigate(`/tasks/${_id}/edit`)
-    console.log('Navigate to edit task:', _id);
+  // Define the base classes for the list item, with conditional active state
+  const itemClasses = `flex items-center justify-between p-4 rounded-lg shadow-sm transition-all duration-200 mb-3 border cursor-pointer
+    ${
+      isActive
+        ? 'bg-primary-900/30 border-primary'
+        : 'bg-card border-dark-700 hover:shadow-md hover:border-dark-500'
+    }`;
+
+  // Handle task item click
+  const handleClick = (e) => {
+    // Only trigger click if not clicking on checkbox or delete button
+    if (e.target.type !== 'checkbox') {
+      onClick(_id);
+    }
   };
 
   return (
-    // Use Link to make the whole item clickable, leading to details/edit
-    // Or keep as li and add specific click handlers/links
-    <li className="flex items-center justify-between p-4 bg-card rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 mb-3 border border-dark-700 group">
-      {/* Checkbox for selection */}
-      {showCheckbox && (
-        <div className="flex-shrink-0 pr-4">
-          {' '}
-          {/* Wrapper for spacing */}
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => onSelect(_id)} // Call onSelect with task ID
-            onClick={(e) => e.stopPropagation()} // Prevent li click when clicking checkbox
-            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-          />
-        </div>
-      )}
-      <div className="flex-1 min-w-0 mr-4">
-        <Link to={`/tasks/${_id}`} className="block">
-          {' '}
-          {/* Link the title */}
+    <li className={itemClasses} onClick={handleClick}>
+      <div className="flex items-center flex-1 min-w-0">
+        {/* Checkbox for selection */}
+        {showCheckbox && (
+          <div className="flex-shrink-0 pr-4">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onSelect(_id)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
           <h3
-            className="text-lg font-semibold text-foreground truncate group-hover:text-primary transition-colors"
+            className="text-lg font-semibold text-foreground truncate"
             title={title}
           >
             {title}
           </h3>
-        </Link>
-        {/* Display project name if available */}
-        <p className="text-xs text-gray-400 mt-1">
-          {project?.name ? `Project: ${project.name}` : 'Standalone Task'}
-        </p>
-        <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
-          {/* Status Badge */}
-          <span
-            className={`inline-block px-2 py-0.5 rounded-full font-medium ${getStatusClasses(
-              status
-            )}`}
-          >
-            {status}
-          </span>
-          {/* Priority Badge */}
-          <span
-            className={`inline-block px-2 py-0.5 rounded-full font-medium ${getPriorityClasses(
-              priority || 'Low' // Default to Low if undefined
-            )}`}
-          >
-            {priority || 'Low'} Priority
-          </span>
-          {/* Due Date */}
-          <span className="text-gray-400">{formatDate(dueDate)}</span>
+
+          {/* Project name info */}
+          {(simplified || project?.name) && (
+            <p className="text-xs text-gray-400 mt-1 truncate">
+              {project?.name ? `Project: ${project.name}` : 'Standalone Task'}
+            </p>
+          )}
+
+          {/* Created Date and Priority in the same row */}
+          <div className="flex items-center justify-between mt-1 text-xs">
+            {/* Created Date */}
+            <div className="flex items-center text-gray-400">
+              <Calendar size={12} className="mr-1" />
+              <span>Created: {formatCreatedDate(createdAt)}</span>
+            </div>
+
+            {/* Priority Badge */}
+            <span
+              className={`inline-block px-2 py-0.5 rounded-full font-medium ${getPriorityClasses(
+                priority || 'Low'
+              )}`}
+            >
+              {priority || 'Low'}
+            </span>
+          </div>
+
+          {/* Additional details if not in simplified view */}
+          {!simplified && (
+            <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
+              {/* Status Badge */}
+              <span
+                className={`inline-block px-2 py-0.5 rounded-full font-medium ${getStatusClasses(
+                  status
+                )}`}
+              >
+                {status}
+              </span>
+
+              {/* Due Date */}
+              <span className="text-gray-400">{formatDate(dueDate)}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Action Buttons - Show on hover using group-hover */}
-      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        {/* Edit Button Placeholder */}
-        {/* <button
-            onClick={handleEdit}
-            title="Edit Task"
-            className="text-blue-400 hover:text-blue-300 p-1"
-         >
-            <Edit size={16} />
-         </button> */}
+      {/* Delete button - Keep this in both views */}
+      <div className="flex items-center opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity duration-200">
         <button
           onClick={handleDelete}
           title="Delete Task"

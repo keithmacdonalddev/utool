@@ -10,6 +10,7 @@ import {
   AlertCircle,
   TrendingUp,
   TrendingDown,
+  RefreshCw,
 } from 'lucide-react';
 
 const getWeatherIcon = (iconCode) => {
@@ -45,9 +46,11 @@ const NavbarClockStockWeather = () => {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState('');
   const [stock, setStock] = useState(null);
-  const [stockLoading, setStockLoading] = useState(true);
+  const [stockLoading, setStockLoading] = useState(false);
   const [stockError, setStockError] = useState('');
   const [location, setLocation] = useState('Halifax');
+  const [apiCallsRemaining, setApiCallsRemaining] = useState(25);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const intervalRef = useRef(null);
 
   // Clock update
@@ -56,10 +59,60 @@ const NavbarClockStockWeather = () => {
     return () => clearInterval(timerId);
   }, []);
 
+  // Check and reset API calls counter if needed
+  const checkAndResetApiCallsCounter = () => {
+    const today = new Date().toDateString();
+    const lastResetDate = localStorage.getItem('stockApiCallsResetDate');
+
+    // If it's a new day or no data exists, reset the counter
+    if (!lastResetDate || lastResetDate !== today) {
+      localStorage.setItem('stockApiCallsToday', '0');
+      localStorage.setItem('stockApiCallsResetDate', today);
+      setApiCallsRemaining(25);
+      return 25;
+    }
+
+    // Otherwise, return the remaining calls
+    const callsMade = parseInt(
+      localStorage.getItem('stockApiCallsToday') || '0',
+      10
+    );
+    const remaining = Math.max(0, 25 - callsMade);
+    setApiCallsRemaining(remaining);
+    return remaining;
+  };
+
+  // Increment API calls counter
+  const incrementApiCallsCounter = () => {
+    const remaining = checkAndResetApiCallsCounter();
+    if (remaining <= 0) return false;
+
+    const callsMade = parseInt(
+      localStorage.getItem('stockApiCallsToday') || '0',
+      10
+    );
+    localStorage.setItem('stockApiCallsToday', String(callsMade + 1));
+    setApiCallsRemaining(25 - (callsMade + 1));
+    return true;
+  };
+
   const fetchStock = async () => {
+    // Don't fetch if we're already fetching
+    if (isRefreshing) return;
+
+    // Check if we've hit the daily limit
+    if (!incrementApiCallsCounter()) {
+      setStockError(
+        'Daily API call limit reached (25/25). Try again tomorrow.'
+      );
+      return;
+    }
+
+    setIsRefreshing(true);
+    setStockLoading(true);
+
     try {
       console.log('Fetching stock data at:', new Date().toLocaleTimeString());
-      // Remove the duplicate v1 prefix since it's already in the baseURL
       const res = await api.get('/stocks/TSLA');
       if (res.data.success) {
         const stockData = {
@@ -94,6 +147,7 @@ const NavbarClockStockWeather = () => {
       }
     } finally {
       setStockLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -124,7 +178,7 @@ const NavbarClockStockWeather = () => {
     return totalMinutes >= 570 && totalMinutes <= 960;
   };
 
-  // Stock fetching
+  // Load stock data from localStorage on mount
   useEffect(() => {
     const savedStock = localStorage.getItem('lastStockData');
     if (savedStock) {
@@ -136,31 +190,28 @@ const NavbarClockStockWeather = () => {
       }
     }
 
-    // Initialize stock data
-    setStockLoading(true);
+    // Initialize the API calls counter
+    checkAndResetApiCallsCounter();
 
-    // Do an immediate fetch
-    fetchStock();
+    // Set up a timer to check and reset the API calls counter at midnight
+    const setupMidnightReset = () => {
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
 
-    // Clear any existing interval to prevent duplicates
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
+      const timeUntilMidnight = tomorrow - now;
 
-    // Create a new interval for stock updates
-    intervalRef.current = setInterval(() => {
-      console.log(
-        'Stock update interval triggered at:',
-        new Date().toLocaleTimeString()
-      );
-      fetchStock();
-    }, 60 * 1000);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+      // Set timeout to reset counter at midnight
+      setTimeout(() => {
+        checkAndResetApiCallsCounter();
+        setupMidnightReset(); // Set up the next day's reset
+      }, timeUntilMidnight);
     };
+
+    setupMidnightReset();
+
+    // No automatic stock fetching - user must click the refresh button
   }, []);
 
   // Weather fetching
@@ -224,17 +275,31 @@ const NavbarClockStockWeather = () => {
           )}
           <button
             onClick={fetchStock}
-            className="text-xs text-blue-400 hover:text-blue-300 ml-1"
-            title="Refresh stock data"
+            disabled={isRefreshing || apiCallsRemaining <= 0}
+            className={`text-xs ${
+              isRefreshing
+                ? 'text-gray-500'
+                : 'text-blue-400 hover:text-blue-300'
+            } ml-1`}
+            title={
+              apiCallsRemaining > 0
+                ? `Refresh stock data (${apiCallsRemaining}/25 calls remaining today)`
+                : 'Daily API limit reached'
+            }
           >
-            ⟳
+            <RefreshCw
+              size={14}
+              className={isRefreshing ? 'animate-spin' : ''}
+            />
           </button>
         </div>
       )}
-      {stock && (
+      {stock && !stockError && (
         <div
           className="flex items-center space-x-1"
-          title={`TSLA: $${stock.price.toFixed(2)}`}
+          title={`TSLA: $${stock.price.toFixed(
+            2
+          )} - ${apiCallsRemaining}/25 API calls remaining today`}
         >
           {stock.change >= 0 ? (
             <TrendingUp size={16} className="text-green-400" />
@@ -273,6 +338,28 @@ const NavbarClockStockWeather = () => {
                 ⚠️
               </span>
             )}
+          </span>
+          <button
+            onClick={fetchStock}
+            disabled={isRefreshing || apiCallsRemaining <= 0}
+            className={`focus:outline-none ${
+              isRefreshing
+                ? 'text-gray-500'
+                : 'text-blue-400 hover:text-blue-300'
+            } ml-0.5`}
+            title={
+              apiCallsRemaining > 0
+                ? `Refresh stock data (${apiCallsRemaining}/25 calls remaining today)`
+                : 'Daily API limit reached'
+            }
+          >
+            <RefreshCw
+              size={14}
+              className={`${isRefreshing ? 'animate-spin' : ''}`}
+            />
+          </button>
+          <span className="text-xs text-gray-400 ml-0.5">
+            ({apiCallsRemaining}/25)
           </span>
         </div>
       )}
