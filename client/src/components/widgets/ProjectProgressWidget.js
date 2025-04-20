@@ -12,22 +12,6 @@ const ProjectProgressWidget = () => {
     dispatch(getProjects());
   }, [dispatch]);
 
-  // Calculate project progress
-  const calculateProgress = (project) => {
-    // Add null check for project.tasks
-    if (!project.tasks || !Array.isArray(project.tasks)) {
-      return 0;
-    }
-
-    const totalTasks = project.tasks.length;
-    if (totalTasks === 0) return 0;
-
-    const completedTasks = project.tasks.filter(
-      (task) => task.status === 'completed'
-    ).length;
-    return Math.round((completedTasks / totalTasks) * 100);
-  };
-
   // Sort projects by due date (closest first)
   const sortedProjects = [...(projects || [])]
     .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
@@ -63,13 +47,13 @@ const ProjectProgressWidget = () => {
                   {project.name}
                 </Link>
                 <span className="text-xs text-muted">
-                  {calculateProgress(project)}%
+                  {project.progress || 0}%
                 </span>
               </div>
-              <div className="w-full bg-dark-700 rounded-full h-2.5 mt-1">
+              <div className="w-full bg-dark-700 rounded-full h-2.5 mt-1 overflow-hidden">
                 <div
-                  className="bg-accent-blue h-2.5 rounded-full"
-                  style={{ width: `${calculateProgress(project)}%` }}
+                  className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${project.progress || 0}%` }}
                 ></div>
               </div>
             </div>

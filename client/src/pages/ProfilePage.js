@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector, useDispatch, useStore } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import { updateUserInState } from '../features/auth/authSlice';
+import { updateUserInState, deleteUser } from '../features/auth/authSlice';
 import { useNotifications } from '../context/NotificationContext';
 import FormInput from '../components/common/FormInput';
 import FormTextarea from '../components/common/FormTextarea';
@@ -9,9 +10,12 @@ import Button from '../components/common/Button';
 import PageHeader from '../components/common/PageHeader';
 import Card from '../components/common/Card';
 import Alert from '../components/common/Alert';
+import { Trash2 } from 'lucide-react';
 
 const ProfilePage = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const store = useStore();
   const {
     user,
     isLoading: authLoading,
@@ -32,6 +36,8 @@ const ProfilePage = () => {
   });
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateError, setUpdateError] = useState('');
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { showNotification } = useNotifications();
 
   // Populate form when user data is loaded
@@ -86,6 +92,25 @@ const ProfilePage = () => {
       );
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true);
+    try {
+      await dispatch(deleteUser());
+      const resultState = store.getState().auth;
+      if (!resultState.isError) {
+        showNotification('Your account has been deleted successfully.');
+        navigate('/login');
+      } else {
+        throw new Error(resultState.message || 'Failed to delete account');
+      }
+    } catch (err) {
+      setUpdateError(err.message || 'Failed to delete account');
+      setShowDeleteConfirmation(false);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -231,12 +256,58 @@ const ProfilePage = () => {
             className="mb-6"
           />
 
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center mb-6">
             <Button type="submit" disabled={isUpdating}>
               {isUpdating ? 'Updating...' : 'Update Profile'}
             </Button>
           </div>
         </form>
+
+        {/* Delete Account Section */}
+        <div className="border-t border-dark-600 pt-6 mt-2">
+          <h3 className="text-lg font-medium text-red-500 mb-2">Danger Zone</h3>
+          <p className="text-sm text-text-muted mb-4">
+            Deleting your account is permanent. All your data will be removed
+            and cannot be recovered.
+          </p>
+
+          {!showDeleteConfirmation ? (
+            <Button
+              type="button"
+              variant="danger"
+              className="flex items-center gap-2"
+              onClick={() => setShowDeleteConfirmation(true)}
+            >
+              <Trash2 size={16} />
+              Delete Account
+            </Button>
+          ) : (
+            <div className="bg-red-900/30 border border-red-700 rounded p-4">
+              <p className="text-red-300 font-medium mb-4">
+                Are you sure you want to delete your account? This action cannot
+                be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowDeleteConfirmation(false)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={handleDeleteAccount}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   );

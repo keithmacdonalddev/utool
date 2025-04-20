@@ -190,7 +190,7 @@ const ProjectDetailsPage = () => {
         </div>
         <Link
           to={`/projects/${id}/edit`}
-          className="flex items-center justify-center bg-dark-700 hover:bg-dark-600 text-primary px-4 py-2 rounded-md transition-colors"
+          className="flex items-center justify-center bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md transition-colors"
         >
           <Edit size={18} className="mr-2" /> Edit Project
         </Link>

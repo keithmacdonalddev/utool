@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, X, ArrowUp, ArrowDown } from 'lucide-react';
+import {
+  ArrowLeft,
+  X,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  ChevronDown,
+  Loader,
+} from 'lucide-react';
 import Button from '../components/common/Button';
 import {
   getTasks,
@@ -20,7 +28,9 @@ const TasksPage = () => {
   );
   const { projects } = useSelector((state) => state.projects);
   const [activeTaskId, setActiveTaskId] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('In Progress'); // Default to 'In Progress'
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false); // State for dropdown visibility
+  const [isTaskDetailLoading, setIsTaskDetailLoading] = useState(false); // Separate loading state for task details
 
   // Add sorting state
   const [sortCriteria, setSortCriteria] = useState('dueDate');
@@ -46,7 +56,12 @@ const TasksPage = () => {
 
   useEffect(() => {
     if (activeTaskId) {
-      dispatch(getTask(activeTaskId));
+      setIsTaskDetailLoading(true); // Set task detail loading to true
+      dispatch(getTask(activeTaskId))
+        .unwrap()
+        .finally(() => {
+          setIsTaskDetailLoading(false); // Set it back to false when done
+        });
     }
   }, [dispatch, activeTaskId]);
 
@@ -79,13 +94,25 @@ const TasksPage = () => {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    await dispatch(
-      updateTask({
-        taskId: activeTaskId,
-        updates: form,
-      })
-    ).unwrap();
-    dispatch(getTasks()); // Refresh task list
+    setIsTaskDetailLoading(true);
+    try {
+      await dispatch(
+        updateTask({
+          taskId: activeTaskId,
+          updates: form,
+        })
+      ).unwrap();
+
+      // Instead of refreshing the entire task list, just get the updated task
+      dispatch(getTask(activeTaskId));
+
+      // Show a success message or toast notification here if you have one
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      // Show error notification if needed
+    } finally {
+      setIsTaskDetailLoading(false);
+    }
   };
 
   // Filter and sort tasks
@@ -144,7 +171,9 @@ const TasksPage = () => {
     }
   };
 
-  if (isLoading)
+  // Only show loading state when initially loading task list, not when loading a single task
+  const isInitialLoading = isLoading && tasks.length === 0;
+  if (isInitialLoading)
     return <div className="container mx-auto p-4">Loading tasks...</div>;
   if (isError)
     return (
@@ -177,62 +206,61 @@ const TasksPage = () => {
         </Button>
       </div>
 
-      {/* Status Filter Buttons */}
+      {/* Combined Filter and Sort Controls */}
       {tasks.length > 0 && (
         <div className="px-4 mb-4">
-          <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-dark-700 rounded-md">
-            <span className="text-sm font-medium text-gray-300 mr-2">
-              Filter by Status:
-            </span>
-            <button
-              onClick={() => setStatusFilter('All')}
-              className={`px-3 py-1 rounded text-sm ${
-                statusFilter === 'All'
-                  ? 'bg-primary text-white'
-                  : 'bg-dark-700 hover:bg-dark-600 text-gray-200'
-              }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setStatusFilter('Completed')}
-              className={`px-3 py-1 rounded text-sm ${
-                statusFilter === 'Completed'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-dark-700 hover:bg-dark-600 text-gray-200'
-              }`}
-            >
-              Completed
-            </button>
-            <button
-              onClick={() => setStatusFilter('In Progress')}
-              className={`px-3 py-1 rounded text-sm ${
-                statusFilter === 'In Progress'
-                  ? 'bg-yellow-500 text-white'
-                  : 'bg-dark-700 hover:bg-dark-600 text-gray-200'
-              }`}
-            >
-              In Progress
-            </button>
-            <button
-              onClick={() => setStatusFilter('Not Started')}
-              className={`px-3 py-1 rounded text-sm ${
-                statusFilter === 'Not Started'
-                  ? 'bg-gray-500 text-white'
-                  : 'bg-dark-700 hover:bg-dark-600 text-gray-200'
-              }`}
-            >
-              Not Started
-            </button>
-          </div>
-        </div>
-      )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3 bg-card border border-dark-700 rounded-md">
+            {/* Status Filter Dropdown */}
+            <div className="relative inline-block text-left">
+              <div>
+                <button
+                  type="button"
+                  className="inline-flex justify-center w-full rounded-md border border-dark-600 shadow-sm px-4 py-2 bg-dark-700 text-sm font-medium text-gray-200 hover:bg-dark-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-800 focus:ring-primary"
+                  id="options-menu"
+                  aria-haspopup="true"
+                  aria-expanded={isStatusDropdownOpen}
+                  onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                >
+                  <Filter size={16} className="mr-2 -ml-1" />
+                  Status: {statusFilter}
+                  <ChevronDown size={16} className="ml-2 -mr-1" />
+                </button>
+              </div>
 
-      {/* Add Sorting Controls */}
-      {tasks.length > 0 && (
-        <div className="px-4 mb-4">
-          <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-dark-700 rounded-md">
-            <span className="text-sm font-medium text-gray-300 mr-2">
+              {isStatusDropdownOpen && (
+                <div
+                  className="origin-top-left absolute left-0 mt-2 w-48 rounded-md shadow-lg bg-dark-700 ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
+                  role="menu"
+                  aria-orientation="vertical"
+                  aria-labelledby="options-menu"
+                >
+                  <div className="py-1" role="none">
+                    {['All', 'Not Started', 'In Progress', 'Completed'].map(
+                      (status) => (
+                        <button
+                          key={status}
+                          onClick={() => {
+                            setStatusFilter(status);
+                            setIsStatusDropdownOpen(false);
+                          }}
+                          className={`${
+                            statusFilter === status
+                              ? 'bg-primary text-white'
+                              : 'text-gray-200 hover:bg-dark-600 hover:text-white'
+                          } block w-full text-left px-4 py-2 text-sm`}
+                          role="menuitem"
+                        >
+                          {status}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sorting Controls */}
+            <span className="text-sm font-medium text-gray-300 mr-2 hidden md:inline">
               Sort by:
             </span>
             <button
@@ -322,8 +350,8 @@ const TasksPage = () => {
       {/* Split View Container */}
       <div className="flex flex-1 overflow-hidden px-4 pb-4">
         {/* Task List - 1/3 width */}
-        <div className="w-1/3 pr-4 overflow-y-auto border-r border-dark-700">
-          <div className="space-y-2">
+        <div className="w-1/3 overflow-hidden border-r border-dark-700">
+          <div className="h-full overflow-y-auto px-4 -mr-4 pr-8">
             {filteredAndSortedTasks && filteredAndSortedTasks.length > 0 ? (
               <TaskList
                 tasks={filteredAndSortedTasks}
@@ -345,7 +373,11 @@ const TasksPage = () => {
 
         {/* Task Details - 2/3 width */}
         <div className="w-2/3 pl-4 overflow-y-auto">
-          {activeTaskId && currentTask ? (
+          {isTaskDetailLoading ? (
+            <div className="flex items-center justify-center h-full text-gray-400">
+              <Loader size={32} className="animate-spin" />
+            </div>
+          ) : activeTaskId && currentTask ? (
             <div className="bg-card rounded-lg border border-dark-700 p-4">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">{currentTask.title}</h2>

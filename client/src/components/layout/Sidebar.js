@@ -84,14 +84,23 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
           {/* Positioned absolutely or adjust flex container */}
           <button
             onClick={toggleMinimize}
-            className="hidden md:block text-gray-400 hover:text-white focus:outline-none p-2" // Added padding
+            className="hidden md:block text-gray-400 hover:text-white focus:outline-none focus:ring-0"
+            style={{
+              outline: 'none',
+              boxShadow: 'none',
+              border: 'none',
+              WebkitTapHighlightColor: 'rgba(0, 0, 0, 0)',
+              appearance: 'none',
+            }}
             title={isMinimized ? 'Expand Sidebar' : 'Collapse Sidebar'}
           >
-            {isMinimized ? (
-              <ChevronsRight size={20} />
-            ) : (
-              <ChevronsLeft size={20} />
-            )}
+            <span className="pointer-events-none">
+              {isMinimized ? (
+                <ChevronsRight size={20} />
+              ) : (
+                <ChevronsLeft size={20} />
+              )}
+            </span>
           </button>
         </div>
 

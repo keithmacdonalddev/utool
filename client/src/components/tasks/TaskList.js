@@ -11,7 +11,9 @@ const TaskList = ({
   simplified = false,
 }) => {
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2 px-2">
+      {' '}
+      {/* Added px-2 for horizontal padding */}
       {tasks.map((task) => (
         <TaskItem
           key={task._id}

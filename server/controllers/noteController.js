@@ -1,14 +1,19 @@
 const Note = require('../models/Note');
 const Task = require('../models/Task');
+const { logger } = require('../utils/logger');
 
 // @desc    Get recent notes for logged-in user
 // @route   GET /api/v1/notes/recent
 // @access  Private
 exports.getRecentNotes = async (req, res, next) => {
   try {
+    logger.logAccess('notes', null, req.user.id, { req });
+
     const notes = await Note.find({ user: req.user.id })
       .sort({ createdAt: -1 }) // Sort by newest first
       .limit(10); // Limit to recent notes (e.g., 10)
+
+    logger.logDbOperation('find', 'Note', true, null, { count: notes.length });
 
     res.status(200).json({
       success: true,
@@ -16,10 +21,17 @@ exports.getRecentNotes = async (req, res, next) => {
       data: notes,
     });
   } catch (err) {
-    console.error('Get Recent Notes Error:', err);
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching recent notes' });
+    logger.error('Failed to fetch recent notes', {
+      error: err,
+      userId: req.user.id,
+      req,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server Error fetching recent notes',
+      notificationType: 'error',
+    });
   }
 };
 
@@ -28,30 +40,50 @@ exports.getRecentNotes = async (req, res, next) => {
 // @access  Private
 exports.getNotesForTask = async (req, res, next) => {
   try {
+    logger.logAccess('task notes', req.params.taskId, req.user.id, { req });
+
     // Check if the task exists and belongs to the user (or if user has access)
     const task = await Task.findById(req.params.taskId);
 
+    logger.logDbOperation('findById', 'Task', !!task, null, {
+      taskId: req.params.taskId,
+    });
+
     if (!task) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Task not found' });
+      logger.warn(`Task not found: ${req.params.taskId}`, {
+        userId: req.user.id,
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found',
+        notificationType: 'error',
+      });
     }
 
     // Ensure the logged-in user is the assignee of the task to view its notes
-    // (Adjust authorization logic later based on roles/permissions if needed)
     if (task.assignee.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to access notes for this task',
-        });
+      logger.warn(`Unauthorized task notes access`, {
+        userId: req.user.id,
+        taskId: req.params.taskId,
+        taskAssignee: task.assignee,
+      });
+
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to access notes for this task',
+        notificationType: 'error',
+      });
     }
 
     // Find notes associated with the task ID
     const notes = await Note.find({ task: req.params.taskId }).sort({
       createdAt: -1,
-    }); // Sort by newest first
+    });
+
+    logger.logDbOperation('find', 'Note', true, null, {
+      count: notes.length,
+      taskId: req.params.taskId,
+    });
 
     res.status(200).json({
       success: true,
@@ -59,10 +91,18 @@ exports.getNotesForTask = async (req, res, next) => {
       data: notes,
     });
   } catch (err) {
-    console.error('Get Notes Error:', err);
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching notes' });
+    logger.error('Failed to fetch task notes', {
+      error: err,
+      taskId: req.params.taskId,
+      userId: req.user.id,
+      req,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server Error fetching notes',
+      notificationType: 'error',
+    });
   }
 };
 
@@ -74,21 +114,34 @@ exports.createNoteForTask = async (req, res, next) => {
     // Check if the task exists and belongs to the user (or if user has access)
     const task = await Task.findById(req.params.taskId);
 
+    logger.logDbOperation('findById', 'Task', !!task, null, {
+      taskId: req.params.taskId,
+    });
+
     if (!task) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Task not found' });
+      logger.warn(`Task not found for note creation: ${req.params.taskId}`, {
+        userId: req.user.id,
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found',
+        notificationType: 'error',
+      });
     }
 
     // Ensure the logged-in user is the assignee of the task to add notes
-    // (Adjust authorization logic later based on roles/permissions if needed)
     if (task.assignee.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to add notes to this task',
-        });
+      logger.warn(`Unauthorized task note creation attempt`, {
+        userId: req.user.id,
+        taskId: req.params.taskId,
+        taskAssignee: task.assignee,
+      });
+
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to add notes to this task',
+        notificationType: 'error',
+      });
     }
 
     // Add user and task IDs to the request body before creating the note
@@ -98,9 +151,16 @@ exports.createNoteForTask = async (req, res, next) => {
     const { content } = req.body; // Extract allowed fields
 
     if (!content) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Note content cannot be empty' });
+      logger.warn('Empty note content submitted', {
+        userId: req.user.id,
+        taskId: req.params.taskId,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: 'Note content cannot be empty',
+        notificationType: 'error',
+      });
     }
 
     const noteData = {
@@ -111,26 +171,48 @@ exports.createNoteForTask = async (req, res, next) => {
 
     const note = await Note.create(noteData);
 
-    // Optional: Add the note reference to the task's notes array
-    // task.notes.push(note._id);
-    // await task.save(); // Consider if this is necessary or handled differently
+    logger.logCreate('note', note._id, req.user.id, {
+      taskId: req.params.taskId,
+      contentLength: content.length,
+      req,
+    });
 
     res.status(201).json({
       success: true,
       data: note,
+      message: 'Note created successfully',
+      notificationType: 'success',
     });
   } catch (err) {
-    console.error('Create Note Error:', err);
+    logger.error('Failed to create note', {
+      error: err,
+      taskId: req.params.taskId,
+      userId: req.user.id,
+      req,
+    });
+
     // Handle Mongoose validation errors specifically
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((val) => val.message);
-      return res
-        .status(400)
-        .json({ success: false, message: messages.join(', ') });
+
+      logger.warn('Note validation error', {
+        messages,
+        userId: req.user.id,
+        taskId: req.params.taskId,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', '),
+        notificationType: 'error',
+      });
     }
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error creating note' });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server Error creating note',
+      notificationType: 'error',
+    });
   }
 };
 
@@ -149,12 +231,10 @@ exports.getUserNotes = async (req, res, next) => {
     // Optional: Check if user exists
     const targetUserExists = await User.findById(targetUserId);
     if (!targetUserExists) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: `User not found with id ${targetUserId}`,
-        });
+      return res.status(404).json({
+        success: false,
+        message: `User not found with id ${targetUserId}`,
+      });
     }
 
     // Find notes created by the target user
@@ -182,36 +262,65 @@ exports.deleteNote = async (req, res, next) => {
   try {
     const note = await Note.findById(req.params.id);
 
+    logger.logDbOperation('findById', 'Note', !!note, null, {
+      noteId: req.params.id,
+    });
+
     if (!note) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'Note not found' });
+      logger.warn(`Note not found for deletion: ${req.params.id}`, {
+        userId: req.user.id,
+      });
+      return res.status(404).json({
+        success: false,
+        message: 'Note not found',
+        notificationType: 'error',
+      });
     }
 
     // Check if user owns this note
     if (note.user.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to delete this note',
-        });
+      logger.warn(`Unauthorized note deletion attempt`, {
+        userId: req.user.id,
+        noteId: req.params.id,
+        noteOwner: note.user,
+      });
+
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to delete this note',
+        notificationType: 'error',
+      });
     }
 
     // Instead of permanently deleting, mark as deleted (soft delete)
     note.deletedAt = new Date();
     await note.save();
 
+    logger.logUpdate('note', note._id, req.user.id, {
+      action: 'trash',
+      taskId: note.task,
+      req,
+    });
+
     res.status(200).json({
       success: true,
       data: {},
       message: 'Note moved to trash successfully',
+      notificationType: 'success',
     });
   } catch (err) {
-    console.error('Delete Note Error:', err);
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error deleting note' });
+    logger.error('Failed to trash note', {
+      error: err,
+      noteId: req.params.id,
+      userId: req.user.id,
+      req,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server Error deleting note',
+      notificationType: 'error',
+    });
   }
 };
 
@@ -230,12 +339,10 @@ exports.permanentlyDeleteNote = async (req, res, next) => {
 
     // Check if user owns this note
     if (note.user.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to delete this note',
-        });
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to delete this note',
+      });
     }
 
     // Permanently delete the note
@@ -248,12 +355,10 @@ exports.permanentlyDeleteNote = async (req, res, next) => {
     });
   } catch (err) {
     console.error('Permanently Delete Note Error:', err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: 'Server Error permanently deleting note',
-      });
+    res.status(500).json({
+      success: false,
+      message: 'Server Error permanently deleting note',
+    });
   }
 };
 
@@ -272,12 +377,10 @@ exports.restoreNote = async (req, res, next) => {
 
     // Check if user owns this note
     if (note.user.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: 'User not authorized to restore this note',
-        });
+      return res.status(403).json({
+        success: false,
+        message: 'User not authorized to restore this note',
+      });
     }
 
     // Restore by clearing deletedAt

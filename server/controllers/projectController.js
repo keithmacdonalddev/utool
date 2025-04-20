@@ -1,6 +1,7 @@
 const Project = require('../models/Project');
 const Task = require('../models/Task'); // Needed for calculating progress later
 const User = require('../models/User'); // Needed for populating members/owner
+const { logger } = require('../utils/logger'); // Import enhanced logger
 
 // @desc    Get projects for logged-in user (member or owner)
 // @route   GET /api/v1/projects
@@ -44,6 +45,11 @@ exports.getProjects = async (req, res, next) => {
 // @access  Private
 exports.createProject = async (req, res, next) => {
   try {
+    logger.info(`Attempting to create new project`, {
+      userId: req.user.id,
+      action: 'create_project',
+    });
+
     // Add logged-in user as the owner
     req.body.owner = req.user.id;
     // The owner is automatically added to members by pre-save hook in model
@@ -54,9 +60,14 @@ exports.createProject = async (req, res, next) => {
 
     // Basic validation
     if (!name) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Project name is required' });
+      logger.warn('Project creation attempt without name', {
+        userId: req.user.id,
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Project name is required',
+        notificationType: 'error',
+      });
     }
 
     const projectData = {
@@ -75,6 +86,14 @@ exports.createProject = async (req, res, next) => {
 
     const project = await Project.create(projectData);
 
+    logger.logCreate('project', project._id, req.user.id, {
+      projectName: project.name,
+      memberCount: project.members.length,
+      status: project.status,
+      priority: project.priority,
+      hasEndDate: !!project.endDate,
+    });
+
     // Add audit log for project creation
     const { auditLog } = require('../middleware/auditLogMiddleware');
     await auditLog(req, 'project_create', 'success', {
@@ -86,9 +105,16 @@ exports.createProject = async (req, res, next) => {
     res.status(201).json({
       success: true,
       data: project,
+      message: `Project "${project.name}" created successfully`,
+      notificationType: 'success',
     });
   } catch (err) {
-    console.error('Create Project Error:', err);
+    logger.error('Failed to create project', {
+      error: err,
+      userId: req.user.id,
+      projectName: req.body.name,
+    });
+
     // Add audit log for failed project creation
     const { auditLog } = require('../middleware/auditLogMiddleware');
     await auditLog(req, 'project_create', 'failed', {
@@ -99,13 +125,24 @@ exports.createProject = async (req, res, next) => {
     // Handle Mongoose validation errors specifically
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((val) => val.message);
-      return res
-        .status(400)
-        .json({ success: false, message: messages.join(', ') });
+      logger.warn('Project validation error', {
+        messages,
+        userId: req.user.id,
+        projectName: req.body.name,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', '),
+        notificationType: 'error',
+      });
     }
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error creating project' });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server Error creating project',
+      notificationType: 'error',
+    });
   }
 };
 
@@ -168,21 +205,44 @@ exports.getProject = async (req, res, next) => {
 // @access  Private
 exports.updateProject = async (req, res, next) => {
   try {
+    logger.info(`Attempting to update project with ID: ${req.params.id}`, {
+      userId: req.user.id,
+      action: 'update_project',
+      projectId: req.params.id,
+    });
+
     let project = await Project.findById(req.params.id);
 
+    logger.logDbOperation('findById', 'Project', !!project, null, {
+      projectId: req.params.id,
+      userId: req.user.id,
+    });
+
     if (!project) {
+      logger.warn(`Project not found for update: ${req.params.id}`, {
+        userId: req.user.id,
+      });
+
       return res.status(404).json({
         success: false,
         message: `Project not found with id of ${req.params.id}`,
+        notificationType: 'error',
       });
     }
 
     // Check if the logged-in user is the owner (or has specific update permissions later)
     if (project.owner.toString() !== req.user.id) {
+      logger.warn(`Unauthorized project update attempt`, {
+        userId: req.user.id,
+        projectId: req.params.id,
+        projectOwner: project.owner,
+      });
+
       // TODO: Add more granular permission checks later (e.g., allow members to update certain fields)
       return res.status(403).json({
         success: false,
         message: 'User not authorized to update this project',
+        notificationType: 'error',
       });
     }
 
@@ -193,7 +253,7 @@ exports.updateProject = async (req, res, next) => {
       status: project.status,
       startDate: project.startDate,
       endDate: project.endDate,
-      priority: project.priority, // Add priority
+      priority: project.priority,
       memberCount: project.members ? project.members.length : 0,
     };
 
@@ -206,7 +266,7 @@ exports.updateProject = async (req, res, next) => {
       ...(status && { status }),
       ...(startDate && { startDate }),
       ...(endDate && { endDate }),
-      ...(priority && { priority }), // Add priority
+      ...(priority && { priority }),
       // Ensure owner remains a member if members array is updated
       ...(members && {
         members: [...new Set([project.owner.toString(), ...members])],
@@ -216,6 +276,18 @@ exports.updateProject = async (req, res, next) => {
     project = await Project.findByIdAndUpdate(req.params.id, updateData, {
       new: true, // Return the modified document
       runValidators: true, // Run schema validators on update
+    });
+
+    logger.logUpdate('project', project._id, req.user.id, {
+      projectName: project.name,
+      changedFields: Object.keys(updateData),
+      originalValues: originalProject,
+      newValues: {
+        name: project.name,
+        status: project.status,
+        priority: project.priority,
+        memberCount: project.members ? project.members.length : 0,
+      },
     });
 
     // Add audit log for project update
@@ -228,9 +300,18 @@ exports.updateProject = async (req, res, next) => {
       newMemberCount: project.members ? project.members.length : 0,
     });
 
-    res.status(200).json({ success: true, data: project });
+    res.status(200).json({
+      success: true,
+      data: project,
+      message: `Project "${project.name}" updated successfully`,
+      notificationType: 'success',
+    });
   } catch (err) {
-    console.error('Update Project Error:', err);
+    logger.error('Failed to update project', {
+      error: err,
+      projectId: req.params.id,
+      userId: req.user.id,
+    });
 
     // Add audit log for failed project update
     const { auditLog } = require('../middleware/auditLogMiddleware');
@@ -243,17 +324,28 @@ exports.updateProject = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: `Project not found with id of ${req.params.id}`,
+        notificationType: 'error',
       });
     }
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((val) => val.message);
-      return res
-        .status(400)
-        .json({ success: false, message: messages.join(', ') });
+      logger.warn('Project validation error', {
+        messages,
+        userId: req.user.id,
+        projectId: req.params.id,
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', '),
+        notificationType: 'error',
+      });
     }
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error updating project' });
+    res.status(500).json({
+      success: false,
+      message: 'Server Error updating project',
+      notificationType: 'error',
+    });
   }
 };
 
@@ -262,20 +354,43 @@ exports.updateProject = async (req, res, next) => {
 // @access  Private
 exports.deleteProject = async (req, res, next) => {
   try {
+    logger.info(`Attempting to delete project with ID: ${req.params.id}`, {
+      userId: req.user.id,
+      action: 'delete_project',
+      projectId: req.params.id,
+    });
+
     const project = await Project.findById(req.params.id);
 
+    logger.logDbOperation('findById', 'Project', !!project, null, {
+      projectId: req.params.id,
+      userId: req.user.id,
+    });
+
     if (!project) {
+      logger.warn(`Project not found for deletion: ${req.params.id}`, {
+        userId: req.user.id,
+      });
+
       return res.status(404).json({
         success: false,
         message: `Project not found with id of ${req.params.id}`,
+        notificationType: 'error',
       });
     }
 
     // Check if the logged-in user is the owner
     if (project.owner.toString() !== req.user.id) {
+      logger.warn(`Unauthorized project deletion attempt`, {
+        userId: req.user.id,
+        projectId: req.params.id,
+        projectOwner: project.owner,
+      });
+
       return res.status(403).json({
         success: false,
         message: 'User not authorized to delete this project',
+        notificationType: 'error',
       });
     }
 
@@ -285,6 +400,7 @@ exports.deleteProject = async (req, res, next) => {
       name: project.name,
       memberCount: project.members ? project.members.length : 0,
       status: project.status,
+      createdAt: project.createdAt,
     };
 
     // TODO: Decide on cascading delete behavior for associated Tasks/Notes.
@@ -297,7 +413,18 @@ exports.deleteProject = async (req, res, next) => {
 
     await project.deleteOne(); // Use deleteOne() on the document instance
 
-    // Add audit log for project deletion
+    // Log project deletion with enhanced logger
+    logger.logDelete('project', projectInfo.id, req.user.id, {
+      projectName: projectInfo.name,
+      memberCount: projectInfo.memberCount,
+      status: projectInfo.status,
+      lifespanDays: Math.floor(
+        (Date.now() - new Date(projectInfo.createdAt).getTime()) /
+          (1000 * 60 * 60 * 24)
+      ),
+    });
+
+    // Add audit log for project deletion (keep existing implementation)
     const { auditLog } = require('../middleware/auditLogMiddleware');
     await auditLog(req, 'project_delete', 'success', {
       projectId: projectInfo.id,
@@ -305,9 +432,18 @@ exports.deleteProject = async (req, res, next) => {
       projectInfo: projectInfo,
     });
 
-    res.status(200).json({ success: true, data: {} }); // Send empty object on successful delete
+    res.status(200).json({
+      success: true,
+      data: {},
+      message: `Project "${projectInfo.name}" deleted successfully`,
+      notificationType: 'success',
+    });
   } catch (err) {
-    console.error('Delete Project Error:', err);
+    logger.error('Failed to delete project', {
+      error: err,
+      projectId: req.params.id,
+      userId: req.user.id,
+    });
 
     // Add audit log for failed project deletion
     const { auditLog } = require('../middleware/auditLogMiddleware');
@@ -320,10 +456,13 @@ exports.deleteProject = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: `Project not found with id of ${req.params.id}`,
+        notificationType: 'error',
       });
     }
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error deleting project' });
+    res.status(500).json({
+      success: false,
+      message: 'Server Error deleting project',
+      notificationType: 'error',
+    });
   }
 };

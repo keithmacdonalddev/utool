@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../utils/api';
-import { Star, Trash2, RefreshCw } from 'lucide-react';
+import { Star, Trash2, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 
 const FavoriteQuotesPage = () => {
@@ -56,9 +57,18 @@ const FavoriteQuotesPage = () => {
     <div className="container mx-auto p-4">
       <div className="flex flex-col">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-[#F8FAFC]">
-            My Favorite Quotes
-          </h1>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/dashboard"
+              className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
+              title="Back to Dashboard"
+            >
+              <ArrowLeft size={18} />
+            </Link>
+            <h1 className="text-2xl font-bold text-[#F8FAFC]">
+              My Favorite Quotes
+            </h1>
+          </div>
           <button
             onClick={fetchFavoriteQuotes}
             className="text-blue-500 hover:text-blue-400 flex items-center"

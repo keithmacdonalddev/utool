@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import {
   fetchNotes,
   resetNoteStatus,
@@ -13,14 +14,25 @@ import PinnedSection from '../components/notes/PinnedSection';
 import FavoritesSection from '../components/notes/FavoritesSection';
 import ArchivedSection from '../components/notes/ArchivedSection';
 import Button from '../components/common/Button';
+import { ArrowLeft } from 'lucide-react';
 
 const NotesPage = () => {
   const dispatch = useDispatch();
   const { notes, pinned, favorites, archived, isLoading, isError, message } =
     useSelector((state) => state.notes);
 
-  const [view, setView] = useState('grid'); // 'grid' or 'list'
+  // Get the saved view preference from localStorage or default to 'grid'
+  const [view, setView] = useState(() => {
+    const savedView = localStorage.getItem('notesViewPreference');
+    return savedView || 'grid'; // Default to 'grid' if no preference is saved
+  });
+
   const [showEditor, setShowEditor] = useState(false);
+
+  // Save the view preference to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('notesViewPreference', view);
+  }, [view]);
 
   useEffect(() => {
     dispatch(fetchNotes());
@@ -38,9 +50,16 @@ const NotesPage = () => {
     <div className="min-h-screen bg-dark-800 text-text pb-12">
       {/* Minimal Header */}
       <div className="max-w-5xl mx-auto px-4 pb-4 flex flex-col sm:flex-row items-center justify-between">
-        <h1 className="text-3xl font-bold text-[#F8FAFC] flex items-center gap-2">
-          <span className="text-accent-purple">📝</span> Notes
-        </h1>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
+            title="Back to Dashboard"
+          >
+            <ArrowLeft size={18} />
+          </Link>
+          <h1 className="text-3xl font-bold text-[#F8FAFC]">Notes</h1>
+        </div>
         <div className="flex gap-2 mt-4 sm:mt-0">
           <Button
             variant="primary"

@@ -72,15 +72,20 @@ const TaskItem = ({
   };
 
   // Define the base classes for the list item, with conditional active state
-  const itemClasses = `flex items-center justify-between p-4 rounded-lg shadow-sm transition-all duration-200 mb-3 border cursor-pointer
+  const itemClasses = `flex items-center justify-between p-4 rounded-lg shadow-sm transition-all duration-200 mb-3 border cursor-pointer mx-0.5
     ${
       isActive
-        ? 'bg-primary-900/30 border-primary'
+        ? 'bg-primary-900/30 border-primary outline outline-1 outline-primary'
         : 'bg-card border-dark-700 hover:shadow-md hover:border-dark-500'
     }`;
 
   // Handle task item click
   const handleClick = (e) => {
+    // Always prevent default behavior to avoid page reloads
+    e.preventDefault();
+    // Stop propagation to prevent parent elements from triggering
+    e.stopPropagation();
+
     // Only trigger click if not clicking on checkbox or delete button
     if (e.target.type !== 'checkbox') {
       onClick(_id);

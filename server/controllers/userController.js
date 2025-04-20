@@ -312,3 +312,35 @@ exports.deleteUser = async (req, res, next) => {
       .json({ success: false, message: 'Server error deleting user' });
   }
 };
+
+// @desc    Get multiple users by IDs
+// @route   POST /api/v1/users/batch
+// @access  Private
+exports.getBatchUsers = async (req, res, next) => {
+  try {
+    const { userIds } = req.body;
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide an array of user IDs',
+      });
+    }
+
+    const users = await User.find({ _id: { $in: userIds } }).select(
+      'name email avatar _id'
+    );
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      data: users,
+    });
+  } catch (err) {
+    console.error('Batch Get Users Error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching batch users',
+    });
+  }
+};

@@ -10,6 +10,7 @@ import Card from '../components/common/Card';
 import Alert from '../components/common/Alert';
 import Loading from '../components/common/Loading';
 import useFriends from '../hooks/useFriends'; // Import our custom hook
+import { useNotifications } from '../context/NotificationContext'; // Import useNotifications
 
 const ProjectCreatePage = () => {
   const [formData, setFormData] = useState({
@@ -31,6 +32,8 @@ const ProjectCreatePage = () => {
     isLoading: friendsLoading,
     error: friendsError,
   } = useFriends();
+
+  const { showNotification } = useNotifications(); // Extract showNotification
 
   const { name, description, members } = formData;
 
@@ -61,6 +64,7 @@ const ProjectCreatePage = () => {
     // Basic validation
     if (!name.trim()) {
       setError('Project name is required');
+      showNotification('Project name is required', 'error'); // Keep error notification for client-side validation
       return;
     }
 
@@ -71,10 +75,22 @@ const ProjectCreatePage = () => {
     };
 
     try {
-      await dispatch(createProject(newProject)).unwrap();
-      navigate('/projects'); // Redirect to projects list after creation
+      const resultAction = await dispatch(createProject(newProject));
+      if (createProject.fulfilled.match(resultAction)) {
+        // REMOVED: showNotification(`Project "${resultAction.payload.name}" created successfully`, 'success');
+        navigate('/projects'); // Navigate immediately
+      } else {
+        // Handle rejected case from createProject thunk
+        const errorMessage = resultAction.payload || 'Failed to create project';
+        setError(errorMessage);
+        // Assume the automatic handler will show the error based on server response
+        // If not, we might need to add showNotification(errorMessage, 'error') back here.
+      }
     } catch (err) {
-      setError(err || 'Failed to create project');
+      // Catch any unexpected errors during dispatch
+      const errorMessage = err.message || 'An unexpected error occurred';
+      setError(errorMessage);
+      showNotification(errorMessage, 'error'); // Keep for unexpected client-side errors
     }
   };
 

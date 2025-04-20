@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { store } from '../app/store'; // Import the Redux store
+import { toast } from 'react-toastify';
 
 // Create an instance of axios
 const api = axios.create({
@@ -13,6 +14,29 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Function to handle displaying notifications from server responses
+const handleServerNotification = (response) => {
+  // Check if the response contains a message and notification type
+  if (
+    response.data &&
+    response.data.message &&
+    response.data.notificationType
+  ) {
+    const { message, notificationType } = response.data;
+
+    // Use toast directly for simple server notifications
+    // For more complex notifications with pin/close buttons,
+    // you should use the NotificationContext's showNotification
+    toast[notificationType || 'info'](message, {
+      position: 'top-right',
+      autoClose: 5000,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+    });
+  }
+};
 
 // Add a request interceptor to include the token in headers
 api.interceptors.request.use(
@@ -35,9 +59,16 @@ api.interceptors.request.use(
 // Add a response interceptor for handling global errors (e.g., 401 Unauthorized)
 api.interceptors.response.use(
   (response) => {
+    // Handle success notifications
+    handleServerNotification(response);
     return response;
   },
   (error) => {
+    // Handle error notifications
+    if (error.response && error.response.data) {
+      handleServerNotification(error.response);
+    }
+
     // Handle 401 Unauthorized errors (expired tokens, invalid credentials)
     if (error.response && error.response.status === 401) {
       // Check if we're already on the login page to prevent redirect loops
@@ -47,12 +78,6 @@ api.interceptors.response.use(
         // Clear authentication data from localStorage
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-
-        // Dispatch logout action if Redux store is available
-        // This is commented out as it would require importing the store
-        // and might cause circular dependencies
-        // You can implement a better pattern if needed
-        // store.dispatch(logoutUser());
 
         // Redirect to login page
         setTimeout(() => {

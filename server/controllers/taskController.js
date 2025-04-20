@@ -2,6 +2,7 @@ const Task = require('../models/Task');
 const Project = require('../models/Project'); // Need Project model
 const User = require('../models/User');
 const mongoose = require('mongoose'); // Add mongoose import for ObjectId validation
+const { logger } = require('../utils/logger'); // Import enhanced logger
 
 // @desc    Get tasks for logged-in user
 // @route   GET /api/v1/tasks
@@ -415,12 +416,28 @@ exports.updateTask = async (req, res, next) => {
 // @access  Private
 exports.deleteTask = async (req, res, next) => {
   try {
+    logger.info(`Attempting to delete task with ID: ${req.params.id}`, {
+      userId: req.user.id,
+      action: 'delete_task',
+      taskId: req.params.id,
+    });
+
     const task = await Task.findById(req.params.id);
 
+    logger.logDbOperation('findById', 'Task', !!task, null, {
+      taskId: req.params.id,
+      userId: req.user.id,
+    });
+
     if (!task) {
+      logger.warn(`Task not found for deletion: ${req.params.id}`, {
+        userId: req.user.id,
+      });
+
       return res.status(404).json({
         success: false,
         message: `Task not found with id of ${req.params.id}`,
+        notificationType: 'error',
       });
     }
 
@@ -428,10 +445,24 @@ exports.deleteTask = async (req, res, next) => {
     if (task.assignee.toString() !== req.user.id) {
       // If not assignee, check if user is project owner
       const project = await Project.findById(task.project);
+
+      logger.logDbOperation('findById', 'Project', !!project, null, {
+        projectId: task.project,
+        userId: req.user.id,
+      });
+
       if (!project || project.owner.toString() !== req.user.id) {
+        logger.warn(`Unauthorized task deletion attempt`, {
+          userId: req.user.id,
+          taskId: req.params.id,
+          taskAssignee: task.assignee,
+          projectId: task.project,
+        });
+
         return res.status(403).json({
           success: false,
           message: 'Not authorized to delete this task',
+          notificationType: 'error',
         });
       }
     }
@@ -444,9 +475,22 @@ exports.deleteTask = async (req, res, next) => {
       priority: task.priority,
       assignee: task.assignee,
       project: task.project,
+      createdAt: task.createdAt,
     };
 
     await task.deleteOne();
+
+    // Log task deletion with enhanced logger
+    logger.logDelete('task', taskInfo.id, req.user.id, {
+      taskTitle: taskInfo.title,
+      projectId: taskInfo.project,
+      status: taskInfo.status,
+      priority: taskInfo.priority,
+      lifespanDays: Math.floor(
+        (Date.now() - new Date(taskInfo.createdAt).getTime()) /
+          (1000 * 60 * 60 * 24)
+      ),
+    });
 
     // Add audit log for task deletion
     const { auditLog } = require('../middleware/auditLogMiddleware');
@@ -457,9 +501,18 @@ exports.deleteTask = async (req, res, next) => {
       taskInfo: taskInfo,
     });
 
-    res.status(200).json({ success: true, data: {} });
+    res.status(200).json({
+      success: true,
+      data: {},
+      message: `Task "${taskInfo.title}" deleted successfully`,
+      notificationType: 'success',
+    });
   } catch (err) {
-    console.error('Delete Task Error:', err);
+    logger.error('Failed to delete task', {
+      error: err,
+      taskId: req.params.id,
+      userId: req.user.id,
+    });
 
     // Add audit log for failed task deletion
     const { auditLog } = require('../middleware/auditLogMiddleware');
@@ -472,12 +525,14 @@ exports.deleteTask = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: `Task not found with id of ${req.params.id}`,
+        notificationType: 'error',
       });
     }
 
     res.status(500).json({
       success: false,
       message: 'Server Error deleting task',
+      notificationType: 'error',
     });
   }
 };

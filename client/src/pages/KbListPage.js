@@ -4,16 +4,50 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux'; // Import useSelector
 import api from '../utils/api';
-import { Tag, Layers, ArrowLeft, Eye } from 'lucide-react'; // Removed Trash2 and AlertTriangle since we're removing the delete functionality
+import { Tag, Layers, ArrowLeft, Eye, Grid, List } from 'lucide-react'; // Added Grid and List icons
 import KbSearchBar from '../components/kb/KbSearchBar';
 import Button from '../components/common/Button';
 
+// LocalStorage key for view preference
+const VIEW_PREFERENCE_KEY = 'kb_view_preference';
+
+// Helper functions for localStorage with error handling
+const saveToLocalStorage = (key, value) => {
+  try {
+    localStorage.setItem(key, value);
+    console.log(`Saved view preference: ${value}`);
+    return true;
+  } catch (error) {
+    console.error('Failed to save to localStorage:', error);
+    return false;
+  }
+};
+
+const getFromLocalStorage = (key, defaultValue) => {
+  try {
+    const savedValue = localStorage.getItem(key);
+    console.log(
+      `Loaded view preference: ${savedValue || 'none - using default'}`
+    );
+    return savedValue !== null && savedValue !== undefined
+      ? savedValue
+      : defaultValue;
+  } catch (error) {
+    console.error('Failed to get from localStorage:', error);
+    return defaultValue;
+  }
+};
+
 const KbListPage = () => {
+  // Initialize viewMode from localStorage immediately
+  const defaultViewMode = getFromLocalStorage(VIEW_PREFERENCE_KEY, 'grid');
   const [articles, setArticles] = useState([]);
   const [currentSearch, setCurrentSearch] = useState({}); // State to hold search params
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
   const [message, setMessage] = useState('');
+  // View mode state with default from localStorage
+  const [viewMode, setViewMode] = useState(defaultViewMode);
 
   // Get user from Redux store
   const { user } = useSelector((state) => state.auth);
@@ -21,6 +55,12 @@ const KbListPage = () => {
   const isAdmin = user && user.role === 'Admin';
 
   const navigate = useNavigate();
+
+  // Custom setter for viewMode that also updates localStorage
+  const setViewModeWithStorage = (newMode) => {
+    setViewMode(newMode);
+    saveToLocalStorage(VIEW_PREFERENCE_KEY, newMode);
+  };
 
   // --- Fetch/Search Articles ---
   // Use useCallback to memoize the fetch function
@@ -106,6 +146,138 @@ const KbListPage = () => {
     );
   }
 
+  // Render a single article in list view
+  const renderListItem = (article) => (
+    <Link
+      key={article._id}
+      to={`/kb/${article._id}`}
+      className="block bg-card border border-dark-700 shadow-card rounded-xl p-4 text-white transition duration-300 ease-in-out hover:shadow-md hover:border-accent-purple mx-0.5 mb-3
+      focus:outline-none focus:ring-2 focus:ring-accent-purple focus:ring-offset-1 focus:ring-offset-dark-800"
+    >
+      <div className="flex justify-between">
+        <div className="flex-grow">
+          <h2
+            className="text-xl font-semibold text-white mb-2"
+            title={article.title}
+          >
+            {article.title}
+          </h2>
+
+          <div className="flex items-center text-xs text-gray-400 mb-3">
+            <Eye size={14} className="mr-1" />
+            <span>{article.views || 0} views</span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {article.tags?.length > 0 && (
+              <div className="flex flex-wrap gap-1 items-center mr-3">
+                <Tag size={14} className="text-gray-500 mr-1 flex-shrink-0" />
+                {article.tags.slice(0, 3).map((tag, index) => (
+                  <span
+                    key={index}
+                    className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full text-xs"
+                  >
+                    {tag}
+                  </span>
+                ))}
+                {article.tags.length > 3 && (
+                  <span className="text-xs text-gray-400">
+                    +{article.tags.length - 3} more
+                  </span>
+                )}
+              </div>
+            )}
+
+            {article.categories?.length > 0 && (
+              <div className="flex flex-wrap gap-1 items-center">
+                <Layers
+                  size={14}
+                  className="text-gray-500 mr-1 flex-shrink-0"
+                />
+                {article.categories.slice(0, 2).map((category, index) => (
+                  <span
+                    key={index}
+                    className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full text-xs"
+                  >
+                    {category}
+                  </span>
+                ))}
+                {article.categories.length > 2 && (
+                  <span className="text-xs text-gray-400">
+                    +{article.categories.length - 2} more
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center ml-4">
+          <span className="text-xs text-gray-400">Click to view</span>
+        </div>
+      </div>
+    </Link>
+  );
+
+  // Render a single article in grid view (existing card implementation)
+  const renderGridItem = (article) => (
+    <Link
+      key={article._id}
+      to={`/kb/${article._id}`}
+      className="block bg-card border border-dark-700 shadow-card rounded-xl p-4 text-white flex flex-col justify-between transition duration-300 ease-in-out hover:shadow-lg hover:bg-dark-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400"
+    >
+      {/* Inner content container */}
+      <div className="flex-grow">
+        {/* Title */}
+        <h2
+          className="text-xl font-semibold text-white mb-2 truncate"
+          title={article.title}
+        >
+          {article.title}
+        </h2>
+        {/* View count */}
+        <div className="flex items-center text-xs text-gray-400 mb-2">
+          <Eye size={14} className="mr-1" />
+          <span>{article.views || 0} views</span>
+        </div>
+        {/* Tags */}
+        {article.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2 text-xs items-center">
+            <Tag size={14} className="text-gray-500 mr-1 flex-shrink-0" />
+            {article.tags.map((tag, index) => (
+              <span
+                key={index}
+                className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+        {/* Categories */}
+        {article.categories?.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3 text-xs items-center">
+            <Layers size={14} className="text-gray-500 mr-1 flex-shrink-0" />
+            {article.categories.map((category, index) => (
+              <span
+                key={index}
+                className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full"
+              >
+                {category}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Action Buttons Area */}
+      <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end items-center">
+        {/* Subtle View Cue */}
+        <span className="text-xs text-gray-400">Click card to view</span>
+      </div>
+    </Link>
+  );
+
   return (
     // Use flex column layout for the page, taking full height available in <main>
     <div className="flex flex-col h-full">
@@ -122,17 +294,46 @@ const KbListPage = () => {
           </Link>
           <h1 className="text-2xl font-bold text-[#F8FAFC]">Knowledge Base</h1>
         </div>
-        {/* Only show New Article button to admin users */}
-        {isAdmin && (
-          <Button
-            variant="primary"
-            className="py-2 px-6 text-base font-bold shadow"
-            style={{ color: '#F8FAFC' }}
-            onClick={() => (window.location.href = '/kb/new')}
-          >
-            + New Article
-          </Button>
-        )}
+
+        <div className="flex items-center gap-3">
+          {/* View Toggle Buttons */}
+          <div className="bg-dark-700 rounded-lg p-1 flex">
+            <button
+              onClick={() => setViewModeWithStorage('grid')}
+              className={`p-2 rounded-md ${
+                viewMode === 'grid'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Grid View"
+            >
+              <Grid size={18} />
+            </button>
+            <button
+              onClick={() => setViewModeWithStorage('list')}
+              className={`p-2 rounded-md ${
+                viewMode === 'list'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+          </div>
+
+          {/* Only show New Article button to admin users */}
+          {isAdmin && (
+            <Button
+              variant="primary"
+              className="py-2 px-6 text-base font-bold shadow"
+              style={{ color: '#F8FAFC' }}
+              onClick={() => (window.location.href = '/kb/new')}
+            >
+              + New Article
+            </Button>
+          )}
+        </div>
       </div>
       {/* Search Bar - Standalone, no background */}
       <div className="px-4 md:px-0 mt-2">
@@ -154,90 +355,25 @@ const KbListPage = () => {
             {message}
           </p>
         )}
-        {/* Articles Grid - Render only if not loading and articles exist */}
-        {!isLoading && !message && articles.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {' '}
-            {/* Reduced gap */}
-            {/* Map over articles */}
-            {articles.map((article) => (
-              // *** Wrap the entire card content in a Link component ***
-              <Link
-                key={article._id}
-                to={`/kb/${article._id}`}
-                // Apply card styling and interaction states directly to the Link
-                className="block bg-card border border-dark-700 shadow-card rounded-xl p-4 text-white flex flex-col justify-between transition duration-300 ease-in-out hover:shadow-lg hover:bg-dark-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400"
-              >
-                {/* Inner content container */}
-                <div className="flex-grow">
-                  {' '}
-                  {/* Added flex-grow */}
-                  {/* Title */}
-                  <h2
-                    className="text-xl font-semibold text-white mb-2 truncate"
-                    title={article.title}
-                  >
-                    {article.title}
-                  </h2>
-                  {/* View count */}
-                  <div className="flex items-center text-xs text-gray-400 mb-2">
-                    <Eye size={14} className="mr-1" />
-                    <span>{article.views || 0} views</span>
-                  </div>
-                  {/* Tags */}
-                  {article.tags?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-2 text-xs items-center">
-                      {' '}
-                      {/* Added items-center */}
-                      <Tag
-                        size={14}
-                        className="text-gray-500 mr-1 flex-shrink-0"
-                      />
-                      {article.tags.map((tag, index) => (
-                        <span
-                          key={index}
-                          className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {/* Categories */}
-                  {article.categories?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3 text-xs items-center">
-                      {' '}
-                      {/* Added items-center */}
-                      <Layers
-                        size={14}
-                        className="text-gray-500 mr-1 flex-shrink-0"
-                      />
-                      {article.categories.map((category, index) => (
-                        <span
-                          key={index}
-                          className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full"
-                        >
-                          {category}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Buttons Area */}
-                <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end items-center">
-                  {/* Subtle View Cue */}
-                  <span className="text-xs text-gray-400">
-                    Click card to view
-                  </span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>{' '}
-      {/* Closing tag for scrollable content area */}
-    </div> // Closing tag for the main flex container
+        {/* Articles Grid/List View - Render only if not loading and articles exist */}
+        {!isLoading &&
+          !message &&
+          articles.length > 0 &&
+          (viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {articles.map((article) => renderGridItem(article))}
+            </div>
+          ) : (
+            <div className="flex flex-col px-2 overflow-hidden">
+              <div className="overflow-y-auto -mx-2 px-2 pt-2 pb-2">
+                {' '}
+                {/* Added pt-2 for top padding */}
+                {articles.map((article) => renderListItem(article))}
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
   );
 };
 

@@ -52,6 +52,8 @@ const NavbarClockStockWeather = () => {
   const [apiCallsRemaining, setApiCallsRemaining] = useState(25);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const intervalRef = useRef(null);
+  const weatherFetchedRef = useRef(false);
+  const weatherIntervalRef = useRef(null);
 
   // Clock update
   useEffect(() => {
@@ -219,7 +221,16 @@ const NavbarClockStockWeather = () => {
     const fetchWeather = async () => {
       if (!weather) setWeatherLoading(true);
       setWeatherError('');
+
       try {
+        // Check if we've already fetched weather data in this session
+        if (weatherFetchedRef.current) {
+          console.log('Skipping duplicate weather fetch');
+          return;
+        }
+
+        weatherFetchedRef.current = true;
+
         const res = await api.get(
           `/weather?location=${encodeURIComponent(location)}`
         );
@@ -233,14 +244,33 @@ const NavbarClockStockWeather = () => {
         setWeatherError(
           err.response?.data?.message || err.message || 'Weather N/A'
         );
+        // Reset the flag on error so we can try again
+        weatherFetchedRef.current = false;
       } finally {
         setWeatherLoading(false);
       }
     };
 
     fetchWeather();
-    const weatherIntervalId = setInterval(fetchWeather, 15 * 60 * 1000);
-    return () => clearInterval(weatherIntervalId);
+
+    // Clear previous interval if it exists
+    if (weatherIntervalRef.current) {
+      clearInterval(weatherIntervalRef.current);
+    }
+
+    // Set new interval and store the ID
+    weatherIntervalRef.current = setInterval(() => {
+      // Reset the flag before fetching again in the interval
+      weatherFetchedRef.current = false;
+      fetchWeather();
+    }, 15 * 60 * 1000);
+
+    // Cleanup function
+    return () => {
+      if (weatherIntervalRef.current) {
+        clearInterval(weatherIntervalRef.current);
+      }
+    };
   }, [location]);
 
   const formattedTime = currentTime.toLocaleTimeString([], {
@@ -329,20 +359,11 @@ const NavbarClockStockWeather = () => {
                   minute: '2-digit',
                 })
               : 'Now'}
-            {stock.lastUpdated &&
-              Date.now() - new Date(stock.lastUpdated).getTime() > 120000 && (
-                <span className="text-yellow-400 ml-1">⚠️</span>
-              )}
-            {stock.isFallback && (
-              <span className="text-yellow-400 ml-1" title="Fallback data">
-                ⚠️
-              </span>
-            )}
           </span>
           <button
             onClick={fetchStock}
             disabled={isRefreshing || apiCallsRemaining <= 0}
-            className={`focus:outline-none ${
+            className={`focus:outline-none focus:ring-0 ${
               isRefreshing
                 ? 'text-gray-500'
                 : 'text-blue-400 hover:text-blue-300'

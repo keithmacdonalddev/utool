@@ -47,11 +47,22 @@ const NoteEditorModal = ({ onClose }) => {
       setContent(selectedNote.content || '');
       setTags(selectedNote.tags || []);
       setColor(selectedNote.color || '');
-      setReminder(
-        selectedNote.reminder
-          ? new Date(selectedNote.reminder).toISOString().slice(0, 16)
-          : ''
-      );
+
+      // Fix for timezone issue when formatting reminder date
+      if (selectedNote.reminder) {
+        const reminderDate = new Date(selectedNote.reminder);
+        const year = reminderDate.getFullYear();
+        const month = String(reminderDate.getMonth() + 1).padStart(2, '0');
+        const day = String(reminderDate.getDate()).padStart(2, '0');
+        const hours = String(reminderDate.getHours()).padStart(2, '0');
+        const minutes = String(reminderDate.getMinutes()).padStart(2, '0');
+
+        // Format as YYYY-MM-DDThh:mm (format required by datetime-local input)
+        setReminder(`${year}-${month}-${day}T${hours}:${minutes}`);
+      } else {
+        setReminder('');
+      }
+
       setPinned(selectedNote.pinned || false);
       setFavorite(selectedNote.favorite || false);
       setArchived(selectedNote.archived || false);

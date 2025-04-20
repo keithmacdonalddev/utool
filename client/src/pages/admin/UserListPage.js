@@ -10,10 +10,14 @@ import {
   XCircle,
   AlertTriangle,
   ArrowLeft,
+  Copy,
+  Check,
 } from 'lucide-react';
 import FormInput from '../../components/common/FormInput';
 import FormSelect from '../../components/common/FormSelect';
 import FormCheckbox from '../../components/common/FormCheckbox';
+import Button from '../../components/common/Button';
+import { toast } from 'react-toastify';
 
 const UserListPage = () => {
   const [users, setUsers] = useState([]);
@@ -37,8 +41,36 @@ const UserListPage = () => {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState('');
-  const { showNotification } = useNotifications();
+  const { handleNotificationClick } = useNotifications();
   const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [copiedField, setCopiedField] = useState(null);
+
+  const copyToClipboard = (text, fieldId) => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        // Set the copied field to show checkmark
+        setCopiedField(fieldId);
+        // Reset after 1.5 seconds
+        setTimeout(() => {
+          setCopiedField(null);
+        }, 1500);
+        // Use toast notification directly instead of showNotification
+        toast.success('Copied to clipboard!', {
+          position: 'top-right',
+          autoClose: 1500,
+          closeOnClick: true,
+          pauseOnHover: true,
+        });
+      })
+      .catch((err) => {
+        console.error('Failed to copy: ', err);
+        toast.error('Failed to copy to clipboard', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
+      });
+  };
 
   const handleCreateUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.password || !newUser.role) {
@@ -61,7 +93,10 @@ const UserListPage = () => {
           isVerified: false,
         });
         fetchUsers();
-        showNotification('User created successfully');
+        toast.success('User created successfully', {
+          position: 'top-right',
+          autoClose: 3000,
+        });
       }
     } catch (err) {
       setCreateError(err.response?.data?.message || 'Failed to create user');
@@ -155,7 +190,10 @@ const UserListPage = () => {
       await api.delete(`/users/${userToDelete._id}`);
       fetchUsers();
       closeDeleteConfirmation();
-      showNotification('User deleted successfully');
+      toast.success('User deleted successfully', {
+        position: 'top-right',
+        autoClose: 3000,
+      });
     } catch (err) {
       setDeleteError(err.response?.data?.message || 'Failed to delete user.');
       setIsDeleting(false);
@@ -186,38 +224,39 @@ const UserListPage = () => {
       className="container mx-auto p-4 flex flex-col"
       style={{ height: 'calc(100vh - 5rem)', overflow: 'hidden' }}
     >
-      <div className="mb-4 flex-none">
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
-        >
-          <ArrowLeft size={16} className="mr-1" />
-          Back to Dashboard
-        </Link>
-      </div>
+      {/* Remove the separate back link div */}
 
       <div className="flex justify-between items-center mb-6 flex-none">
-        <h1 className="text-2xl font-bold text-[#F8FAFC] flex items-center">
-          <Users className="mr-2" /> User Management
-        </h1>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
+            title="Back to Dashboard"
+          >
+            <ArrowLeft size={18} />
+          </Link>
+          <h1 className="text-2xl font-bold text-[#F8FAFC]">User Management</h1>
+        </div>
         <div className="flex space-x-2">
-          <button
+          <Button
+            variant="primary"
+            className="py-2 px-6 text-base font-bold shadow"
+            style={{ color: '#F8FAFC' }}
             onClick={() => setShowAddUserForm(!showAddUserForm)}
-            className="bg-accent-purple text-[#F8FAFC] font-bold py-2 px-4 rounded-xl shadow hover:bg-accent-blue/80 transition"
           >
             + Add User
-          </button>
+          </Button>
         </div>
       </div>
 
       {showAddUserForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
-          <div className="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
+          <div className="relative mx-auto p-5 border border-dark-700 w-full max-w-md shadow-lg rounded-md bg-card">
             <div className="mt-3 text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
-                <Users size={24} className="text-blue-600" />
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-dark-700">
+                <Users size={24} className="text-primary" />
               </div>
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">
+              <h3 className="text-lg leading-6 font-medium text-foreground mt-2">
                 Create New User
               </h3>
               <div className="mt-2 px-7 py-3">
@@ -276,19 +315,25 @@ const UserListPage = () => {
                   />
                 </div>
                 {createError && (
-                  <div className="mt-2 text-sm text-red-600">{createError}</div>
+                  <div className="mt-2 text-sm text-red-400">{createError}</div>
                 )}
                 <div className="items-center px-4 py-3 mt-4 flex justify-center gap-4">
                   <button
                     onClick={handleCreateUser}
-                    disabled={isCreating}
-                    className="px-4 py-2 bg-blue-600 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                    disabled={
+                      isCreating ||
+                      !newUser.name ||
+                      !newUser.email ||
+                      !newUser.password ||
+                      !newUser.role
+                    }
+                    className="px-4 py-2 bg-primary hover:bg-primary/80 text-white text-base font-medium rounded-md w-auto shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 disabled:opacity-50 transition-colors"
                   >
                     {isCreating ? 'Creating...' : 'Create User'}
                   </button>
                   <button
                     onClick={() => setShowAddUserForm(false)}
-                    className="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                    className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-200 text-base font-medium rounded-md w-auto shadow-sm focus:outline-none focus:ring-2 focus:ring-dark-500 focus:ring-opacity-50 transition-colors"
                   >
                     Cancel
                   </button>
@@ -300,7 +345,7 @@ const UserListPage = () => {
       )}
 
       <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0 }}>
-        <div className="bg-white shadow-md rounded overflow-hidden flex-1 min-h-0 flex flex-col">
+        <div className="bg-[#23242B] shadow-md rounded overflow-hidden flex-1 min-h-0 flex flex-col">
           <div className="flex-1 overflow-auto min-h-0">
             <table className="min-w-full bg-[#23242B] border border-[#393A41] rounded-xl shadow-2xl">
               <thead className="bg-[#282A36] sticky top-0 z-10">
@@ -359,7 +404,7 @@ const UserListPage = () => {
                 {sortedUsers.map((user) => (
                   <tr
                     key={user._id}
-                    className="hover:bg-dark-700 cursor-pointer transition-colors"
+                    className="hover:bg-dark-700 transition-colors"
                     onClick={(e) => {
                       // Only navigate if click wasn't on an action button/link
                       if (!e.target.closest('button, a')) {
@@ -368,10 +413,42 @@ const UserListPage = () => {
                     }}
                   >
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC]">
-                      {user.name}
+                      <div className="flex items-center">
+                        <span className="cursor-pointer">{user.name}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyToClipboard(user.name, `name-${user._id}`);
+                          }}
+                          className="ml-2 text-gray-400 hover:text-accent-blue focus:outline-none focus:ring-0 transition-colors"
+                          title="Copy name to clipboard"
+                        >
+                          {copiedField === `name-${user._id}` ? (
+                            <Check size={16} className="text-green-500" />
+                          ) : (
+                            <Copy size={16} />
+                          )}
+                        </button>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-[#F8FAFC]">
-                      {user.email}
+                      <div className="flex items-center">
+                        <span className="cursor-pointer">{user.email}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyToClipboard(user.email, `email-${user._id}`);
+                          }}
+                          className="ml-2 text-gray-400 hover:text-accent-blue focus:outline-none focus:ring-0 transition-colors"
+                          title="Copy email to clipboard"
+                        >
+                          {copiedField === `email-${user._id}` ? (
+                            <Check size={16} className="text-green-500" />
+                          ) : (
+                            <Copy size={16} />
+                          )}
+                        </button>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-[#F8FAFC]">
                       {user.role}
@@ -408,34 +485,34 @@ const UserListPage = () => {
       </div>
 
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
-          <div className="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
+          <div className="relative mx-auto p-5 border border-dark-700 w-full max-w-md shadow-lg rounded-md bg-card">
             <div className="mt-3 text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                <AlertTriangle size={24} className="text-red-600" />
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-900/30">
+                <AlertTriangle size={24} className="text-red-400" />
               </div>
-              <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">
+              <h3 className="text-lg leading-6 font-medium text-foreground mt-2">
                 Delete Confirmation
               </h3>
               <div className="mt-2 px-7 py-3">
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-400">
                   Are you sure you want to delete the user {userToDelete?.name}?
                   This action cannot be undone.
                 </p>
                 {deleteError && (
-                  <div className="mt-2 text-sm text-red-600">{deleteError}</div>
+                  <div className="mt-2 text-sm text-red-400">{deleteError}</div>
                 )}
                 <div className="items-center px-4 py-3 mt-4 flex justify-center gap-4">
                   <button
                     onClick={handleDeleteUser}
                     disabled={isDeleting}
-                    className="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
+                    className="px-4 py-2 bg-red-600 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 disabled:opacity-50"
                   >
                     {isDeleting ? 'Deleting...' : 'Delete'}
                   </button>
                   <button
                     onClick={closeDeleteConfirmation}
-                    className="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                    className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-200 text-base font-medium rounded-md w-auto shadow-sm focus:outline-none focus:ring-2 focus:ring-dark-500 focus:ring-opacity-50"
                   >
                     Cancel
                   </button>

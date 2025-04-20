@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import { Tab } from '@headlessui/react';
-import { UserPlus, Users, UserCheck, Send } from 'lucide-react';
+import { UserPlus, Users, UserCheck, Send, ArrowLeft } from 'lucide-react';
 import AddFriendSearch from '../components/friends/AddFriendSearch';
 import FriendList from '../components/friends/FriendList';
 import FriendRequestList from '../components/friends/FriendRequestList';
@@ -19,7 +20,9 @@ function classNames(...classes) {
 
 function FriendsPage() {
   const dispatch = useDispatch();
-  const { error } = useSelector((state) => state.friends);
+  const { error, friends, requestsReceived, requestsSent } = useSelector(
+    (state) => state.friends
+  );
   const [notification, setNotification] = useState({
     show: false,
     message: '',
@@ -50,19 +53,42 @@ function FriendsPage() {
   };
 
   const tabs = [
-    { name: 'My Friends', icon: Users, content: <FriendList /> },
+    {
+      name: 'My Friends',
+      icon: Users,
+      count: friends?.length || 0,
+      content: <FriendList />,
+    },
     {
       name: 'Friend Requests',
       icon: UserCheck,
+      count: requestsReceived?.length || 0,
       content: <FriendRequestList />,
     },
-    { name: 'Sent Requests', icon: Send, content: <SentRequestList /> },
+    {
+      name: 'Sent Requests',
+      icon: Send,
+      count: requestsSent?.length || 0,
+      content: <SentRequestList />,
+    },
     { name: 'Add Friends', icon: UserPlus, content: <AddFriendSearch /> },
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8 bg-background text-foreground">
-      <h1 className="text-3xl font-bold mb-6 text-primary">Manage Friends</h1>
+    <div className="flex flex-col h-full">
+      {/* Header Row: Back Link, Title */}
+      <div className="flex justify-between items-center mb-3 px-4 md:px-0 pt-4">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
+            title="Back to Dashboard"
+          >
+            <ArrowLeft size={18} />
+          </Link>
+          <h1 className="text-2xl font-bold text-[#F8FAFC]">Friends</h1>
+        </div>
+      </div>
 
       {notification.show && (
         <Notification
@@ -72,7 +98,8 @@ function FriendsPage() {
         />
       )}
 
-      <div className="w-full">
+      {/* Main content */}
+      <div className="w-full px-4 md:px-0">
         <Tab.Group>
           <Tab.List className="flex space-x-1 rounded-xl bg-card p-1 border border-dark-700 shadow-sm">
             {tabs.map((tab) => (
@@ -89,7 +116,14 @@ function FriendsPage() {
                 }
               >
                 <tab.icon size={16} />
-                {tab.name}
+                <span className="flex items-center">
+                  {tab.name}
+                  {tab.count > 0 && (
+                    <span className="ml-2 bg-accent-purple text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {tab.count}
+                    </span>
+                  )}
+                </span>
               </Tab>
             ))}
           </Tab.List>

@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 import api from '../utils/api';
 import socket from '../utils/socket'; // Import as default export instead of named export
 import { toast } from 'react-toastify';
+import { PinIcon, XCircleIcon } from 'lucide-react';
 
 // Create context
 const NotificationContext = createContext();
@@ -11,6 +12,7 @@ export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [pinnedToasts, setPinnedToasts] = useState([]);
   const { user } = useSelector((state) => state.auth);
 
   // Fetch initial notifications and set up socket listener
@@ -32,19 +34,7 @@ export const NotificationProvider = ({ children }) => {
           setUnreadCount((prevCount) => prevCount + 1);
 
           // Show toast notification
-          toast.info(
-            <div onClick={() => handleNotificationClick(notification)}>
-              <strong>{notification.title}</strong>
-              <p>{notification.message}</p>
-            </div>,
-            {
-              position: 'top-right',
-              autoClose: 5000,
-              closeOnClick: true,
-              pauseOnHover: true,
-              draggable: true,
-            }
-          );
+          showSystemNotification(notification);
         });
 
         // Clean up the socket listener when the component unmounts
@@ -56,6 +46,129 @@ export const NotificationProvider = ({ children }) => {
       }
     }
   }, [user]);
+
+  // Custom function to display toast notification with pin/close buttons
+  const showSystemNotification = (notification) => {
+    const toastId = notification._id || Date.now().toString();
+
+    const ToastContent = () => (
+      <div className="flex flex-col">
+        <div
+          className="cursor-pointer"
+          onClick={() => handleNotificationClick(notification)}
+        >
+          <strong>{notification.title}</strong>
+          <p>{notification.message}</p>
+        </div>
+        <div className="flex justify-end mt-1 space-x-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePinToast(toastId, notification);
+            }}
+            className="p-1 hover:bg-gray-700 rounded-full transition-colors"
+            title="Pin notification"
+          >
+            <PinIcon size={16} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toast.dismiss(toastId);
+            }}
+            className="p-1 hover:bg-gray-700 rounded-full transition-colors"
+            title="Close"
+          >
+            <XCircleIcon size={16} />
+          </button>
+        </div>
+      </div>
+    );
+
+    toast(<ToastContent />, {
+      position: 'top-right',
+      autoClose: 5000,
+      closeOnClick: false, // Don't close when clicking content
+      closeButton: false, // Hide default close button
+      draggable: true,
+      pauseOnHover: true,
+      toastId: toastId,
+      type: notification.type || 'info',
+    });
+  };
+
+  // Handle pinning a toast notification
+  const handlePinToast = (toastId, notification) => {
+    // First dismiss the auto-closing toast
+    toast.dismiss(toastId);
+
+    // Create a new pinned version that won't auto-close
+    const pinnedToastId = `pinned-${toastId}`;
+
+    const PinnedToastContent = () => (
+      <div className="flex flex-col">
+        <div className="flex items-start">
+          <div
+            className="cursor-pointer flex-grow"
+            onClick={() => handleNotificationClick(notification)}
+          >
+            <strong>{notification.title}</strong>
+            <p>{notification.message}</p>
+          </div>
+          <div className="ml-2 flex-shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toast.dismiss(pinnedToastId);
+                setPinnedToasts((prev) =>
+                  prev.filter((id) => id !== pinnedToastId)
+                );
+              }}
+              className="p-1 hover:bg-gray-700 rounded-full transition-colors"
+              title="Close"
+            >
+              <XCircleIcon size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="text-xs text-gray-400 mt-1">Pinned notification</div>
+      </div>
+    );
+
+    toast(<PinnedToastContent />, {
+      position: 'top-right',
+      autoClose: false, // Never auto-close pinned notifications
+      closeOnClick: false,
+      closeButton: false,
+      draggable: true,
+      pauseOnHover: true,
+      toastId: pinnedToastId,
+      type: notification.type || 'info',
+      className: 'pinned-toast border-l-4 border-amber-500',
+    });
+
+    // Keep track of pinned toasts
+    setPinnedToasts((prev) => [...prev, pinnedToastId]);
+  };
+
+  // Show a notification with the ability to pin
+  const showNotification = (message, type = 'info') => {
+    // Create notification object
+    const notification = {
+      _id: Date.now().toString(),
+      title:
+        type === 'error'
+          ? 'Error'
+          : type === 'success'
+          ? 'Success'
+          : 'Notification',
+      message,
+      type,
+    };
+
+    // Display the notification
+    showSystemNotification(notification);
+  };
 
   // Fetch all notifications from the API
   const fetchNotifications = async () => {
@@ -190,6 +303,7 @@ export const NotificationProvider = ({ children }) => {
     clearAllNotifications,
     fetchNotifications,
     handleNotificationClick,
+    showNotification,
   };
 
   return (

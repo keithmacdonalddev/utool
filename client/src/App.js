@@ -8,6 +8,8 @@ import {
   Route,
   Navigate,
 } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify'; // Import ToastContainer
+import 'react-toastify/dist/ReactToastify.css'; // Import CSS for react-toastify
 
 import ProtectedRoute from './components/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
@@ -65,6 +67,18 @@ function App() {
     <NotificationProvider>
       <Router>
         <div className="App">
+          <ToastContainer
+            position="top-right"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="dark" // Or "light" or "colored"
+          />
           <Suspense fallback={<div>Loading...</div>}>
             <Routes>
               {/* Public Routes */}

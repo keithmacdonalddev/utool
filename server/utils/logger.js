@@ -283,6 +283,87 @@ const logger = {
     return { type: 'debug', message, data, timestamp: new Date() };
   },
 
+  // Specialized logging for CRUD operations
+  logCreate: (resourceType, resourceId, userId, data = {}) => {
+    const message = `Created ${resourceType}${
+      resourceId ? ` (ID: ${resourceId})` : ''
+    }`;
+    data.fileInfo = getCallerInfo();
+    data.resourceType = resourceType;
+    data.resourceId = resourceId;
+    data.userId =
+      userId || (data.req && data.req.user ? data.req.user.id : null);
+    data.action = 'create';
+    winstonLogger.info(message, data);
+    return logToDb('info', message, data);
+  },
+
+  logUpdate: (resourceType, resourceId, userId, data = {}) => {
+    const message = `Updated ${resourceType}${
+      resourceId ? ` (ID: ${resourceId})` : ''
+    }`;
+    data.fileInfo = getCallerInfo();
+    data.resourceType = resourceType;
+    data.resourceId = resourceId;
+    data.userId =
+      userId || (data.req && data.req.user ? data.req.user.id : null);
+    data.action = 'update';
+    winstonLogger.info(message, data);
+    return logToDb('info', message, data);
+  },
+
+  logDelete: (resourceType, resourceId, userId, data = {}) => {
+    const message = `Deleted ${resourceType}${
+      resourceId ? ` (ID: ${resourceId})` : ''
+    }`;
+    data.fileInfo = getCallerInfo();
+    data.resourceType = resourceType;
+    data.resourceId = resourceId;
+    data.userId =
+      userId || (data.req && data.req.user ? data.req.user.id : null);
+    data.action = 'delete';
+    winstonLogger.info(message, data);
+    return logToDb('info', message, data);
+  },
+
+  logAccess: (resourceType, resourceId, userId, data = {}) => {
+    const message = `Accessed ${resourceType}${
+      resourceId ? ` (ID: ${resourceId})` : ''
+    }`;
+    data.fileInfo = getCallerInfo();
+    data.resourceType = resourceType;
+    data.resourceId = resourceId;
+    data.userId =
+      userId || (data.req && data.req.user ? data.req.user.id : null);
+    data.action = 'access';
+    winstonLogger.verbose(message, data);
+    return { type: 'verbose', message, data, timestamp: new Date() };
+  },
+
+  // Log database operations
+  logDbOperation: (
+    operation,
+    collection,
+    success,
+    errorDetails = null,
+    data = {}
+  ) => {
+    const status = success ? 'successful' : 'failed';
+    const message = `Database ${operation} on ${collection} ${status}`;
+    data.fileInfo = getCallerInfo();
+    data.dbOperation = { operation, collection, success };
+
+    if (errorDetails) {
+      data.dbOperation.error = errorDetails;
+      data.showDetails = true;
+      winstonLogger.error(message, data);
+    } else {
+      winstonLogger.info(message, data);
+    }
+
+    return logToDb(success ? 'info' : 'error', message, data);
+  },
+
   // Log HTTP requests with response time
   logRequest: (req, res, responseTime) => {
     const message = `${req.method} ${req.originalUrl} ${res.statusCode} - ${responseTime}ms`;

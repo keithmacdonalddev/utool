@@ -26,10 +26,33 @@ const UserEditPage = () => {
     website: '',
     bio: '',
   });
+
+  // Add state to track original user data for detecting changes
+  const [originalData, setOriginalData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState(''); // For both fetch and update errors
   const { handleNotificationClick } = useNotifications();
+
+  // Track if there are form changes
+  const hasChanges = () => {
+    if (!originalData) return false;
+
+    // Check for changes in all fields except resetPassword and newPassword
+    return (
+      originalData.name !== formData.name ||
+      originalData.email !== formData.email ||
+      originalData.role !== formData.role ||
+      originalData.isVerified !== formData.isVerified ||
+      originalData.avatar !== formData.avatar ||
+      originalData.jobTitle !== formData.jobTitle ||
+      originalData.country !== formData.country ||
+      originalData.city !== formData.city ||
+      originalData.website !== formData.website ||
+      originalData.bio !== formData.bio ||
+      (formData.resetPassword && formData.newPassword) // Consider password reset as a change only if new password is provided
+    );
+  };
 
   // Using handleNotificationClick as a replacement for showNotification
   const showNotification = (message, type = 'info') => {
@@ -63,7 +86,8 @@ const UserEditPage = () => {
             website,
             bio,
           } = res.data.data;
-          setFormData({
+
+          const userData = {
             name,
             email,
             role,
@@ -76,7 +100,10 @@ const UserEditPage = () => {
             bio: bio || '',
             resetPassword: false,
             newPassword: '',
-          });
+          };
+
+          setFormData(userData);
+          setOriginalData({ ...userData }); // Store original data for comparison
         } else {
           throw new Error(res.data.message || 'Failed to fetch user data');
         }
@@ -134,7 +161,7 @@ const UserEditPage = () => {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-4 text-center">
+      <div className="container mx-auto p-4 text-center text-foreground">
         Loading user data...
       </div>
     );
@@ -145,14 +172,14 @@ const UserEditPage = () => {
     return (
       <div className="container mx-auto p-4">
         <div
-          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4"
+          className="bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded mb-4"
           role="alert"
         >
           <strong className="font-bold">Error!</strong> {error}
         </div>
         <Link
           to="/admin/users"
-          className="text-blue-600 hover:underline inline-flex items-center"
+          className="text-accent-purple hover:text-accent-blue hover:underline inline-flex items-center"
         >
           <ArrowLeft size={16} className="mr-1" /> Back to User List
         </Link>
@@ -165,17 +192,19 @@ const UserEditPage = () => {
       <div className="mb-4">
         <Link
           to="/admin/users"
-          className="text-blue-600 hover:underline inline-flex items-center text-sm"
+          className="text-accent-purple hover:text-accent-blue hover:underline inline-flex items-center text-sm"
         >
           <ArrowLeft size={16} className="mr-1" /> Back to User List
         </Link>
       </div>
-      <h1 className="text-2xl font-bold mb-6 text-center">Edit User Profile</h1>
+      <h1 className="text-2xl font-bold mb-6 text-center text-foreground">
+        Edit User Profile
+      </h1>
 
       {error &&
         isUpdating && ( // Show update error
           <div
-            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+            className="bg-red-900/30 border border-red-700 text-red-300 px-4 py-3 rounded relative mb-4"
             role="alert"
           >
             <strong className="font-bold">Update Error!</strong> {error}
@@ -184,7 +213,7 @@ const UserEditPage = () => {
 
       <form
         onSubmit={onSubmit}
-        className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4"
+        className="bg-card border border-dark-700 shadow-md rounded px-8 pt-6 pb-8 mb-4"
       >
         {/* Name */}
         <FormInput
@@ -229,7 +258,7 @@ const UserEditPage = () => {
           onChange={onChange}
         />
         {/* Password Reset Section */}
-        <div className="mb-6 border-t pt-4">
+        <div className="mb-6 border-t border-dark-600 pt-4">
           <FormCheckbox
             id="resetPassword"
             name="resetPassword"
@@ -238,18 +267,18 @@ const UserEditPage = () => {
             onChange={(e) =>
               setFormData({ ...formData, resetPassword: e.target.checked })
             }
-            boldLabel
+            labelClassName="font-bold"
           />
           {formData.resetPassword && (
             <div className="mt-2">
               <label
-                className="block text-gray-700 text-sm font-bold mb-2"
+                className="block text-foreground text-sm font-medium mb-2"
                 htmlFor="newPassword"
               >
                 New Password
               </label>
               <input
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
                 id="newPassword"
                 type="password"
                 placeholder="Enter new password"
@@ -258,7 +287,7 @@ const UserEditPage = () => {
                 onChange={onChange}
                 minLength="8"
               />
-              <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
+              <p className="text-xs text-gray-400 mt-1">Minimum 8 characters</p>
             </div>
           )}
         </div>
@@ -266,13 +295,13 @@ const UserEditPage = () => {
         {/* Additional Metadata Fields */}
         <div className="mb-6">
           <label
-            className="block text-gray-700 text-sm font-bold mb-2"
+            className="block text-foreground text-sm font-medium mb-2"
             htmlFor="jobTitle"
           >
             Job Title
           </label>
           <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
             id="jobTitle"
             type="text"
             placeholder="Enter job title"
@@ -285,13 +314,13 @@ const UserEditPage = () => {
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label
-              className="block text-gray-700 text-sm font-bold mb-2"
+              className="block text-foreground text-sm font-medium mb-2"
               htmlFor="country"
             >
               Country
             </label>
             <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
               id="country"
               type="text"
               placeholder="Country"
@@ -302,13 +331,13 @@ const UserEditPage = () => {
           </div>
           <div>
             <label
-              className="block text-gray-700 text-sm font-bold mb-2"
+              className="block text-foreground text-sm font-medium mb-2"
               htmlFor="city"
             >
               City
             </label>
             <input
-              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
               id="city"
               type="text"
               placeholder="City"
@@ -321,13 +350,13 @@ const UserEditPage = () => {
 
         <div className="mb-6">
           <label
-            className="block text-gray-700 text-sm font-bold mb-2"
+            className="block text-foreground text-sm font-medium mb-2"
             htmlFor="website"
           >
             Website
           </label>
           <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
             id="website"
             type="url"
             placeholder="https://example.com"
@@ -339,13 +368,13 @@ const UserEditPage = () => {
 
         <div className="mb-6">
           <label
-            className="block text-gray-700 text-sm font-bold mb-2"
+            className="block text-foreground text-sm font-medium mb-2"
             htmlFor="bio"
           >
             Bio
           </label>
           <textarea
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
             id="bio"
             rows="3"
             placeholder="Tell us about yourself..."
@@ -354,7 +383,7 @@ const UserEditPage = () => {
             onChange={onChange}
             maxLength="500"
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             {formData.bio?.length || 0}/500 characters
           </p>
         </div>
@@ -362,13 +391,13 @@ const UserEditPage = () => {
         {/* Avatar URL Input */}
         <div className="mb-6">
           <label
-            className="block text-gray-700 text-sm font-bold mb-2"
+            className="block text-foreground text-sm font-medium mb-2"
             htmlFor="avatar"
           >
             Avatar URL (Optional)
           </label>
           <input
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
             id="avatar"
             type="url"
             placeholder="https://example.com/avatar.png"
@@ -388,13 +417,20 @@ const UserEditPage = () => {
           )}
         </div>
 
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center gap-4">
           <button
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
+            className="px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 disabled:opacity-50 transition-colors duration-200"
             type="submit"
-            disabled={isUpdating}
+            disabled={isUpdating || !hasChanges()}
           >
             {isUpdating ? 'Updating...' : 'Update User'}
+          </button>
+          <button
+            type="button"
+            className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-dark-500 focus:ring-opacity-50 transition-colors duration-200"
+            onClick={() => navigate('/admin/users')}
+          >
+            Cancel
           </button>
         </div>
       </form>

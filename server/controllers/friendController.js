@@ -83,7 +83,114 @@ exports.sendFriendRequest = asyncHandler(async (req, res, next) => {
   recipient.friendRequestsReceived.push(senderId);
   await recipient.save();
 
-  // TODO: Implement notification system (e.g., via WebSockets)
+  // Create notification for the recipient with improved logging
+  try {
+    const Notification = require('../models/Notification');
+    const { logger } = require('../utils/logger');
+
+    logger.info(
+      `Creating friend request notification for user ${recipientId}`,
+      {
+        sender: senderId,
+        senderName: sender.name,
+        recipient: recipientId,
+        recipientName: recipient.name,
+      }
+    );
+
+    const notification = await Notification.create({
+      user: recipientId,
+      type: 'friend_request',
+      title: 'New Friend Request',
+      message: `${sender.name} sent you a friend request`,
+      relatedItem: senderId,
+      itemModel: 'User',
+      url: '/friends',
+    });
+
+    logger.info(
+      `Friend request notification created with ID: ${notification._id}`,
+      {
+        notificationId: notification._id,
+        recipientId: recipientId,
+      }
+    );
+
+    // If Socket.IO is available, send the notification immediately
+    const io = req.app.get('io');
+    if (io) {
+      const userRoom = `user:${recipientId}`;
+      const { sendNotification } = require('../utils/socketManager');
+
+      logger.info(
+        `Attempting real-time delivery of notification to room: ${userRoom}`,
+        {
+          socketInstance: !!io,
+          recipientId,
+        }
+      );
+
+      // Check if user is connected
+      const userSockets = io.sockets.adapter.rooms.get(userRoom);
+      const isUserConnected = !!(userSockets && userSockets.size > 0);
+
+      logger.info(
+        `Recipient socket status check: ${
+          isUserConnected ? 'CONNECTED' : 'NOT CONNECTED'
+        }`,
+        {
+          recipientId,
+          roomExists: !!userSockets,
+          socketCount: userSockets ? userSockets.size : 0,
+        }
+      );
+
+      // Use the improved sendNotification utility with proper notification object
+      const notificationData = {
+        _id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        url: notification.url,
+        createdAt: notification.createdAt,
+      };
+
+      const sent = sendNotification(io, recipientId, notificationData);
+
+      logger.info(
+        `Notification emit attempt result: ${sent ? 'SUCCESS' : 'FAILED'}`,
+        {
+          notificationId: notification._id,
+          recipientId,
+        }
+      );
+
+      // Mark notification as sent if delivered successfully
+      if (sent) {
+        notification.isSent = true;
+        await notification.save();
+        logger.info(`Notification marked as sent`, {
+          notificationId: notification._id,
+        });
+      }
+    } else {
+      logger.warn(
+        `Socket.IO instance not available, notification will be delivered on next connection`,
+        {
+          notificationId: notification._id,
+          recipientId: recipientId,
+        }
+      );
+    }
+  } catch (err) {
+    logger.error('Error creating friend request notification:', {
+      error: err.message,
+      stack: err.stack,
+      sender: senderId,
+      recipient: recipientId,
+    });
+    // Don't fail the request if notification creation fails
+  }
 
   res.status(200).json({ success: true, message: 'Friend request sent' });
 });
@@ -125,7 +232,116 @@ exports.acceptFriendRequest = asyncHandler(async (req, res, next) => {
   await recipient.save();
   await sender.save();
 
-  // TODO: Implement notification system
+  // Create notification for the sender that their request was accepted
+  try {
+    const Notification = require('../models/Notification');
+    const { logger } = require('../utils/logger');
+
+    logger.info(
+      `Creating friend request acceptance notification for user ${senderId}`,
+      {
+        sender: recipientId,
+        senderName: recipient.name,
+        recipient: senderId,
+        recipientName: sender.name,
+      }
+    );
+
+    const notification = await Notification.create({
+      user: senderId,
+      type: 'friend_request',
+      title: 'Friend Request Accepted',
+      message: `${recipient.name} accepted your friend request`,
+      relatedItem: recipientId,
+      itemModel: 'User',
+      url: '/friends',
+    });
+
+    logger.info(
+      `Friend request acceptance notification created with ID: ${notification._id}`,
+      {
+        notificationId: notification._id,
+        recipientId: senderId,
+      }
+    );
+
+    // If Socket.IO is available, send the notification immediately
+    const io = req.app.get('io');
+    if (io) {
+      const userRoom = `user:${senderId}`;
+      const { sendNotification } = require('../utils/socketManager');
+
+      logger.info(
+        `Attempting real-time delivery of acceptance notification to room: ${userRoom}`,
+        {
+          socketInstance: !!io,
+          recipientId: senderId,
+        }
+      );
+
+      // Check if user is connected
+      const userSockets = io.sockets.adapter.rooms.get(userRoom);
+      const isUserConnected = !!(userSockets && userSockets.size > 0);
+
+      logger.info(
+        `Recipient socket status check: ${
+          isUserConnected ? 'CONNECTED' : 'NOT CONNECTED'
+        }`,
+        {
+          recipientId: senderId,
+          roomExists: !!userSockets,
+          socketCount: userSockets ? userSockets.size : 0,
+        }
+      );
+
+      // Use the improved sendNotification utility with proper notification object
+      const notificationData = {
+        _id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        url: notification.url,
+        createdAt: notification.createdAt,
+      };
+
+      const sent = sendNotification(io, senderId, notificationData);
+
+      logger.info(
+        `Acceptance notification emit attempt result: ${
+          sent ? 'SUCCESS' : 'FAILED'
+        }`,
+        {
+          notificationId: notification._id,
+          recipientId: senderId,
+        }
+      );
+
+      // Mark notification as sent if delivered successfully
+      if (sent) {
+        notification.isSent = true;
+        await notification.save();
+        logger.info(`Acceptance notification marked as sent`, {
+          notificationId: notification._id,
+        });
+      }
+    } else {
+      logger.warn(
+        `Socket.IO instance not available, acceptance notification will be delivered on next connection`,
+        {
+          notificationId: notification._id,
+          recipientId: senderId,
+        }
+      );
+    }
+  } catch (err) {
+    logger.error('Error creating friend request acceptance notification:', {
+      error: err.message,
+      stack: err.stack,
+      sender: recipientId,
+      recipient: senderId,
+    });
+    // Don't fail the request if notification creation fails
+  }
 
   res.status(200).json({ success: true, message: 'Friend request accepted' });
 });

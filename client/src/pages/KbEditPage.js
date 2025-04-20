@@ -15,8 +15,10 @@ const KbEditPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  // Add state for delete confirmation modal
+  // Add state for delete confirmation modals
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showFinalDeleteModal, setShowFinalDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Get user from Redux store
@@ -231,10 +233,21 @@ const KbEditPage = () => {
     // Navigate back to the details page for the current article ID
     navigate(`/kb/${id}`);
   };
-  // --- End Cancel Handler ---
 
-  // --- Handle Delete Article ---
-  const handleDelete = async () => {
+  // --- Handle first delete modal confirmation ---
+  const handleFirstDeleteConfirm = () => {
+    setShowDeleteModal(false);
+    setShowFinalDeleteModal(true);
+    setDeleteConfirmText('');
+  };
+
+  // --- Handle text input change for the final delete confirmation ---
+  const handleDeleteTextChange = (e) => {
+    setDeleteConfirmText(e.target.value);
+  };
+
+  // --- Handle final Delete Article ---
+  const handleFinalDelete = async () => {
     setIsDeleting(true);
     setIsError(false);
     setMessage('');
@@ -242,7 +255,7 @@ const KbEditPage = () => {
     try {
       await api.delete(`/kb/${id}`);
       // Close modal and navigate to KB list after successful deletion
-      setShowDeleteModal(false);
+      setShowFinalDeleteModal(false);
       navigate('/kb');
     } catch (error) {
       setIsError(true);
@@ -408,7 +421,7 @@ const KbEditPage = () => {
         </form>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* First Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-dark-800 rounded-lg p-6 max-w-md w-full border border-dark-700">
@@ -424,17 +437,60 @@ const KbEditPage = () => {
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 className="bg-dark-700 hover:bg-dark-600 text-gray-200 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleFirstDeleteConfirm}
+                className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Final Delete Confirmation Modal with Text Verification */}
+      {showFinalDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-dark-800 rounded-lg p-6 max-w-md w-full border border-dark-700">
+            <h3 className="text-xl font-bold text-white mb-4">
+              Final Confirmation
+            </h3>
+            <p className="text-gray-300 mb-4">
+              To confirm deletion, please type{' '}
+              <strong className="text-red-500">delete</strong> in the field
+              below.
+            </p>
+            <div className="mb-6">
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={handleDeleteTextChange}
+                placeholder="Type 'delete' to confirm"
+                className="w-full px-3 py-2 rounded-md border bg-dark-700 text-white border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200"
+              />
+            </div>
+            <div className="flex justify-end gap-4">
+              <button
+                type="button"
+                onClick={() => setShowFinalDeleteModal(false)}
+                className="bg-dark-700 hover:bg-dark-600 text-gray-200 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
                 disabled={isDeleting}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={handleFinalDelete}
                 className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                disabled={isDeleting}
+                disabled={
+                  deleteConfirmText.toLowerCase() !== 'delete' || isDeleting
+                }
               >
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                {isDeleting ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
           </div>
