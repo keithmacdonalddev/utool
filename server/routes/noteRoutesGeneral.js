@@ -1,18 +1,14 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-
-// Import middleware
-const { protect } = require('../middleware/authMiddleware');
-
-// Import controller functions
-const {
+import { protect } from '../middleware/authMiddleware.js';
+import {
   getRecentNotes,
   deleteNote,
   permanentlyDeleteNote,
   restoreNote,
   getTrashedNotes,
   emptyTrash,
-} = require('../controllers/noteController');
+} from '../controllers/noteController.js';
 
 // All routes below this will use the 'protect' middleware
 router.use(protect);
@@ -32,4 +28,4 @@ router.delete('/:id/permanent', permanentlyDeleteNote); // Permanently delete a 
 
 // Add other general note routes here later if needed (e.g., search all notes)
 
-module.exports = router;
+export default router;

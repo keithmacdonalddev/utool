@@ -1,6 +1,5 @@
-// filepath: server/utils/socketManager.js
-const jwt = require('jsonwebtoken');
-const { logger } = require('./logger');
+import jwt from 'jsonwebtoken';
+import { logger } from './logger.js';
 
 // Socket.io middleware for authentication
 const authenticateSocket = (socket, next) => {
@@ -171,7 +170,7 @@ const broadcastLogEntry = () => {
   // This function intentionally left empty as client-side logging is removed
 };
 
-module.exports = {
+export {
   authenticateSocket,
   handleConnection,
   broadcastLogEntry,

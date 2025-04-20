@@ -1,5 +1,5 @@
-const express = require('express');
-const {
+import express from 'express';
+import {
   searchUsers,
   sendFriendRequest,
   acceptFriendRequest,
@@ -7,11 +7,10 @@ const {
   removeFriend,
   getFriends,
   getFriendRequests,
-} = require('../controllers/friendController');
+} from '../controllers/friendController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
-
-const { protect } = require('../middleware/authMiddleware');
 
 // All routes below are protected
 router.use(protect);
@@ -24,4 +23,4 @@ router.delete('/:userId', removeFriend); // DELETE /api/v1/friends/<friend_user_
 router.get('/', getFriends); // GET /api/v1/friends
 router.get('/requests', getFriendRequests); // GET /api/v1/friends/requests
 
-module.exports = router;
+export default router;

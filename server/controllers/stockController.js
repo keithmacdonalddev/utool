@@ -1,5 +1,5 @@
-const axios = require('axios');
-const errorResponse = require('../utils/errorResponse');
+import axios from 'axios';
+import errorResponse from '../utils/errorResponse.js';
 
 // Mock data for fallback when API fails
 const mockStockData = {
@@ -36,7 +36,7 @@ const mockStockData = {
 };
 
 // Get real-time stock quote from Alpha Vantage
-exports.getStockQuote = async (req, res, next) => {
+export const getStockQuote = async (req, res, next) => {
   try {
     const { symbol } = req.params;
 

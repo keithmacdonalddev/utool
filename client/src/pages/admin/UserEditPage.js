@@ -25,6 +25,7 @@ const UserEditPage = () => {
     city: '',
     website: '',
     bio: '',
+    ipAddresses: [], // Initialize ipAddresses
   });
 
   // Add state to track original user data for detecting changes
@@ -85,6 +86,7 @@ const UserEditPage = () => {
             city,
             website,
             bio,
+            ipAddresses, // <-- add this
           } = res.data.data;
 
           const userData = {
@@ -100,6 +102,7 @@ const UserEditPage = () => {
             bio: bio || '',
             resetPassword: false,
             newPassword: '',
+            ipAddresses: ipAddresses || [], // <-- add this
           };
 
           setFormData(userData);
@@ -416,6 +419,25 @@ const UserEditPage = () => {
             </div>
           )}
         </div>
+
+        {/* IP Addresses Section */}
+        {formData.ipAddresses && formData.ipAddresses.length > 0 && (
+          <div className="mb-6">
+            <label className="block text-foreground text-sm font-medium mb-2">
+              IP Addresses (Login/Registration History)
+            </label>
+            <ul className="bg-dark-700 rounded p-3 text-xs text-foreground/80">
+              {formData.ipAddresses.map((ip, idx) => (
+                <li
+                  key={ip + idx}
+                  className="break-all border-b border-dark-600 last:border-0 py-1"
+                >
+                  {ip}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="flex items-center justify-center gap-4">
           <button

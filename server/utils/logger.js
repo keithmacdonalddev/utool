@@ -1,5 +1,6 @@
-const { format, createLogger, transports } = require('winston');
-const AuditLog = require('../models/AuditLog');
+import { format, createLogger, transports } from 'winston';
+import AuditLog from '../models/AuditLog.js';
+import mongoose from 'mongoose';
 
 // Format for console logging with more human-readable output
 const consoleFormat = format.combine(
@@ -87,6 +88,11 @@ const LOG_LEVELS = {
 // Function to log to database
 async function logToDb(type, message, data = {}) {
   try {
+    // Prevent logging if DB is not connected
+    if (mongoose.connection.readyState !== 1) {
+      return null;
+    }
+
     // Create log object with added fields for verbose logging
     const logEntry = {
       type,
@@ -191,6 +197,13 @@ async function logToDb(type, message, data = {}) {
       })
         .save()
         .catch((err) => {
+          // Suppress PoolClosedError on shutdown
+          if (
+            err?.name === 'MongoPoolClosedError' ||
+            err?.message?.includes('PoolClosedError')
+          ) {
+            return;
+          }
           console.error('Error saving log to database:', err);
         });
     }
@@ -393,6 +406,4 @@ const logger = {
   },
 };
 
-module.exports = {
-  logger,
-};
+export { logger };

@@ -1,8 +1,46 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+// authMiddleware.js - JWT Authentication & Authorization Middleware
+import jwt from 'jsonwebtoken';
+import asyncHandler from './async.js';
+import ErrorResponse from '../utils/errorResponse.js';
+import User from '../models/User.js';
+import {
+  permissions,
+  featureFlags,
+  ACCESS_LEVELS,
+  hasAccess,
+} from '../config/permissions.js';
 
-// Protect routes
-exports.protect = async (req, res, next) => {
+/*
+┌─────────────────────────────────────────────────────────────┐
+│ JWT AUTHENTICATION MIDDLEWARE EDUCATIONAL GUIDE             │
+│                                                             │
+│ This middleware implements token-based authentication       │
+│ using JSON Web Tokens (JWT) which:                          │
+│                                                             │
+│ 1. TOKEN EXTRACTION & VERIFICATION                          │
+│    - Extracts JWT from request headers or cookies           │
+│    - Verifies token signature using server's secret key     │
+│    - Decodes payload to retrieve user information           │
+│                                                             │
+│ 2. STATELESS AUTHENTICATION                                 │
+│    - No session storage required on server                  │
+│    - Each request contains credentials (the token)          │
+│    - Enables horizontal scaling of backend servers          │
+│                                                             │
+│ 3. USER AUTHORIZATION                                       │
+│    - Fetches current user from database using token ID      │
+│    - Attaches user object to request for downstream use     │
+│    - Enables role-based access control in route handlers    │
+│                                                             │
+│ 4. SECURITY MEASURES                                        │
+│    - Token expiration to limit validity period              │
+│    - Optional refresh token rotation                        │
+│    - Protection against various attack vectors              │
+└─────────────────────────────────────────────────────────────┘
+*/
+
+// Protect routes - verify user is authenticated with valid JWT
+export const protect = async (req, res, next) => {
   let token;
 
   // Check for token in Authorization header (Bearer token)
@@ -49,21 +87,24 @@ exports.protect = async (req, res, next) => {
   }
 };
 
-// Import permissions config and helper
-const { permissions, featureFlags, ACCESS_LEVELS, hasAccess } = require('../config/permissions');
-
 // Grant access based on feature and required access level
-exports.authorize = (feature, requiredLevel) => {
-  return async (req, res, next) => { // Made async to potentially fetch resource for 'own' check
+export const authorize = (feature, requiredLevel) => {
+  return async (req, res, next) => {
+    // Made async to potentially fetch resource for 'own' check
     if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Not authorized' });
+      return res
+        .status(401)
+        .json({ success: false, message: 'Not authorized' });
     }
 
     const userRole = req.user.role;
 
     // 1. Check if the feature is globally enabled (optional but good practice)
     if (featureFlags[feature] === false) {
-       return res.status(403).json({ success: false, message: `Feature '${feature}' is currently disabled.` });
+      return res.status(403).json({
+        success: false,
+        message: `Feature '${feature}' is currently disabled.`,
+      });
     }
 
     // 2. Get the user's permission level for this feature
@@ -78,21 +119,28 @@ exports.authorize = (feature, requiredLevel) => {
 
     // 3. Check if the user's level meets the required level for the action
     // Simple check for 'read', 'full', 'create_edit'
-    if (requiredLevel === ACCESS_LEVELS.READ || requiredLevel === ACCESS_LEVELS.FULL || requiredLevel === ACCESS_LEVELS.CREATE_EDIT) {
+    if (
+      requiredLevel === ACCESS_LEVELS.READ ||
+      requiredLevel === ACCESS_LEVELS.FULL ||
+      requiredLevel === ACCESS_LEVELS.CREATE_EDIT
+    ) {
       if (hasAccess(userLevel, requiredLevel)) {
         return next(); // User has sufficient general access
       } else {
-         return res.status(403).json({
-           success: false,
-           message: `Your role (${userRole}) requires '${requiredLevel}' access for '${feature}', but only has '${userLevel}'.`,
-         });
+        return res.status(403).json({
+          success: false,
+          message: `Your role (${userRole}) requires '${requiredLevel}' access for '${feature}', but only has '${userLevel}'.`,
+        });
       }
     }
 
     // 4. Handle 'own' access level check (more complex)
     if (requiredLevel === ACCESS_LEVELS.OWN) {
       // If user has FULL or CREATE_EDIT, they automatically pass 'own' check for this feature
-      if (userLevel === ACCESS_LEVELS.FULL || userLevel === ACCESS_LEVELS.CREATE_EDIT) {
+      if (
+        userLevel === ACCESS_LEVELS.FULL ||
+        userLevel === ACCESS_LEVELS.CREATE_EDIT
+      ) {
         return next();
       }
       // If user only has 'OWN' level, we need to verify ownership of the specific resource
@@ -102,27 +150,50 @@ exports.authorize = (feature, requiredLevel) => {
         // Example for a resource with an 'author' field and ID in req.params.id:
         const resourceId = req.params.id; // Assuming ID is in params
         if (!resourceId) {
-           console.warn(`Ownership check failed: Missing resource ID in request params for feature '${feature}'.`);
-           return res.status(400).json({ success: false, message: 'Resource ID missing for ownership check.' });
+          console.warn(
+            `Ownership check failed: Missing resource ID in request params for feature '${feature}'.`
+          );
+          return res.status(400).json({
+            success: false,
+            message: 'Resource ID missing for ownership check.',
+          });
         }
 
         try {
           // Dynamically determine the model based on the feature
           let Model;
           switch (feature) {
-            case 'knowledgeBase': Model = require('../models/KnowledgeBaseArticle'); break;
-            case 'projects': Model = require('../models/Project'); break;
-            case 'tasks': Model = require('../models/Task'); break;
-            case 'notes': Model = require('../models/Note'); break;
+            case 'knowledgeBase':
+              Model = (await import('../models/KnowledgeBaseArticle.js'))
+                .default;
+              break;
+            case 'projects':
+              Model = (await import('../models/Project.js')).default;
+              break;
+            case 'tasks':
+              Model = (await import('../models/Task.js')).default;
+              break;
+            case 'notes':
+              Model = (await import('../models/Note.js')).default;
+              break;
             // Add cases for 'blogPosts' etc.
             default:
-              console.error(`Ownership check failed: No model mapping for feature '${feature}'.`);
-              return res.status(500).json({ success: false, message: 'Internal server error during authorization.' });
+              console.error(
+                `Ownership check failed: No model mapping for feature '${feature}'.`
+              );
+              return res.status(500).json({
+                success: false,
+                message: 'Internal server error during authorization.',
+              });
           }
 
-          const resource = await Model.findById(resourceId).select('author user'); // Select potential owner fields
+          const resource = await Model.findById(resourceId).select(
+            'author user'
+          ); // Select potential owner fields
           if (!resource) {
-            return res.status(404).json({ success: false, message: 'Resource not found.' });
+            return res
+              .status(404)
+              .json({ success: false, message: 'Resource not found.' });
           }
 
           // Check common owner fields ('author' or 'user')
@@ -136,21 +207,28 @@ exports.authorize = (feature, requiredLevel) => {
             });
           }
         } catch (err) {
-           console.error(`Error during ownership check for feature '${feature}', ID '${resourceId}':`, err);
-           return res.status(500).json({ success: false, message: 'Internal server error during authorization.' });
+          console.error(
+            `Error during ownership check for feature '${feature}', ID '${resourceId}':`,
+            err
+          );
+          return res.status(500).json({
+            success: false,
+            message: 'Internal server error during authorization.',
+          });
         }
-
       } else {
         // User has 'read' or 'none', which is insufficient for 'own' requirement
-         return res.status(403).json({
-           success: false,
-           message: `Your role (${userRole}) requires ownership access for '${feature}', but only has '${userLevel}'.`,
-         });
+        return res.status(403).json({
+          success: false,
+          message: `Your role (${userRole}) requires ownership access for '${feature}', but only has '${userLevel}'.`,
+        });
       }
     }
 
     // If requiredLevel is not recognized or handled
-    console.warn(`Authorization check bypassed: Unhandled requiredLevel '${requiredLevel}' for feature '${feature}'.`);
+    console.warn(
+      `Authorization check bypassed: Unhandled requiredLevel '${requiredLevel}' for feature '${feature}'.`
+    );
     next(); // Or return an error if strict handling is needed
   };
 };

@@ -1,11 +1,12 @@
-const Note = require('../models/Note');
-const Task = require('../models/Task');
-const { logger } = require('../utils/logger');
+import Note from '../models/Note.js';
+import Task from '../models/Task.js';
+import { logger } from '../utils/logger.js';
+import { auditLog } from '../middleware/auditLogMiddleware.js';
 
 // @desc    Get recent notes for logged-in user
 // @route   GET /api/v1/notes/recent
 // @access  Private
-exports.getRecentNotes = async (req, res, next) => {
+export const getRecentNotes = async (req, res, next) => {
   try {
     logger.logAccess('notes', null, req.user.id, { req });
 
@@ -38,7 +39,7 @@ exports.getRecentNotes = async (req, res, next) => {
 // @desc    Get notes for a specific task
 // @route   GET /api/v1/tasks/:taskId/notes
 // @access  Private
-exports.getNotesForTask = async (req, res, next) => {
+export const getNotesForTask = async (req, res, next) => {
   try {
     logger.logAccess('task notes', req.params.taskId, req.user.id, { req });
 
@@ -109,7 +110,7 @@ exports.getNotesForTask = async (req, res, next) => {
 // @desc    Create a note for a specific task
 // @route   POST /api/v1/tasks/:taskId/notes
 // @access  Private
-exports.createNoteForTask = async (req, res, next) => {
+export const createNoteForTask = async (req, res, next) => {
   try {
     // Check if the task exists and belongs to the user (or if user has access)
     const task = await Task.findById(req.params.taskId);
@@ -177,6 +178,8 @@ exports.createNoteForTask = async (req, res, next) => {
       req,
     });
 
+    await auditLog(req, 'note_create', 'success', { noteId: note._id });
+
     res.status(201).json({
       success: true,
       data: note,
@@ -190,6 +193,8 @@ exports.createNoteForTask = async (req, res, next) => {
       userId: req.user.id,
       req,
     });
+
+    await auditLog(req, 'note_create', 'failed', { error: err.message });
 
     // Handle Mongoose validation errors specifically
     if (err.name === 'ValidationError') {
@@ -224,7 +229,7 @@ exports.createNoteForTask = async (req, res, next) => {
 // @desc    Get all notes for a specific user (Admin only)
 // @route   GET /api/v1/admin/users/:userId/notes
 // @access  Private/Admin
-exports.getUserNotes = async (req, res, next) => {
+export const getUserNotes = async (req, res, next) => {
   try {
     const targetUserId = req.params.userId;
 
@@ -258,7 +263,7 @@ exports.getUserNotes = async (req, res, next) => {
 // @desc    Delete a note (move to trash)
 // @route   DELETE /api/v1/notes/:id
 // @access  Private
-exports.deleteNote = async (req, res, next) => {
+export const deleteNote = async (req, res, next) => {
   try {
     const note = await Note.findById(req.params.id);
 
@@ -302,6 +307,8 @@ exports.deleteNote = async (req, res, next) => {
       req,
     });
 
+    await auditLog(req, 'note_delete', 'success', { noteId: note._id });
+
     res.status(200).json({
       success: true,
       data: {},
@@ -316,6 +323,8 @@ exports.deleteNote = async (req, res, next) => {
       req,
     });
 
+    await auditLog(req, 'note_delete', 'failed', { error: err.message });
+
     res.status(500).json({
       success: false,
       message: 'Server Error deleting note',
@@ -327,7 +336,7 @@ exports.deleteNote = async (req, res, next) => {
 // @desc    Permanently delete a note
 // @route   DELETE /api/v1/notes/:id/permanent
 // @access  Private
-exports.permanentlyDeleteNote = async (req, res, next) => {
+export const permanentlyDeleteNote = async (req, res, next) => {
   try {
     const note = await Note.findById(req.params.id);
 
@@ -348,6 +357,8 @@ exports.permanentlyDeleteNote = async (req, res, next) => {
     // Permanently delete the note
     await note.deleteOne();
 
+    await auditLog(req, 'note_delete', 'success', { noteId: note._id });
+
     res.status(200).json({
       success: true,
       data: {},
@@ -355,6 +366,9 @@ exports.permanentlyDeleteNote = async (req, res, next) => {
     });
   } catch (err) {
     console.error('Permanently Delete Note Error:', err);
+
+    await auditLog(req, 'note_delete', 'failed', { error: err.message });
+
     res.status(500).json({
       success: false,
       message: 'Server Error permanently deleting note',
@@ -365,7 +379,7 @@ exports.permanentlyDeleteNote = async (req, res, next) => {
 // @desc    Restore a note from trash
 // @route   PUT /api/v1/notes/:id/restore
 // @access  Private
-exports.restoreNote = async (req, res, next) => {
+export const restoreNote = async (req, res, next) => {
   try {
     const note = await Note.findById(req.params.id);
 
@@ -403,7 +417,7 @@ exports.restoreNote = async (req, res, next) => {
 // @desc    Get all trashed notes for user
 // @route   GET /api/v1/notes/trash
 // @access  Private
-exports.getTrashedNotes = async (req, res, next) => {
+export const getTrashedNotes = async (req, res, next) => {
   try {
     const notes = await Note.find({
       user: req.user.id,
@@ -426,7 +440,7 @@ exports.getTrashedNotes = async (req, res, next) => {
 // @desc    Empty trash (permanently delete all trashed notes)
 // @route   DELETE /api/v1/notes/trash/empty
 // @access  Private
-exports.emptyTrash = async (req, res, next) => {
+export const emptyTrash = async (req, res, next) => {
   try {
     const result = await Note.deleteMany({
       user: req.user.id,

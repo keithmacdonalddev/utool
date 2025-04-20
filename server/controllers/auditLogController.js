@@ -1,13 +1,28 @@
-const AuditLog = require('../models/AuditLog');
-const ErrorResponse = require('../utils/errorResponse');
-const asyncHandler = require('../middleware/async');
+import AuditLog from '../models/AuditLog.js';
+import ErrorResponse from '../utils/errorResponse.js';
+import asyncHandler from '../middleware/async.js';
 
 // @desc    Get all audit logs
 // @route   GET /api/v1/audit-logs
 // @access  Private/Admin
-exports.getAuditLogs = asyncHandler(async (req, res, next) => {
+export const getAuditLogs = asyncHandler(async (req, res, next) => {
+  console.log('Audit Log Request Query:', req.query);
+
   // Copy req.query
   const reqQuery = { ...req.query };
+
+  // Convert timestamp[gte]/timestamp[lte] to MongoDB format
+  if (reqQuery['timestamp[gte]'] || reqQuery['timestamp[lte]']) {
+    reqQuery.timestamp = {};
+    if (reqQuery['timestamp[gte]']) {
+      reqQuery.timestamp.$gte = new Date(reqQuery['timestamp[gte]']);
+      delete reqQuery['timestamp[gte]'];
+    }
+    if (reqQuery['timestamp[lte]']) {
+      reqQuery.timestamp.$lte = new Date(reqQuery['timestamp[lte]']);
+      delete reqQuery['timestamp[lte]'];
+    }
+  }
 
   // Fields to exclude
   const removeFields = ['select', 'sort', 'page', 'limit'];
@@ -15,10 +30,17 @@ exports.getAuditLogs = asyncHandler(async (req, res, next) => {
 
   // Create query string
   let queryStr = JSON.stringify(reqQuery);
-  queryStr = queryStr.replace(
-    /\b(gt|gte|lt|lte|in)\b/g,
-    (match) => `$${match}`
-  );
+
+  console.log('MongoDB Query String:', queryStr);
+
+  // Parse back to object for logging
+  const parsedQuery = JSON.parse(queryStr);
+  console.log('MongoDB Query Object:', parsedQuery);
+
+  // Check if we have timestamp filters
+  if (parsedQuery.timestamp) {
+    console.log('Timestamp filters present:', parsedQuery.timestamp);
+  }
 
   // Finding resource
   let query = AuditLog.find(JSON.parse(queryStr)).populate(
@@ -45,12 +67,16 @@ exports.getAuditLogs = asyncHandler(async (req, res, next) => {
   const limit = parseInt(req.query.limit, 10) || 25;
   const startIndex = (page - 1) * limit;
   const endIndex = page * limit;
+
+  // Count all matching documents first
   const total = await AuditLog.countDocuments(JSON.parse(queryStr));
+  console.log('Total matching logs found:', total);
 
   query = query.skip(startIndex).limit(limit);
 
   // Executing query
   const auditLogs = await query;
+  console.log(`Retrieved ${auditLogs.length} audit logs`);
 
   // Pagination result
   const pagination = {};
@@ -70,7 +96,7 @@ exports.getAuditLogs = asyncHandler(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    count: auditLogs.length,
+    count: total,
     pagination,
     data: auditLogs,
   });
@@ -79,7 +105,7 @@ exports.getAuditLogs = asyncHandler(async (req, res, next) => {
 // @desc    Search audit logs
 // @route   GET /api/v1/audit-logs/search
 // @access  Private/Admin
-exports.searchAuditLogs = asyncHandler(async (req, res, next) => {
+export const searchAuditLogs = asyncHandler(async (req, res, next) => {
   const { q } = req.query;
 
   if (!q) {

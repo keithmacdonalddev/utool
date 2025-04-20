@@ -1,13 +1,13 @@
-const cron = require('node-cron');
-const Task = require('../models/Task');
-const Note = require('../models/Note');
-const User = require('../models/User');
-const { sendEmail } = require('./mailer');
-const { logger } = require('./logger');
-const {
+import cron from 'node-cron';
+import Task from '../models/Task.js';
+import Note from '../models/Note.js';
+import User from '../models/User.js';
+import { sendEmail } from './mailer.js';
+import { logger } from './logger.js';
+import {
   createReminderNotification,
   processUnsentNotifications,
-} = require('../controllers/notificationController');
+} from '../controllers/notificationController.js';
 
 // Schedule for running task reminders (every hour)
 const scheduleTaskReminders = () => {
@@ -244,7 +244,7 @@ const scheduleNotificationProcessor = (io) => {
   return { updateSocketIO };
 };
 
-module.exports = {
+export {
   scheduleTaskReminders,
   scheduleNoteReminders,
   scheduleNotificationProcessor,

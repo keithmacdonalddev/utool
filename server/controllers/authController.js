@@ -1,10 +1,8 @@
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const mongoose = require('mongoose'); // Added mongoose import
-const User = require('../models/User');
-const { auditLog } = require('../middleware/auditLogMiddleware');
-// const sendEmail = require('../utils/sendEmail'); // Implement later
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
+import User from '../models/User.js';
 
 // Helper function to generate JWT
 const getSignedJwtToken = (id) => {
@@ -13,16 +11,33 @@ const getSignedJwtToken = (id) => {
   });
 };
 
+// Helper to get real client IP (works with trust proxy)
+function getClientIp(req) {
+  // req.ip is reliable when trust proxy is set
+  return (
+    req.ip || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || ''
+  );
+}
+
+// Helper to add IP to user profile if not present
+async function addIpToUser(user, ip) {
+  if (ip && !user.ipAddresses.includes(ip)) {
+    user.ipAddresses.push(ip);
+    await user.save({ validateBeforeSave: false });
+  }
+}
+
 // @desc    Register user
 // @route   POST /api/v1/auth/register
 // @access  Public
-exports.register = async (req, res, next) => {
+export const register = async (req, res, next) => {
   const { name, email, password } = req.body;
 
   try {
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
       await auditLog(req, 'register', 'failed', { email });
       return res
         .status(400)
@@ -41,7 +56,10 @@ exports.register = async (req, res, next) => {
     user.verificationToken = verificationToken;
     user.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
 
+    user.ipAddress = getClientIp(req);
     await user.save({ validateBeforeSave: false });
+
+    await addIpToUser(user, getClientIp(req));
 
     // Construct verification URL
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -54,6 +72,7 @@ exports.register = async (req, res, next) => {
     console.log(`Subject: Account Verification`);
     console.log(`Message: ${message}`);
 
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'register', 'success', { userId: user._id });
     res.status(201).json({
       success: true,
@@ -71,7 +90,7 @@ exports.register = async (req, res, next) => {
 // @desc    Login user
 // @route   POST /api/v1/auth/login
 // @access  Public
-exports.login = async (req, res, next) => {
+export const login = async (req, res, next) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -98,6 +117,7 @@ exports.login = async (req, res, next) => {
     );
 
     if (!user) {
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
       await auditLog(req, 'login', 'failed', { email });
       return res
         .status(401)
@@ -118,6 +138,7 @@ exports.login = async (req, res, next) => {
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       user.failedLoginAttempts += 1;
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
       await auditLog(req, 'login', 'failed', {
         email,
         failedAttempts: user.failedLoginAttempts,
@@ -128,6 +149,10 @@ exports.login = async (req, res, next) => {
       if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
         user.accountLockedUntil = Date.now() + LOCK_TIME;
         await user.save({ validateBeforeSave: false });
+        const { auditLog } = await import(
+          '../middleware/auditLogMiddleware.js'
+        );
+        await auditLog(req, 'account_lock', 'success', { userId: user._id });
         return res.status(403).json({
           success: false,
           message: `Account locked due to too many failed login attempts. Try again in 15 minutes.`,
@@ -154,6 +179,12 @@ exports.login = async (req, res, next) => {
       await user.save({ validateBeforeSave: false });
     }
 
+    user.ipAddress = getClientIp(req);
+    await user.save({ validateBeforeSave: false });
+
+    await addIpToUser(user, getClientIp(req));
+
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'login', 'success', { userId: user._id });
     console.log(`Login successful for user: ${user.email} (${user._id})`);
     sendTokenResponse(user, 200, res);
@@ -179,7 +210,7 @@ exports.login = async (req, res, next) => {
 // @desc    Verify email
 // @route   GET /api/v1/auth/verify-email/:token
 // @access  Public
-exports.verifyEmail = async (req, res, next) => {
+export const verifyEmail = async (req, res, next) => {
   const { token } = req.params;
 
   if (!token) {
@@ -198,6 +229,7 @@ exports.verifyEmail = async (req, res, next) => {
     });
 
     if (!user) {
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
       await auditLog(req, 'email_verification', 'failed', { token });
       return res.status(400).json({
         success: false,
@@ -210,6 +242,7 @@ exports.verifyEmail = async (req, res, next) => {
     user.verificationTokenExpires = undefined;
     await user.save({ validateBeforeSave: false });
 
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'email_verification', 'success', { userId: user._id });
     res
       .status(200)
@@ -225,7 +258,7 @@ exports.verifyEmail = async (req, res, next) => {
 // @desc    Resend verification link
 // @route   POST /api/v1/auth/resend-verification
 // @access  Public
-exports.resendVerificationLink = async (req, res, next) => {
+export const resendVerificationLink = async (req, res, next) => {
   const { email } = req.body;
 
   if (!email) {
@@ -266,6 +299,7 @@ exports.resendVerificationLink = async (req, res, next) => {
     console.log(`Subject: Account Verification Resend`);
     console.log(`Message: ${message}`);
 
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'email_verification', 'pending', { userId: user._id });
     res.status(200).json({
       success: true,
@@ -283,7 +317,7 @@ exports.resendVerificationLink = async (req, res, next) => {
 // @desc    Get current logged in user
 // @route   GET /api/v1/auth/me
 // @access  Private
-exports.getMe = async (req, res, next) => {
+export const getMe = async (req, res, next) => {
   // req.user is set by the protect middleware
   // We might want to re-fetch to ensure latest data, but req.user should be sufficient
   const user = await User.findById(req.user.id); // Re-fetch to be safe
@@ -299,7 +333,7 @@ exports.getMe = async (req, res, next) => {
 // @desc    Update user details (name, email - not password)
 // @route   PUT /api/v1/auth/updateme
 // @access  Private
-exports.updateMe = async (req, res, next) => {
+export const updateMe = async (req, res, next) => {
   // Fields allowed to be updated by the user themselves
   const fieldsToUpdate = {
     name: req.body.name,
@@ -338,8 +372,16 @@ exports.updateMe = async (req, res, next) => {
         .json({ success: false, message: 'User not found during update' });
     }
 
+    user.ipAddress = getClientIp(req);
+    await user.save({ validateBeforeSave: false });
+
+    if (user) {
+      await addIpToUser(user, getClientIp(req));
+    }
+
     // Don't send back the token on update, just the updated user data
     const changedFields = Object.keys(fieldsToUpdate);
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'profile_update', 'success', {
       userId: user._id,
       changedFields,

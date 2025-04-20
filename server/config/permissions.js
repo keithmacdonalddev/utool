@@ -75,4 +75,4 @@ const hasAccess = (userLevel, requiredLevel) => {
   return false;
 };
 
-module.exports = { permissions, featureFlags, ACCESS_LEVELS, hasAccess };
+export { permissions, featureFlags, ACCESS_LEVELS, hasAccess };

@@ -1,7 +1,13 @@
-const AuditLog = require('../models/AuditLog');
+import AuditLog from '../models/AuditLog.js';
+import mongoose from 'mongoose';
+import { isShuttingDown } from '../server.js';
 
 const auditLog = async (req, action, status, metadata = {}) => {
   try {
+    // Prevent logging if shutting down or DB is not connected
+    if (isShuttingDown || mongoose.connection.readyState !== 1) {
+      return;
+    }
     // For login/register/verification actions, userId might be passed in metadata
     // This handles the case where req.user is not set yet (during login/register)
     const userId = metadata.userId || req.user?._id;
@@ -29,6 +35,13 @@ const auditLog = async (req, action, status, metadata = {}) => {
       },
     });
   } catch (err) {
+    // Suppress PoolClosedError on shutdown
+    if (
+      err?.name === 'MongoPoolClosedError' ||
+      err?.message?.includes('PoolClosedError')
+    ) {
+      return;
+    }
     console.error('Failed to create audit log:', err);
   }
 };
@@ -54,7 +67,4 @@ const withAuditLog = (action) => {
   };
 };
 
-module.exports = {
-  auditLog,
-  withAuditLog,
-};
+export { auditLog, withAuditLog };

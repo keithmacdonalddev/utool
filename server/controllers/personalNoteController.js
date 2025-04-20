@@ -1,5 +1,5 @@
-const Note = require('../models/Note');
-const User = require('../models/User');
+import Note from '../models/Note.js';
+import User from '../models/User.js';
 
 // Utility: Build query for filtering, searching, sorting
 function buildNotesQuery({ userId, isAdmin, filters = {}, search, sort }) {
@@ -34,8 +34,11 @@ function buildNotesQuery({ userId, isAdmin, filters = {}, search, sort }) {
 // @desc    List notes (with filter/sort/search)
 // @route   GET /api/notes
 // @access  Private (user) / Admin (all)
-exports.getNotes = async (req, res) => {
-  console.log(`[NOTES] GET /api/v1/notes called by user ${req.user?._id} (${req.user?.email}), query:`, req.query);
+export const getNotes = async (req, res) => {
+  console.log(
+    `[NOTES] GET /api/v1/notes called by user ${req.user?._id} (${req.user?.email}), query:`,
+    req.query
+  );
   try {
     const isAdmin = req.user && req.user.role === 'admin';
     const {
@@ -72,17 +75,31 @@ exports.getNotes = async (req, res) => {
     res.json({ success: true, count: notes.length, data: notes });
   } catch (err) {
     console.error('[NOTES] Error in getNotes:', err);
-    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: 'Server error', error: err.message });
   }
 };
 
 // @desc    Create new note
 // @route   POST /api/notes
 // @access  Private
-exports.createNote = async (req, res) => {
-  console.log(`[NOTES] POST /api/v1/notes called by user ${req.user?._id} (${req.user?.email}), body:`, req.body);
+export const createNote = async (req, res) => {
+  console.log(
+    `[NOTES] POST /api/v1/notes called by user ${req.user?._id} (${req.user?.email}), body:`,
+    req.body
+  );
   try {
-    const { title, content, tags, pinned, favorite, archived, reminder, color } = req.body;
+    const {
+      title,
+      content,
+      tags,
+      pinned,
+      favorite,
+      archived,
+      reminder,
+      color,
+    } = req.body;
     const note = await Note.create({
       title,
       content,
@@ -94,7 +111,9 @@ exports.createNote = async (req, res) => {
       color,
       user: req.user._id,
     });
-    console.log(`[NOTES] Note created with id ${note._id} by user ${req.user?._id}`);
+    console.log(
+      `[NOTES] Note created with id ${note._id} by user ${req.user?._id}`
+    );
     res.status(201).json({ success: true, data: note });
   } catch (err) {
     console.error('[NOTES] Error in createNote:', err);
@@ -105,20 +124,28 @@ exports.createNote = async (req, res) => {
 // @desc    Get single note
 // @route   GET /api/notes/:id
 // @access  Private (owner) / Admin
-exports.getNote = async (req, res) => {
-  console.log(`[NOTES] GET /api/v1/notes/${req.params.id} called by user ${req.user?._id} (${req.user?.email})`);
+export const getNote = async (req, res) => {
+  console.log(
+    `[NOTES] GET /api/v1/notes/${req.params.id} called by user ${req.user?._id} (${req.user?.email})`
+  );
   try {
     const note = await Note.findById(req.params.id);
     if (!note) {
       console.warn(`[NOTES] Note not found: ${req.params.id}`);
-      return res.status(404).json({ success: false, message: 'Note not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'Note not found' });
     }
     if (
       note.user.toString() !== req.user._id.toString() &&
       req.user.role !== 'admin'
     ) {
-      console.warn(`[NOTES] Unauthorized access attempt to note ${req.params.id} by user ${req.user?._id}`);
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+      console.warn(
+        `[NOTES] Unauthorized access attempt to note ${req.params.id} by user ${req.user?._id}`
+      );
+      return res
+        .status(403)
+        .json({ success: false, message: 'Not authorized' });
     }
     res.json({ success: true, data: note });
   } catch (err) {
@@ -130,20 +157,29 @@ exports.getNote = async (req, res) => {
 // @desc    Update note
 // @route   PUT /api/notes/:id
 // @access  Private (owner) / Admin
-exports.updateNote = async (req, res) => {
-  console.log(`[NOTES] PUT /api/v1/notes/${req.params.id} called by user ${req.user?._id} (${req.user?.email}), body:`, req.body);
+export const updateNote = async (req, res) => {
+  console.log(
+    `[NOTES] PUT /api/v1/notes/${req.params.id} called by user ${req.user?._id} (${req.user?.email}), body:`,
+    req.body
+  );
   try {
     const note = await Note.findById(req.params.id);
     if (!note) {
       console.warn(`[NOTES] Note not found for update: ${req.params.id}`);
-      return res.status(404).json({ success: false, message: 'Note not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'Note not found' });
     }
     if (
       note.user.toString() !== req.user._id.toString() &&
       req.user.role !== 'admin'
     ) {
-      console.warn(`[NOTES] Unauthorized update attempt to note ${req.params.id} by user ${req.user?._id}`);
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+      console.warn(
+        `[NOTES] Unauthorized update attempt to note ${req.params.id} by user ${req.user?._id}`
+      );
+      return res
+        .status(403)
+        .json({ success: false, message: 'Not authorized' });
     }
     const updatableFields = [
       'title',
@@ -170,20 +206,28 @@ exports.updateNote = async (req, res) => {
 // @desc    Soft delete note
 // @route   DELETE /api/notes/:id
 // @access  Private (owner) / Admin
-exports.softDeleteNote = async (req, res) => {
-  console.log(`[NOTES] DELETE (soft) /api/v1/notes/${req.params.id} called by user ${req.user?._id} (${req.user?.email})`);
+export const softDeleteNote = async (req, res) => {
+  console.log(
+    `[NOTES] DELETE (soft) /api/v1/notes/${req.params.id} called by user ${req.user?._id} (${req.user?.email})`
+  );
   try {
     const note = await Note.findById(req.params.id);
     if (!note) {
       console.warn(`[NOTES] Note not found for soft delete: ${req.params.id}`);
-      return res.status(404).json({ success: false, message: 'Note not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'Note not found' });
     }
     if (
       note.user.toString() !== req.user._id.toString() &&
       req.user.role !== 'admin'
     ) {
-      console.warn(`[NOTES] Unauthorized soft delete attempt to note ${req.params.id} by user ${req.user?._id}`);
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+      console.warn(
+        `[NOTES] Unauthorized soft delete attempt to note ${req.params.id} by user ${req.user?._id}`
+      );
+      return res
+        .status(403)
+        .json({ success: false, message: 'Not authorized' });
     }
     note.deletedAt = new Date();
     await note.save();
@@ -198,20 +242,28 @@ exports.softDeleteNote = async (req, res) => {
 // @desc    Restore soft-deleted note
 // @route   PATCH /api/notes/:id/restore
 // @access  Private (owner) / Admin
-exports.restoreNote = async (req, res) => {
-  console.log(`[NOTES] PATCH /api/v1/notes/${req.params.id}/restore called by user ${req.user?._id} (${req.user?.email})`);
+export const restoreNote = async (req, res) => {
+  console.log(
+    `[NOTES] PATCH /api/v1/notes/${req.params.id}/restore called by user ${req.user?._id} (${req.user?.email})`
+  );
   try {
     const note = await Note.findById(req.params.id);
     if (!note) {
       console.warn(`[NOTES] Note not found for restore: ${req.params.id}`);
-      return res.status(404).json({ success: false, message: 'Note not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'Note not found' });
     }
     if (
       note.user.toString() !== req.user._id.toString() &&
       req.user.role !== 'admin'
     ) {
-      console.warn(`[NOTES] Unauthorized restore attempt to note ${req.params.id} by user ${req.user?._id}`);
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+      console.warn(
+        `[NOTES] Unauthorized restore attempt to note ${req.params.id} by user ${req.user?._id}`
+      );
+      return res
+        .status(403)
+        .json({ success: false, message: 'Not authorized' });
     }
     note.deletedAt = null;
     await note.save();
@@ -226,20 +278,28 @@ exports.restoreNote = async (req, res) => {
 // @desc    Hard delete note (permanent)
 // @route   DELETE /api/notes/:id/permanent
 // @access  Private (owner) / Admin
-exports.hardDeleteNote = async (req, res) => {
-  console.log(`[NOTES] DELETE (hard) /api/v1/notes/${req.params.id}/permanent called by user ${req.user?._id} (${req.user?.email})`);
+export const hardDeleteNote = async (req, res) => {
+  console.log(
+    `[NOTES] DELETE (hard) /api/v1/notes/${req.params.id}/permanent called by user ${req.user?._id} (${req.user?.email})`
+  );
   try {
     const note = await Note.findById(req.params.id);
     if (!note) {
       console.warn(`[NOTES] Note not found for hard delete: ${req.params.id}`);
-      return res.status(404).json({ success: false, message: 'Note not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'Note not found' });
     }
     if (
       note.user.toString() !== req.user._id.toString() &&
       req.user.role !== 'admin'
     ) {
-      console.warn(`[NOTES] Unauthorized hard delete attempt to note ${req.params.id} by user ${req.user?._id}`);
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+      console.warn(
+        `[NOTES] Unauthorized hard delete attempt to note ${req.params.id} by user ${req.user?._id}`
+      );
+      return res
+        .status(403)
+        .json({ success: false, message: 'Not authorized' });
     }
     await note.deleteOne();
     console.log(`[NOTES] Note permanently deleted: ${note._id}`);
@@ -253,12 +313,19 @@ exports.hardDeleteNote = async (req, res) => {
 // @desc    Admin: Get all notes (with filters)
 // @route   GET /api/admin/notes
 // @access  Private/Admin
-exports.adminGetAllNotes = async (req, res) => {
-  console.log(`[NOTES] ADMIN GET /api/admin/notes called by user ${req.user?._id} (${req.user?.email}), query:`, req.query);
+export const adminGetAllNotes = async (req, res) => {
+  console.log(
+    `[NOTES] ADMIN GET /api/admin/notes called by user ${req.user?._id} (${req.user?.email}), query:`,
+    req.query
+  );
   try {
     if (req.user.role !== 'admin') {
-      console.warn(`[NOTES] Unauthorized admin notes access attempt by user ${req.user?._id}`);
-      return res.status(403).json({ success: false, message: 'Not authorized' });
+      console.warn(
+        `[NOTES] Unauthorized admin notes access attempt by user ${req.user?._id}`
+      );
+      return res
+        .status(403)
+        .json({ success: false, message: 'Not authorized' });
     }
     const {
       archived,
@@ -296,6 +363,8 @@ exports.adminGetAllNotes = async (req, res) => {
     res.json({ success: true, count: notes.length, data: notes });
   } catch (err) {
     console.error('[NOTES] Error in adminGetAllNotes:', err);
-    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: 'Server error', error: err.message });
   }
 };

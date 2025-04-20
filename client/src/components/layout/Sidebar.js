@@ -14,6 +14,7 @@ import {
   Star,
   StickyNote, // Added for Notes
   Trash2, // Added for Trash
+  History, // Added for Audit Logs
 } from 'lucide-react'; // Removed UserGroup import which isn't available
 
 const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
@@ -217,7 +218,21 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
                 <Users size={20} className="flex-shrink-0" />
                 <span className={linkTextClasses}>User Management</span>
               </NavLink>
-              {/* Removed Server Logs NavLink */}
+
+              {/* Audit Logs Link */}
+              <NavLink
+                to="/admin/audit-logs"
+                className={({ isActive }) =>
+                  `${linkItemClasses} ${
+                    isMinimized ? 'md:justify-center' : ''
+                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                }
+                onClick={toggleSidebar}
+                title="Audit Logs"
+              >
+                <History size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>Audit Logs</span>
+              </NavLink>
             </>
           )}
         </nav>

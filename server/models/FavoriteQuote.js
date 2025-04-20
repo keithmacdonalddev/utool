@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const FavoriteQuoteSchema = new mongoose.Schema({
   user: {
@@ -27,4 +27,4 @@ const FavoriteQuoteSchema = new mongoose.Schema({
 // Create a compound unique index to prevent duplicate favorites for a user
 FavoriteQuoteSchema.index({ user: 1, quoteId: 1 }, { unique: true });
 
-module.exports = mongoose.model('FavoriteQuote', FavoriteQuoteSchema);
+export default mongoose.model('FavoriteQuote', FavoriteQuoteSchema);

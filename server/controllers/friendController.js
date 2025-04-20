@@ -1,13 +1,12 @@
-const User = require('../models/User');
-const mongoose = require('mongoose');
-const asyncHandler = require('../middleware/async');
-const ErrorResponse = require('../utils/errorResponse');
-const { auditLog } = require('../middleware/auditLogMiddleware');
+import User from '../models/User.js';
+import mongoose from 'mongoose';
+import asyncHandler from '../middleware/async.js';
+import ErrorResponse from '../utils/errorResponse.js';
 
 // @desc    Search users by name or email
 // @route   GET /api/v1/friends/search
 // @access  Private
-exports.searchUsers = asyncHandler(async (req, res, next) => {
+export const searchUsers = asyncHandler(async (req, res, next) => {
   const searchTerm = req.query.term;
   if (!searchTerm) {
     return next(new ErrorResponse('Please provide a search term', 400));
@@ -43,7 +42,7 @@ exports.searchUsers = asyncHandler(async (req, res, next) => {
 // @desc    Send a friend request
 // @route   POST /api/v1/friends/request/:userId
 // @access  Private
-exports.sendFriendRequest = asyncHandler(async (req, res, next) => {
+export const sendFriendRequest = asyncHandler(async (req, res, next) => {
   const recipientId = req.params.userId;
   const senderId = req.user.id;
 
@@ -85,8 +84,8 @@ exports.sendFriendRequest = asyncHandler(async (req, res, next) => {
 
   // Create notification for the recipient with improved logging
   try {
-    const Notification = require('../models/Notification');
-    const { logger } = require('../utils/logger');
+    const Notification = (await import('../models/Notification.js')).default;
+    const { logger } = await import('../utils/logger.js');
 
     logger.info(
       `Creating friend request notification for user ${recipientId}`,
@@ -120,7 +119,7 @@ exports.sendFriendRequest = asyncHandler(async (req, res, next) => {
     const io = req.app.get('io');
     if (io) {
       const userRoom = `user:${recipientId}`;
-      const { sendNotification } = require('../utils/socketManager');
+      const { sendNotification } = await import('../utils/socketManager.js');
 
       logger.info(
         `Attempting real-time delivery of notification to room: ${userRoom}`,
@@ -183,6 +182,7 @@ exports.sendFriendRequest = asyncHandler(async (req, res, next) => {
       );
     }
   } catch (err) {
+    const { logger } = await import('../utils/logger.js');
     logger.error('Error creating friend request notification:', {
       error: err.message,
       stack: err.stack,
@@ -198,7 +198,7 @@ exports.sendFriendRequest = asyncHandler(async (req, res, next) => {
 // @desc    Accept a friend request
 // @route   PUT /api/v1/friends/accept/:userId
 // @access  Private
-exports.acceptFriendRequest = asyncHandler(async (req, res, next) => {
+export const acceptFriendRequest = asyncHandler(async (req, res, next) => {
   const senderId = req.params.userId; // The user who sent the request
   const recipientId = req.user.id; // The user accepting the request
 
@@ -234,8 +234,8 @@ exports.acceptFriendRequest = asyncHandler(async (req, res, next) => {
 
   // Create notification for the sender that their request was accepted
   try {
-    const Notification = require('../models/Notification');
-    const { logger } = require('../utils/logger');
+    const Notification = (await import('../models/Notification.js')).default;
+    const { logger } = await import('../utils/logger.js');
 
     logger.info(
       `Creating friend request acceptance notification for user ${senderId}`,
@@ -269,7 +269,7 @@ exports.acceptFriendRequest = asyncHandler(async (req, res, next) => {
     const io = req.app.get('io');
     if (io) {
       const userRoom = `user:${senderId}`;
-      const { sendNotification } = require('../utils/socketManager');
+      const { sendNotification } = await import('../utils/socketManager.js');
 
       logger.info(
         `Attempting real-time delivery of acceptance notification to room: ${userRoom}`,
@@ -334,6 +334,7 @@ exports.acceptFriendRequest = asyncHandler(async (req, res, next) => {
       );
     }
   } catch (err) {
+    const { logger } = await import('../utils/logger.js');
     logger.error('Error creating friend request acceptance notification:', {
       error: err.message,
       stack: err.stack,
@@ -349,96 +350,100 @@ exports.acceptFriendRequest = asyncHandler(async (req, res, next) => {
 // @desc    Reject or cancel a friend request
 // @route   DELETE /api/v1/friends/requests/:userId
 // @access  Private
-exports.rejectOrCancelFriendRequest = asyncHandler(async (req, res, next) => {
-  const currentUserId = req.user.id;
-  const otherUserId = req.params.userId;
+export const rejectOrCancelFriendRequest = asyncHandler(
+  async (req, res, next) => {
+    const currentUserId = req.user.id;
+    const otherUserId = req.params.userId;
 
-  // Validate that the userId parameter is a valid ObjectId
-  if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
-    return next(
-      new ErrorResponse(`Invalid user ID format: ${otherUserId}`, 400)
-    );
-  }
+    // Validate that the userId parameter is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
+      return next(
+        new ErrorResponse(`Invalid user ID format: ${otherUserId}`, 400)
+      );
+    }
 
-  // Don't allow self-rejection
-  if (currentUserId === otherUserId) {
-    return next(
-      new ErrorResponse('Cannot reject or cancel your own request', 400)
-    );
-  }
+    // Don't allow self-rejection
+    if (currentUserId === otherUserId) {
+      return next(
+        new ErrorResponse('Cannot reject or cancel your own request', 400)
+      );
+    }
 
-  // Find both users
-  const [currentUser, otherUser] = await Promise.all([
-    User.findById(currentUserId),
-    User.findById(otherUserId),
-  ]);
+    // Find both users
+    const [currentUser, otherUser] = await Promise.all([
+      User.findById(currentUserId),
+      User.findById(otherUserId),
+    ]);
 
-  // Check if both users exist
-  if (!otherUser) {
-    return next(
-      new ErrorResponse(`User not found with id ${otherUserId}`, 404)
-    );
-  }
+    // Check if both users exist
+    if (!otherUser) {
+      return next(
+        new ErrorResponse(`User not found with id ${otherUserId}`, 404)
+      );
+    }
 
-  if (!currentUser) {
-    return next(new ErrorResponse('Current user not found', 404));
-  }
+    if (!currentUser) {
+      return next(new ErrorResponse('Current user not found', 404));
+    }
 
-  // Track if we found a request to handle
-  let requestFound = false;
+    // Track if we found a request to handle
+    let requestFound = false;
 
-  // Case 1: Current user is rejecting a received request
-  if (currentUser.friendRequestsReceived.includes(otherUserId)) {
-    currentUser.friendRequestsReceived =
-      currentUser.friendRequestsReceived.filter(
+    // Case 1: Current user is rejecting a received request
+    if (currentUser.friendRequestsReceived.includes(otherUserId)) {
+      currentUser.friendRequestsReceived =
+        currentUser.friendRequestsReceived.filter(
+          (id) => id.toString() !== otherUserId
+        );
+      otherUser.friendRequestsSent = otherUser.friendRequestsSent.filter(
+        (id) => id.toString() !== currentUserId
+      );
+      requestFound = true;
+    }
+    // Case 2: Current user is canceling a sent request
+    else if (currentUser.friendRequestsSent.includes(otherUserId)) {
+      currentUser.friendRequestsSent = currentUser.friendRequestsSent.filter(
         (id) => id.toString() !== otherUserId
       );
-    otherUser.friendRequestsSent = otherUser.friendRequestsSent.filter(
-      (id) => id.toString() !== currentUserId
-    );
-    requestFound = true;
-  }
-  // Case 2: Current user is canceling a sent request
-  else if (currentUser.friendRequestsSent.includes(otherUserId)) {
-    currentUser.friendRequestsSent = currentUser.friendRequestsSent.filter(
-      (id) => id.toString() !== otherUserId
-    );
-    otherUser.friendRequestsReceived = otherUser.friendRequestsReceived.filter(
-      (id) => id.toString() !== currentUserId
-    );
-    requestFound = true;
-  }
+      otherUser.friendRequestsReceived =
+        otherUser.friendRequestsReceived.filter(
+          (id) => id.toString() !== currentUserId
+        );
+      requestFound = true;
+    }
 
-  if (!requestFound) {
-    return next(new ErrorResponse('Friend request not found', 404));
+    if (!requestFound) {
+      return next(new ErrorResponse('Friend request not found', 404));
+    }
+
+    try {
+      await Promise.all([currentUser.save(), otherUser.save()]);
+
+      // Log the action
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+      await auditLog(req, 'friend_request_cancel', 'success', {
+        targetUserId: otherUserId,
+        action: currentUser.friendRequestsReceived.includes(otherUserId)
+          ? 'reject'
+          : 'cancel',
+      });
+    } catch (err) {
+      console.error('Error updating friend request status:', err);
+      return next(
+        new ErrorResponse('Failed to update friend request status', 500)
+      );
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: 'Friend request rejected or canceled' });
   }
-
-  try {
-    await Promise.all([currentUser.save(), otherUser.save()]);
-
-    // Log the action
-    await auditLog(req, 'friend_request_cancel', 'success', {
-      targetUserId: otherUserId,
-      action: currentUser.friendRequestsReceived.includes(otherUserId)
-        ? 'reject'
-        : 'cancel',
-    });
-  } catch (err) {
-    console.error('Error updating friend request status:', err);
-    return next(
-      new ErrorResponse('Failed to update friend request status', 500)
-    );
-  }
-
-  res
-    .status(200)
-    .json({ success: true, message: 'Friend request rejected or canceled' });
-});
+);
 
 // @desc    Remove a friend
 // @route   DELETE /api/v1/friends/:userId
 // @access  Private
-exports.removeFriend = asyncHandler(async (req, res, next) => {
+export const removeFriend = asyncHandler(async (req, res, next) => {
   const friendId = req.params.userId;
   const currentUserId = req.user.id;
 
@@ -471,7 +476,7 @@ exports.removeFriend = asyncHandler(async (req, res, next) => {
 // @desc    Get current user's friends list
 // @route   GET /api/v1/friends
 // @access  Private
-exports.getFriends = asyncHandler(async (req, res, next) => {
+export const getFriends = asyncHandler(async (req, res, next) => {
   const user = await User.findById(req.user.id).populate(
     'friends',
     'name email avatar'
@@ -485,7 +490,7 @@ exports.getFriends = asyncHandler(async (req, res, next) => {
 // @desc    Get pending friend requests (sent and received)
 // @route   GET /api/v1/friends/requests
 // @access  Private
-exports.getFriendRequests = asyncHandler(async (req, res, next) => {
+export const getFriendRequests = asyncHandler(async (req, res, next) => {
   const user = await User.findById(req.user.id)
     .populate('friendRequestsSent', 'name email avatar')
     .populate('friendRequestsReceived', 'name email avatar');

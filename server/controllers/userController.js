@@ -1,10 +1,26 @@
-const User = require('../models/User');
-const { auditLog } = require('../middleware/auditLogMiddleware');
+import User from '../models/User.js';
+import { auditLog } from '../middleware/auditLogMiddleware.js';
+
+// Helper to get real client IP (works with trust proxy)
+function getClientIp(req) {
+  // req.ip is reliable when trust proxy is set
+  return (
+    req.ip || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || ''
+  );
+}
+
+// Helper to add IP to user profile if not present
+async function addIpToUser(user, ip) {
+  if (ip && !user.ipAddresses.includes(ip)) {
+    user.ipAddresses.push(ip);
+    await user.save({ validateBeforeSave: false });
+  }
+}
 
 // @desc    Get all users
 // @route   GET /api/v1/users
 // @access  Private/Admin
-exports.getUsers = async (req, res, next) => {
+export const getUsers = async (req, res, next) => {
   try {
     // TODO: Add pagination later
     const users = await User.find(); // Exclude sensitive fields if needed by default
@@ -20,7 +36,7 @@ exports.getUsers = async (req, res, next) => {
 // @desc    Get single user by ID
 // @route   GET /api/v1/users/:id
 // @access  Private/Admin
-exports.getUser = async (req, res, next) => {
+export const getUser = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
 
@@ -31,7 +47,19 @@ exports.getUser = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({ success: true, data: user });
+    // Only include ipAddresses if requester is admin
+    let userObj = user.toObject();
+    if (!req.user || req.user.role !== 'Admin') {
+      delete userObj.ipAddresses;
+    } else {
+      console.log(
+        '[ADMIN] Returning ipAddresses for user',
+        user._id,
+        userObj.ipAddresses
+      );
+    }
+
+    res.status(200).json({ success: true, data: userObj });
   } catch (err) {
     console.error('Get User Error:', err);
     // Handle invalid ObjectId format
@@ -50,7 +78,7 @@ exports.getUser = async (req, res, next) => {
 // @desc    Create user (Admin only - different from public registration)
 // @route   POST /api/v1/users
 // @access  Private/Admin
-exports.createUser = async (req, res, next) => {
+export const createUser = async (req, res, next) => {
   // Admin might set role, initial password, verification status, avatar directly
   const { name, email, password, role, isVerified, avatar } = req.body;
 
@@ -81,6 +109,13 @@ exports.createUser = async (req, res, next) => {
       avatar: avatar || '', // Set avatar or default to empty
     });
 
+    // Extract and save IP address
+    user.ipAddress = getClientIp(req);
+    await user.save({ validateBeforeSave: false });
+
+    // Add IP to user profile if not present
+    await addIpToUser(user, getClientIp(req));
+
     // Log user creation with more specific action type
     await auditLog(req, 'content_create', 'success', {
       contentType: 'user',
@@ -88,6 +123,9 @@ exports.createUser = async (req, res, next) => {
       role: user.role,
       isVerified: user.isVerified,
     });
+
+    // After content create
+    await auditLog(req, 'content_create', 'success', { userId: user._id });
 
     res.status(201).json({ success: true, data: user });
   } catch (err) {
@@ -115,7 +153,7 @@ exports.createUser = async (req, res, next) => {
 // @desc    Update user (Admin only)
 // @route   PUT /api/v1/users/:id
 // @access  Private/Admin
-exports.updateUser = async (req, res, next) => {
+export const updateUser = async (req, res, next) => {
   console.log('Update user request received:', req.params.id, req.body);
 
   try {
@@ -188,6 +226,15 @@ exports.updateUser = async (req, res, next) => {
     const updatedUser = await user.save();
     console.log('User successfully updated:', updatedUser.toObject());
 
+    // Extract and save IP address
+    user.ipAddress = getClientIp(req);
+    await user.save({ validateBeforeSave: false });
+
+    // Add IP to user profile if not present
+    if (user) {
+      await addIpToUser(user, getClientIp(req));
+    }
+
     // Log specific audit entries based on what changed
     if (hasRoleChanged) {
       // Log role change separately
@@ -196,6 +243,9 @@ exports.updateUser = async (req, res, next) => {
         oldRole: oldValues.role,
         newRole: updatedUser.role,
       });
+
+      // After permission change
+      await auditLog(req, 'permission_change', 'success', { userId: user._id });
     }
 
     if (hasProfileChanged) {
@@ -212,6 +262,9 @@ exports.updateUser = async (req, res, next) => {
             return obj;
           }, {}),
       });
+
+      // After content update
+      await auditLog(req, 'content_update', 'success', { userId: user._id });
     }
 
     res.status(200).json({
@@ -259,7 +312,7 @@ exports.updateUser = async (req, res, next) => {
 // @desc    Delete user
 // @route   DELETE /api/v1/users/:id
 // @access  Private/Admin
-exports.deleteUser = async (req, res, next) => {
+export const deleteUser = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id);
 
@@ -290,6 +343,9 @@ exports.deleteUser = async (req, res, next) => {
       deletedUserInfo: userData,
     });
 
+    // After content delete
+    await auditLog(req, 'content_delete', 'success', { userId: user._id });
+
     res.status(200).json({ success: true, data: {} }); // Success, no data to return
   } catch (err) {
     console.error('Delete User Error:', err);
@@ -316,7 +372,7 @@ exports.deleteUser = async (req, res, next) => {
 // @desc    Get multiple users by IDs
 // @route   POST /api/v1/users/batch
 // @access  Private
-exports.getBatchUsers = async (req, res, next) => {
+export const getBatchUsers = async (req, res, next) => {
   try {
     const { userIds } = req.body;
 

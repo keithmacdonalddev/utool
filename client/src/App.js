@@ -1,21 +1,26 @@
-import React, { Suspense, lazy, useEffect } from 'react';
-import { NotificationProvider } from './context/NotificationContext';
-import { useDispatch, useSelector } from 'react-redux';
-import { connectWithAuth, disconnectSocket } from './utils/socket';
+// App.js - Main entry point for the React application
+// This file defines the application's routing structure and global providers
+
+import React, { Suspense, lazy, useEffect } from 'react'; // React core and hooks
+import { NotificationProvider } from './context/NotificationContext'; // Custom notification context
+import { useDispatch, useSelector } from 'react-redux'; // Redux hooks for state management
+import { connectWithAuth, disconnectSocket } from './utils/socket'; // Socket.IO connection utilities
 import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
+  BrowserRouter as Router, // Client-side router implementation
+  Routes, // Container for all routes
+  Route, // Individual route definition
+  Navigate, // Component for redirecting
 } from 'react-router-dom';
-import { ToastContainer } from 'react-toastify'; // Import ToastContainer
-import 'react-toastify/dist/ReactToastify.css'; // Import CSS for react-toastify
+import { ToastContainer } from 'react-toastify'; // Toast notification system
+import 'react-toastify/dist/ReactToastify.css'; // Styles for toast notifications
 
-import ProtectedRoute from './components/ProtectedRoute';
-import MainLayout from './components/layout/MainLayout';
-import './App.css';
+import ProtectedRoute from './components/ProtectedRoute'; // Custom route guard component
+import MainLayout from './components/layout/MainLayout'; // Layout wrapper with sidebar and header
+import './App.css'; // Global application styles
 
-// Lazy-loaded components
+// Lazy-loaded components using code splitting
+// This improves initial load performance by only loading components when needed
+// Each import() returns a Promise that resolves to the component module
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
@@ -33,74 +38,92 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const FavoriteQuotesPage = lazy(() => import('./pages/FavoriteQuotesPage'));
 const TasksPage = lazy(() => import('./pages/TasksPage'));
 const TaskDetailsPage = lazy(() => import('./pages/TaskDetailsPage'));
-const FriendsPage = lazy(() => import('./pages/FriendsPage')); // Import FriendsPage
+const FriendsPage = lazy(() => import('./pages/FriendsPage'));
 // Notes Feature
 const NotesPage = lazy(() => import('./pages/NotesPage'));
 const TrashPage = lazy(() => import('./pages/TrashPage'));
 // Admin Pages
 const AdminUserListPage = lazy(() => import('./pages/admin/UserListPage'));
 const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
+const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-const TaskCreatePage = lazy(() => import('./pages/TaskCreatePage')); // Import TaskCreatePage
+const TaskCreatePage = lazy(() => import('./pages/TaskCreatePage'));
 
 function App() {
+  // Extract user authentication state from Redux store
+  // This is used to determine if socket connection should be established
   const { user, token } = useSelector((state) => state.auth);
 
-  // Connect socket when user is logged in
+  // useEffect hook to manage socket connection based on authentication state
+  // This ensures real-time features only work when the user is logged in
   useEffect(() => {
     if (token) {
-      // Connect to socket with auth
+      // Connect to socket with authentication token when user is logged in
       connectWithAuth();
     } else {
-      // Disconnect socket when no token is present
+      // Disconnect socket when no token is present (logged out)
       disconnectSocket();
     }
 
-    // Clean up on unmount
+    // Clean up function runs when component unmounts
+    // Ensures socket is properly disconnected when leaving the application
     return () => {
       disconnectSocket();
     };
-  }, [token]);
+  }, [token]); // Only re-run effect when token changes
 
   return (
+    // NotificationProvider makes notifications available throughout the app
     <NotificationProvider>
+      {/* Router provides navigation capabilities to the entire app */}
       <Router>
         <div className="App">
+          {/* ToastContainer handles display of toast notifications */}
+          {/* Configuration options determine appearance and behavior */}
           <ToastContainer
-            position="top-right"
-            autoClose={5000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-            theme="dark" // Or "light" or "colored"
+            position="top-right" // Location on screen
+            autoClose={5000} // Close after 5 seconds
+            hideProgressBar={false} // Show countdown bar
+            newestOnTop={false} // Stack order
+            closeOnClick // Close when clicked
+            rtl={false} // Left-to-right text
+            pauseOnFocusLoss // Pause countdown when window loses focus
+            draggable // Allow user to drag notifications
+            pauseOnHover // Pause countdown when hovering
+            theme="dark" // Visual theme
           />
+
+          {/* Suspense shows a fallback UI while lazy-loaded components are loading */}
           <Suspense fallback={<div>Loading...</div>}>
+            {/* Routes defines all application routes */}
             <Routes>
-              {/* Public Routes */}
+              {/* Public Routes - accessible without authentication */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route
-                path="/verify-email/:token"
+                path="/verify-email/:token" // Route with URL parameter
                 element={<VerifyEmailPage />}
               />
-              {/* Protected Routes - Allow all authenticated users (including Regular Users) */}
+
+              {/* Protected Routes - require authentication */}
+              {/* ProtectedRoute component checks user role before rendering */}
               <Route
                 element={
                   <ProtectedRoute
-                    allowedRoles={['Regular User', 'Pro User', 'Admin']}
+                    allowedRoles={['Regular User', 'Pro User', 'Admin']} // All authenticated users
                   />
                 }
               >
+                {/* MainLayout provides common structure (sidebar, header, etc.) */}
                 <Route element={<MainLayout />}>
+                  {/* Dashboard and main feature routes */}
                   <Route path="/dashboard" element={<DashboardPage />} />
+
+                  {/* Project management routes */}
                   <Route path="/projects/new" element={<ProjectCreatePage />} />
                   <Route
-                    path="/projects/:id"
+                    path="/projects/:id" // Dynamic route with project ID parameter
                     element={<ProjectDetailsPage />}
                   />
                   <Route path="/projects" element={<ProjectListPage />} />
@@ -108,6 +131,8 @@ function App() {
                     path="/projects/:id/edit"
                     element={<ProjectEditPage />}
                   />
+
+                  {/* Knowledge Base routes */}
                   <Route path="/kb/new" element={<KbCreatePage />} />
                   <Route path="/kb" element={<KbListPage />} />
                   <Route path="/kb/:id" element={<KbDetailsPage />} />
@@ -116,22 +141,23 @@ function App() {
                     path="/kb/:id/versions"
                     element={<KbVersionHistoryPage />}
                   />
+
+                  {/* User profile and productivity tools */}
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/notes/trash" element={<TrashPage />} />
                   <Route path="/tasks" element={<TasksPage />} />
-                  <Route path="/tasks/new" element={<TaskCreatePage />} />{' '}
-                  {/* New route for task creation */}
+                  <Route path="/tasks/new" element={<TaskCreatePage />} />
                   <Route path="/tasks/:id" element={<TaskDetailsPage />} />
                   <Route
                     path="/favorite-quotes"
                     element={<FavoriteQuotesPage />}
                   />
-                  <Route path="/friends" element={<FriendsPage />} />{' '}
-                  {/* Add FriendsPage Route */}
-                  {/* Admin Only Routes */}
+                  <Route path="/friends" element={<FriendsPage />} />
+
+                  {/* Admin Only Routes - nested protected route */}
+                  {/* Additional role check for admin-specific functionality */}
                   <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
-                    {/* Can nest under /admin or keep flat */}
                     <Route
                       path="/admin/users"
                       element={<AdminUserListPage />}
@@ -140,13 +166,21 @@ function App() {
                       path="/admin/users/:id/edit"
                       element={<AdminUserEditPage />}
                     />
-                    {/* Admin logging routes have been removed */}
+                    <Route
+                      path="/admin/audit-logs"
+                      element={<AuditLogsPage />}
+                    />
                   </Route>
                 </Route>
               </Route>
+
+              {/* Special routes for handling unauthorized access and redirects */}
               <Route path="/unauthorized" element={<UnauthorizedPage />} />
+
+              {/* Root path redirects to dashboard */}
               <Route path="/" element={<Navigate replace to="/dashboard" />} />
-              {/* 404 Not Found route */}
+
+              {/* 404 Not Found route - catches all unmatched paths */}
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>

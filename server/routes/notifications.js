@@ -1,11 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-
-// Import middleware
-const { protect } = require('../middleware/authMiddleware');
-
-// Import controller functions
-const {
+import { protect } from '../middleware/authMiddleware.js';
+import {
   createNotification,
   getUserNotifications,
   markAsRead,
@@ -13,7 +9,7 @@ const {
   getUnreadCount,
   deleteNotification,
   clearAllNotifications,
-} = require('../controllers/notificationController');
+} from '../controllers/notificationController.js';
 
 // All routes below this will use the 'protect' middleware
 router.use(protect);
@@ -33,4 +29,4 @@ router.route('/read-all').put(markAllAsRead);
 
 router.route('/:id').delete(deleteNotification);
 
-module.exports = router;
+export default router;

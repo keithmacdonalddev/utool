@@ -1,6 +1,6 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const {
+import {
   getNotes,
   createNote,
   getNote,
@@ -9,16 +9,15 @@ const {
   restoreNote,
   hardDeleteNote,
   adminGetAllNotes,
-} = require('../controllers/personalNoteController');
-const { protect } = require('../middleware/authMiddleware');
+} from '../controllers/personalNoteController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
-console.log('[NOTES ROUTER] personalNotes.js loaded. Registering personal notes routes.');
+console.log(
+  '[NOTES ROUTER] personalNotes.js loaded. Registering personal notes routes.'
+);
 
 // User notes routes (require authentication)
-router
-  .route('/')
-  .get(protect, getNotes)
-  .post(protect, createNote);
+router.route('/').get(protect, getNotes).post(protect, createNote);
 
 router
   .route('/:id')
@@ -26,18 +25,21 @@ router
   .put(protect, updateNote)
   .delete(protect, softDeleteNote);
 
-router
-  .route('/:id/restore')
-  .patch(protect, restoreNote);
+router.route('/:id/restore').patch(protect, restoreNote);
 
-router
-  .route('/:id/permanent')
-  .delete(protect, hardDeleteNote);
+router.route('/:id/permanent').delete(protect, hardDeleteNote);
 
 // Catch-all for unmatched /api/v1/notes routes
 router.use((req, res) => {
-  console.warn(`[NOTES ROUTER] 404: No route for ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ success: false, message: `No such notes route: ${req.method} ${req.originalUrl}` });
+  console.warn(
+    `[NOTES ROUTER] 404: No route for ${req.method} ${req.originalUrl}`
+  );
+  res
+    .status(404)
+    .json({
+      success: false,
+      message: `No such notes route: ${req.method} ${req.originalUrl}`,
+    });
 });
 
-module.exports = router;
+export default router;

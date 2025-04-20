@@ -1,10 +1,10 @@
-const express = require('express');
-const { protect, authorize } = require('../middleware/authMiddleware');
-const { ACCESS_LEVELS } = require('../config/permissions');
-const {
+import express from 'express';
+import { protect, authorize } from '../middleware/authMiddleware.js';
+import { ACCESS_LEVELS } from '../config/permissions.js';
+import {
   getAuditLogs,
   searchAuditLogs,
-} = require('../controllers/auditLogController');
+} from '../controllers/auditLogController.js';
 
 const router = express.Router();
 
@@ -18,4 +18,4 @@ router
   .route('/search')
   .get(authorize('auditLogs', ACCESS_LEVELS.READ), searchAuditLogs);
 
-module.exports = router;
+export default router;

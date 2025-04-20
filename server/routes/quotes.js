@@ -1,11 +1,11 @@
-const express = require('express');
-const {
+import express from 'express';
+import {
   addFavoriteQuote,
   checkFavoriteQuote,
   getFavoriteQuotes,
   removeFavoriteQuote,
-} = require('../controllers/quoteController');
-const { protect } = require('../middleware/authMiddleware');
+} from '../controllers/quoteController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -20,4 +20,4 @@ router
   .get(checkFavoriteQuote)
   .delete(removeFavoriteQuote);
 
-module.exports = router;
+export default router;

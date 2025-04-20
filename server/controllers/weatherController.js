@@ -1,10 +1,10 @@
-const axios = require('axios');
-const { logger } = require('../utils/logger');
+import axios from 'axios';
+import { logger } from '../utils/logger.js';
 
 // @desc    Get current weather for a location
 // @route   GET /api/v1/weather?location=...
 // @access  Private
-exports.getCurrentWeather = async (req, res, next) => {
+export const getCurrentWeather = async (req, res, next) => {
   const location = req.query.location;
   const primaryApiKey = process.env.OPENWEATHER_API_KEY_PRIMARY;
   const secondaryApiKey = process.env.OPENWEATHER_API_KEY_SECONDARY;

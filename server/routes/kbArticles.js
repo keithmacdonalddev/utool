@@ -1,9 +1,8 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const { protect, authorize } = require('../middleware/authMiddleware');
-const { ACCESS_LEVELS } = require('../config/permissions'); // Import ACCESS_LEVELS
-
-const {
+import { protect, authorize } from '../middleware/authMiddleware.js';
+import { ACCESS_LEVELS } from '../config/permissions.js';
+import {
   getKbArticles,
   createKbArticle,
   getKbArticle,
@@ -13,7 +12,8 @@ const {
   getKbArticleVersion,
   restoreKbArticleVersion,
   searchKbArticles,
-} = require('../controllers/kbController'); // Import controller functions (to be created next)
+} from '../controllers/kbController.js';
+import { articleCommentsRouter } from './comments.js';
 
 // Protect all routes first
 router.use(protect);
@@ -51,12 +51,10 @@ router
   .post(authorize('knowledgeBase', ACCESS_LEVELS.READ), searchKbArticles);
 
 // --- Mount Comment Router ---
-// Import the specific router for comments nested under articles
-const { articleCommentsRouter } = require('./comments');
 // Mount it on the specific article route, using the same param name ':id'
 // This ensures that requests like GET /api/v1/kb/someArticleId/comments are handled by articleCommentsRouter
 // and the :id param will be available via req.params in that router due to mergeParams: true
 router.use('/:id/comments', articleCommentsRouter); // Changed :articleId to :id
 // --- End Mount Comment Router ---
 
-module.exports = router;
+export default router;

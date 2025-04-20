@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "uTool - Comprehensive productivity platform",
   "main": "server.js",
+  "type": "module",
   "dependencies": {
     "@headlessui/react": "^2.2.2",
     "axios": "^1.8.4",

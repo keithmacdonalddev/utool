@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const KnowledgeBaseArticleSchema = new mongoose.Schema({
   title: {
@@ -66,7 +66,7 @@ KnowledgeBaseArticleSchema.pre('save', async function (next) {
   next();
 });
 
-module.exports = mongoose.model(
+export default mongoose.model(
   'KnowledgeBaseArticle',
   KnowledgeBaseArticleSchema
 );

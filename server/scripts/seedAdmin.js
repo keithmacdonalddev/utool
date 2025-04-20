@@ -1,9 +1,12 @@
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const path = require('path'); // Import path module
-const User = require('../models/User'); // Adjust path if necessary
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import User from '../models/User.js';
 
-// Load env vars using an absolute path
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const envPath = path.join(__dirname, '..', '.env');
 dotenv.config({ path: envPath });
 
@@ -55,7 +58,6 @@ const seedAdminUser = async () => {
     await mongoose.disconnect();
     console.log('MongoDB Disconnected.');
     process.exit(0); // Exit process with success
-
   } catch (error) {
     console.error('Error seeding admin user:', error);
     await mongoose.disconnect();

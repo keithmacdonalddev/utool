@@ -1,19 +1,18 @@
-const express = require('express');
-const router = express.Router();
-
-const {
+import express from 'express';
+import {
   getUsers,
   getUser,
   createUser,
   updateUser,
   deleteUser,
   getBatchUsers,
-} = require('../controllers/userController');
-const { getUserTasks } = require('../controllers/taskController');
-const { getUserNotes } = require('../controllers/noteController');
+} from '../controllers/userController.js';
+import { getUserTasks } from '../controllers/taskController.js';
+import { getUserNotes } from '../controllers/noteController.js';
+import { protect, authorize } from '../middleware/authMiddleware.js';
+import { ACCESS_LEVELS } from '../config/permissions.js';
 
-const { protect, authorize } = require('../middleware/authMiddleware');
-const { ACCESS_LEVELS } = require('../config/permissions');
+const router = express.Router();
 
 // Apply protect middleware to all routes
 router.use(protect);
@@ -35,4 +34,4 @@ router.route('/:userId/tasks').get(getUserTasks);
 // Route for admins to get notes for a specific user
 router.route('/:userId/notes').get(getUserNotes);
 
-module.exports = router;
+export default router;

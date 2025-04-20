@@ -1,12 +1,12 @@
-const Project = require('../models/Project');
-const Task = require('../models/Task'); // Needed for calculating progress later
-const User = require('../models/User'); // Needed for populating members/owner
-const { logger } = require('../utils/logger'); // Import enhanced logger
+import Project from '../models/Project.js';
+import Task from '../models/Task.js';
+import User from '../models/User.js';
+import { logger } from '../utils/logger.js';
 
 // @desc    Get projects for logged-in user (member or owner)
 // @route   GET /api/v1/projects
 // @access  Private
-exports.getProjects = async (req, res, next) => {
+export const getProjects = async (req, res, next) => {
   try {
     // Find projects where the logged-in user is in the 'members' array
     const projects = await Project.find({ members: req.user.id })
@@ -43,7 +43,7 @@ exports.getProjects = async (req, res, next) => {
 // @desc    Create new project
 // @route   POST /api/v1/projects
 // @access  Private
-exports.createProject = async (req, res, next) => {
+export const createProject = async (req, res, next) => {
   try {
     logger.info(`Attempting to create new project`, {
       userId: req.user.id,
@@ -95,7 +95,7 @@ exports.createProject = async (req, res, next) => {
     });
 
     // Add audit log for project creation
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'project_create', 'success', {
       projectId: project._id,
       projectName: project.name,
@@ -116,7 +116,7 @@ exports.createProject = async (req, res, next) => {
     });
 
     // Add audit log for failed project creation
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'project_create', 'failed', {
       error: err.message,
       projectName: req.body.name,
@@ -151,7 +151,7 @@ exports.createProject = async (req, res, next) => {
 // @desc    Get single project
 // @route   GET /api/v1/projects/:id
 // @access  Private
-exports.getProject = async (req, res, next) => {
+export const getProject = async (req, res, next) => {
   try {
     const project = await Project.findById(req.params.id)
       .populate('owner', 'name email')
@@ -203,7 +203,7 @@ exports.getProject = async (req, res, next) => {
 // @desc    Update project
 // @route   PUT /api/v1/projects/:id
 // @access  Private
-exports.updateProject = async (req, res, next) => {
+export const updateProject = async (req, res, next) => {
   try {
     logger.info(`Attempting to update project with ID: ${req.params.id}`, {
       userId: req.user.id,
@@ -291,7 +291,7 @@ exports.updateProject = async (req, res, next) => {
     });
 
     // Add audit log for project update
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'project_update', 'success', {
       projectId: project._id,
       projectName: project.name,
@@ -314,7 +314,7 @@ exports.updateProject = async (req, res, next) => {
     });
 
     // Add audit log for failed project update
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'project_update', 'failed', {
       projectId: req.params.id,
       error: err.message,
@@ -352,7 +352,7 @@ exports.updateProject = async (req, res, next) => {
 // @desc    Delete project
 // @route   DELETE /api/v1/projects/:id
 // @access  Private
-exports.deleteProject = async (req, res, next) => {
+export const deleteProject = async (req, res, next) => {
   try {
     logger.info(`Attempting to delete project with ID: ${req.params.id}`, {
       userId: req.user.id,
@@ -425,7 +425,7 @@ exports.deleteProject = async (req, res, next) => {
     });
 
     // Add audit log for project deletion (keep existing implementation)
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'project_delete', 'success', {
       projectId: projectInfo.id,
       projectName: projectInfo.name,
@@ -446,7 +446,7 @@ exports.deleteProject = async (req, res, next) => {
     });
 
     // Add audit log for failed project deletion
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'project_delete', 'failed', {
       projectId: req.params.id,
       error: err.message,

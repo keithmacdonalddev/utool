@@ -1,6 +1,15 @@
+// ProjectDetailsPage.js - A React page component that displays and manages a single project
+//
+// KEY CONCEPTS:
+// 1. React Router Integration: Using URL parameters and navigation hooks
+// 2. Redux State Management: Fetching and updating data with useDispatch and useSelector
+// 3. Component Composition: Combining multiple smaller components to build a complex UI
+// 4. Conditional Rendering: Displaying different UI based on loading/error states
+// 5. Custom Hooks: Reusing logic across components
+
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useParams, Link, useNavigate } from 'react-router-dom'; // Router hooks
+import { useDispatch, useSelector } from 'react-redux'; // Redux hooks
 import {
   getProject,
   updateProject,
@@ -11,26 +20,47 @@ import {
   resetTaskStatus,
 } from '../features/tasks/taskSlice';
 import TaskList from '../components/tasks/TaskList';
-import TaskCreateModal from '../components/tasks/TaskCreateModal'; // Import the new modal
+import TaskCreateModal from '../components/tasks/TaskCreateModal';
 import api from '../utils/api';
-import { PlusCircle, X, Edit } from 'lucide-react';
-import { useNotifications } from '../context/NotificationContext';
-import useFriends from '../hooks/useFriends';
+import { PlusCircle, X, Edit } from 'lucide-react'; // Icon components
+import { useNotifications } from '../context/NotificationContext'; // Context hook
+import useFriends from '../hooks/useFriends'; // Custom hook
 
-// ... existing helper functions (getStatusPillClasses, getPriorityPillClasses, formatDate) ...
-
+/**
+ * ProjectDetailsPage Component
+ *
+ * This page demonstrates common React patterns for complex pages:
+ * - Data fetching on component mount with useEffect
+ * - State extraction with useSelector from Redux
+ * - Side effect management with useEffect cleanup functions
+ * - Complex conditional rendering based on loading/error states
+ * - Modal handling with local state
+ */
 const ProjectDetailsPage = () => {
-  // ... existing state and hooks setup ...
-  const { id } = useParams();
+  /**
+   * React Router Hooks:
+   * - useParams: Extract route parameters from the current URL
+   * - useNavigate: Programmatic navigation between routes
+   */
+  const { id } = useParams(); // Extract project ID from URL
+  const navigate = useNavigate(); // For programmatic navigation
+
+  /**
+   * Redux Hooks:
+   * - useDispatch: Get the dispatch function to send actions
+   * - useSelector: Extract specific data from the Redux store
+   */
   const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const { showNotification } = useNotifications();
+
+  // REDUX SELECTOR PATTERN: Extract only the data this component needs
+  // This prevents unnecessary re-renders when other parts of Redux state change
   const {
     currentProject: project,
     isLoading,
     isError,
     message,
   } = useSelector((state) => state.projects);
+
   const {
     tasks,
     isLoading: tasksLoading,
@@ -38,30 +68,60 @@ const ProjectDetailsPage = () => {
     message: tasksMessage,
   } = useSelector((state) => state.tasks);
 
-  const [showTaskModal, setShowTaskModal] = useState(false); // Add state for task modal
-  const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false);
-  const [selectedUserToAdd, setSelectedUserToAdd] = useState('');
+  /**
+   * Context API:
+   * Using custom hook to access context values
+   */
+  const { showNotification } = useNotifications();
 
-  // Use our custom hook to get friends list instead of all users
+  /**
+   * Local Component State:
+   * Using useState for UI-specific state that doesn't need to be in Redux
+   */
+  const [showTaskModal, setShowTaskModal] = useState(false); // Modal visibility
+  const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false); // Dropdown state
+  const [selectedUserToAdd, setSelectedUserToAdd] = useState(''); // Selected user ID
+
+  /**
+   * Custom Hook:
+   * Extracting reusable logic into a custom hook for friends data
+   */
   const {
     friends,
     isLoading: friendsLoading,
     error: friendsError,
   } = useFriends();
 
+  /**
+   * DATA FETCHING PATTERN:
+   * Using useEffect for side effects like data fetching when component mounts
+   * Dependencies array [dispatch, id] ensures this only runs when those values change
+   *
+   * CLEANUP PATTERN:
+   * Return function resets state when component unmounts (cleanup)
+   */
   useEffect(() => {
     if (id) {
-      dispatch(getProject(id));
-      dispatch(getTasksForProject(id));
+      dispatch(getProject(id)); // Fetch project details
+      dispatch(getTasksForProject(id)); // Fetch related tasks
     }
+
+    // Cleanup function runs when component unmounts
     return () => {
+      // Reset Redux state to prevent stale data when navigating away
       dispatch(resetProjectStatus());
       dispatch(resetTaskStatus());
     };
-  }, [dispatch, id]);
+  }, [dispatch, id]); // Only re-run if these dependencies change
 
-  // ... existing helper functions (getStatusPillClasses, getPriorityPillClasses, formatDate) ...
+  /**
+   * UTILITY FUNCTIONS PATTERN:
+   * Helper functions defined inside component but not dependent on component state
+   * These could be moved outside the component or to a separate utilities file
+   * for better organization and reuse
+   */
   const getStatusPillClasses = (status) => {
+    // Map status values to tailwind classes for styling
     switch (status) {
       case 'Planning':
         return 'bg-blue-500 text-blue-100';
@@ -79,6 +139,7 @@ const ProjectDetailsPage = () => {
   };
 
   const getPriorityPillClasses = (priority) => {
+    // Similar mapping function for priority styling
     switch (priority) {
       case 'Low':
         return 'bg-gray-500 text-gray-100';
@@ -91,35 +152,54 @@ const ProjectDetailsPage = () => {
     }
   };
 
+  /**
+   * FORMAT FUNCTION PATTERN:
+   * Helper to format data for display
+   * Handles null/undefined values gracefully
+   */
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString();
   };
 
-  // ... existing handleAddMember function ...
+  /**
+   * EVENT HANDLER PATTERN:
+   * Function to handle user interactions with error handling
+   * and success notifications
+   *
+   * Uses async/await with try/catch for API calls
+   */
   const handleAddMember = async () => {
+    // Input validation
     if (!selectedUserToAdd || !project) return;
 
+    // Prevent duplicate members
     const currentMemberIds = project.members?.map((m) => m._id) || [];
     if (currentMemberIds.includes(selectedUserToAdd)) {
       showNotification('User is already a member.', 'warning');
       return;
     }
 
+    // Create updated members list
     const updatedMembers = [...currentMemberIds, selectedUserToAdd];
 
     try {
+      // REDUX ASYNC ACTION PATTERN WITH UNWRAP:
+      // using .unwrap() to get the actual Promise result or throw error
       await dispatch(
         updateProject({
           projectId: id,
           projectData: { members: updatedMembers },
         })
       ).unwrap();
+
+      // SUCCESS PATH:
       showNotification('Member added successfully!', 'success');
-      setSelectedUserToAdd(''); // Reset selection
-      setShowAddMemberDropdown(false); // Close dropdown
-      dispatch(getProject(id)); // Re-fetch project data to update UI
+      setSelectedUserToAdd(''); // Reset form state
+      setShowAddMemberDropdown(false); // Update UI state
+      dispatch(getProject(id)); // Refresh data
     } catch (error) {
+      // ERROR PATH:
       console.error('Failed to add member:', error);
       showNotification(
         `Failed to add member: ${error.message || 'Server error'}`,
@@ -128,12 +208,22 @@ const ProjectDetailsPage = () => {
     }
   };
 
-  // Get friends who aren't already project members
+  /**
+   * DERIVED DATA PATTERN:
+   * Compute new values from existing state and props
+   * This is more efficient than storing derived data in state
+   */
   const availableUsersToAdd = friends.filter(
     (friend) => !project?.members?.some((member) => member._id === friend._id)
   );
 
-  // ... existing loading and error checks ...
+  /**
+   * CONDITIONAL RENDERING PATTERN:
+   * Show different UIs based on different application states
+   * This improves user experience by handling loading and error states
+   */
+
+  // Loading state
   if (isLoading || tasksLoading || friendsLoading)
     return (
       <div className="container mx-auto p-4 flex items-center justify-center h-screen">
@@ -144,6 +234,7 @@ const ProjectDetailsPage = () => {
       </div>
     );
 
+  // Error state
   if (isError) {
     return (
       <div className="container mx-auto p-4 flex items-center justify-center h-screen">
@@ -157,6 +248,7 @@ const ProjectDetailsPage = () => {
     );
   }
 
+  // Not found state
   if (!project) {
     return (
       <div className="container mx-auto p-4 flex items-center justify-center h-screen">
@@ -172,9 +264,14 @@ const ProjectDetailsPage = () => {
     );
   }
 
+  /**
+   * COMPONENT JSX:
+   * Main render method of the component
+   * Uses multiple sections with semantic HTML structure
+   */
   return (
     <div className="container mx-auto p-4 bg-background text-foreground space-y-6">
-      {/* Project Header Section with more comprehensive details */}
+      {/* PROJECT HEADER PATTERN: Title + Action button layout */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center">
         <div>
           <h1 className="text-3xl font-bold mb-2 text-primary">
@@ -188,6 +285,7 @@ const ProjectDetailsPage = () => {
             })}
           </div>
         </div>
+        {/* ACTION BUTTON PATTERN: Secondary action */}
         <Link
           to={`/projects/${id}/edit`}
           className="flex items-center justify-center bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md transition-colors"
@@ -196,7 +294,7 @@ const ProjectDetailsPage = () => {
         </Link>
       </div>
 
-      {/* Project description if it exists */}
+      {/* CONDITIONAL SECTION PATTERN: Only render if data exists */}
       {project.description && (
         <div className="bg-card rounded-lg p-4 shadow">
           <h2 className="text-lg font-semibold mb-2 text-primary">
@@ -208,17 +306,19 @@ const ProjectDetailsPage = () => {
         </div>
       )}
 
-      {/* Key project metadata in a well-organized grid */}
+      {/* CARD LAYOUT PATTERN: Card with section title + content grid */}
       <div className="bg-card rounded-lg p-4 shadow">
         <h2 className="text-lg font-semibold mb-4 text-primary">
           Project Details
         </h2>
+        {/* RESPONSIVE GRID PATTERN: Adjust columns based on screen size */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           {/* Status */}
           <div>
             <span className="text-sm text-foreground opacity-80 block mb-1">
               Status
             </span>
+            {/* DYNAMIC STYLING PATTERN: Classes determined by data */}
             <span
               className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getStatusPillClasses(
                 project.status
@@ -237,6 +337,7 @@ const ProjectDetailsPage = () => {
                 project.priority
               )}`}
             >
+              {/* FALLBACK VALUE PATTERN: Using || for default value */}
               {project.priority || 'Medium'}
             </span>
           </div>
@@ -249,13 +350,13 @@ const ProjectDetailsPage = () => {
               {formatDate(project.endDate)}
             </span>
           </div>
-          {/* Members (Moved Here) */}
+          {/* Members dropdown UI */}
           <div>
             <span className="text-sm text-foreground opacity-80 block mb-1">
               Members
             </span>
             <div className="flex flex-wrap gap-2 items-center">
-              {/* Add Member Button & Dropdown */}
+              {/* DROPDOWN PATTERN: Toggle visibility with state */}
               <div className="relative">
                 <button
                   onClick={() =>
@@ -266,9 +367,9 @@ const ProjectDetailsPage = () => {
                 >
                   <PlusCircle size={18} />
                 </button>
+                {/* CONDITIONAL DROPDOWN RENDERING */}
                 {showAddMemberDropdown && (
                   <div className="absolute left-0 mt-2 w-64 bg-card border border-dark-700 rounded-md shadow-lg z-10 p-2">
-                    {/* ... dropdown content ... */}
                     <div className="flex justify-between items-center mb-2">
                       <span className="text-sm font-medium text-foreground">
                         Add Friend as Member
@@ -280,20 +381,24 @@ const ProjectDetailsPage = () => {
                         <X size={16} />
                       </button>
                     </div>
+                    {/* CONDITIONAL CONTENT BASED ON DATA AVAILABILITY */}
                     {availableUsersToAdd.length > 0 ? (
                       <>
+                        {/* CONTROLLED FORM ELEMENT PATTERN */}
                         <select
                           value={selectedUserToAdd}
                           onChange={(e) => setSelectedUserToAdd(e.target.value)}
                           className="w-full px-2 py-1.5 rounded-md border bg-dark-700 text-foreground border-dark-600 focus:outline-none focus:ring-1 focus:ring-primary mb-2 text-sm"
                         >
                           <option value="">Select friend...</option>
+                          {/* LIST RENDERING PATTERN WITH MAP */}
                           {availableUsersToAdd.map((user) => (
                             <option key={user._id} value={user._id}>
                               {user.name} ({user.email})
                             </option>
                           ))}
                         </select>
+                        {/* CONDITIONAL BUTTON DISABLING */}
                         <button
                           onClick={handleAddMember}
                           disabled={!selectedUserToAdd}
@@ -310,7 +415,7 @@ const ProjectDetailsPage = () => {
                   </div>
                 )}
               </div>
-              {/* Existing Member Avatars */}
+              {/* MEMBER LIST PATTERN: Avatars with fallback images */}
               {project.members && project.members.length > 0 ? (
                 project.members.map((member) => (
                   <div key={member._id} className="relative group">
@@ -323,7 +428,7 @@ const ProjectDetailsPage = () => {
                       }
                       alt={member.name}
                       className="h-8 w-8 rounded-full object-cover border-2 border-dark-600 group-hover:border-primary transition-colors"
-                      title={member.name}
+                      title={member.name} // Tooltip on hover
                     />
                   </div>
                 ))
@@ -337,30 +442,34 @@ const ProjectDetailsPage = () => {
         </div>
       </div>
 
-      {/* Progress bar with better styling */}
+      {/* PROGRESS INDICATOR PATTERN: Visual representation of completion */}
       <div className="bg-card rounded-lg p-4 shadow">
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold text-primary">
             Progress: {project.progress || 0}%
           </h2>
+          {/* CONDITIONAL SUCCESS MESSAGE */}
           {project.progress === 100 && (
             <span className="text-green-500 text-sm font-medium">
               Complete!
             </span>
           )}
         </div>
+        {/* PROGRESS BAR WITH DYNAMIC WIDTH */}
         <div className="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
           <div
             className="bg-primary h-4 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${project.progress || 0}%` }}
+            style={{ width: `${project.progress || 0}%` }} // Dynamic inline style
           ></div>
         </div>
       </div>
 
-      {/* Tasks section with improved styling */}
+      {/* CHILD COMPONENT SECTION: Task List + Modal */}
       <div className="bg-card rounded-lg p-4 shadow">
+        {/* SECTION HEADER WITH ACTION PATTERN */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-primary">Tasks</h2>
+          {/* MODAL TRIGGER BUTTON */}
           <button
             onClick={() => setShowTaskModal(true)}
             className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded flex items-center gap-2"
@@ -370,14 +479,18 @@ const ProjectDetailsPage = () => {
           </button>
         </div>
 
-        {/* Task Modal */}
+        {/*
+         * MODAL COMPONENT PATTERN:
+         * Pass isOpen state and onClose callback
+         * onClose will be called by the modal when it should close
+         */}
         <TaskCreateModal
           isOpen={showTaskModal}
           onClose={() => setShowTaskModal(false)}
           projectId={id}
         />
 
-        {/* Task list */}
+        {/* TASK LIST WITH CONDITIONAL STATES */}
         {tasksLoading && (
           <p className="text-foreground opacity-70">Loading tasks...</p>
         )}

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const NotificationSchema = new mongoose.Schema(
   {
@@ -85,4 +85,4 @@ NotificationSchema.index({ scheduledFor: 1, isSent: 1 });
 // Create TTL index to automatically remove old notifications
 NotificationSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
 
-module.exports = mongoose.model('Notification', NotificationSchema);
+export default mongoose.model('Notification', NotificationSchema);

@@ -1,12 +1,9 @@
-// Placeholder for kbController.js - Implement the actual logic later
-// Import necessary models and utilities
-
-const KnowledgeBaseArticle = require('../models/KnowledgeBaseArticle');
+import KnowledgeBaseArticle from '../models/KnowledgeBaseArticle.js';
 
 // @desc    Get all knowledge base articles
 // @route   GET /api/v1/kb
 // @access  Private
-exports.getKbArticles = async (req, res, next) => {
+export const getKbArticles = async (req, res, next) => {
   try {
     // Get all articles and sort by views (descending)
     const kbArticles = await KnowledgeBaseArticle.find().sort({ views: -1 });
@@ -20,7 +17,7 @@ exports.getKbArticles = async (req, res, next) => {
 // @desc    Create a new knowledge base article
 // @route   POST /api/v1/kb
 // @access  Private
-exports.createKbArticle = async (req, res, next) => {
+export const createKbArticle = async (req, res, next) => {
   try {
     const { title, content, tags, categories } = req.body;
     const author = req.user._id; // Assuming user is authenticated and added to req
@@ -34,7 +31,7 @@ exports.createKbArticle = async (req, res, next) => {
     });
 
     // Add audit log for KB article creation
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_create', 'success', {
       articleId: kbArticle._id,
       articleTitle: kbArticle.title,
@@ -47,7 +44,7 @@ exports.createKbArticle = async (req, res, next) => {
     console.error(err);
 
     // Add audit log for failed KB article creation
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_create', 'failed', {
       articleTitle: req.body.title,
       error: err.message,
@@ -60,7 +57,7 @@ exports.createKbArticle = async (req, res, next) => {
 // @desc    Get a single knowledge base article
 // @route   GET /api/v1/kb/:id
 // @access  Private
-exports.getKbArticle = async (req, res, next) => {
+export const getKbArticle = async (req, res, next) => {
   try {
     // Find the article first
     const kbArticle = await KnowledgeBaseArticle.findById(req.params.id);
@@ -85,7 +82,7 @@ exports.getKbArticle = async (req, res, next) => {
 // @desc    Update a knowledge base article
 // @route   PUT /api/v1/kb/:id
 // @access  Private
-exports.updateKbArticle = async (req, res, next) => {
+export const updateKbArticle = async (req, res, next) => {
   try {
     const { title, content, tags, categories } = req.body;
     let kbArticle = await KnowledgeBaseArticle.findById(req.params.id);
@@ -130,7 +127,7 @@ exports.updateKbArticle = async (req, res, next) => {
     kbArticle = await kbArticle.save();
 
     // Add audit log for KB article update
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_update', 'success', {
       articleId: kbArticle._id,
       articleTitle: kbArticle.title,
@@ -143,7 +140,7 @@ exports.updateKbArticle = async (req, res, next) => {
     console.error(err);
 
     // Add audit log for failed KB article update
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_update', 'failed', {
       articleId: req.params.id,
       error: err.message,
@@ -156,7 +153,7 @@ exports.updateKbArticle = async (req, res, next) => {
 // @desc    Delete a knowledge base article
 // @route   DELETE /api/v1/kb/:id
 // @access  Private
-exports.deleteKbArticle = async (req, res, next) => {
+export const deleteKbArticle = async (req, res, next) => {
   try {
     // First find the article to capture details for audit log
     const kbArticle = await KnowledgeBaseArticle.findById(req.params.id);
@@ -177,7 +174,7 @@ exports.deleteKbArticle = async (req, res, next) => {
     };
 
     // Import Comment model
-    const Comment = require('../models/Comment');
+    const Comment = (await import('../models/Comment.js')).default;
 
     // Delete all comments associated with the article
     const deleteResult = await Comment.deleteMany({ article: req.params.id });
@@ -191,7 +188,7 @@ exports.deleteKbArticle = async (req, res, next) => {
     await KnowledgeBaseArticle.findByIdAndDelete(req.params.id);
 
     // Add audit log for KB article deletion
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_delete', 'success', {
       articleId: articleInfo.id,
       articleTitle: articleInfo.title,
@@ -208,7 +205,7 @@ exports.deleteKbArticle = async (req, res, next) => {
     console.error(err);
 
     // Add audit log for failed KB article deletion
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_delete', 'failed', {
       articleId: req.params.id,
       error: err.message,
@@ -221,7 +218,7 @@ exports.deleteKbArticle = async (req, res, next) => {
 // @desc    Get all versions of a knowledge base article
 // @route   GET /api/v1/kb/:id/versions
 // @access  Private
-exports.getKbArticleVersions = async (req, res, next) => {
+export const getKbArticleVersions = async (req, res, next) => {
   try {
     const kbArticle = await KnowledgeBaseArticle.findById(req.params.id).select(
       'versions'
@@ -241,7 +238,7 @@ exports.getKbArticleVersions = async (req, res, next) => {
 // @desc    Get a specific version of a knowledge base article
 // @route   GET /api/v1/kb/:id/versions/:versionId
 // @access  Private
-exports.getKbArticleVersion = async (req, res, next) => {
+export const getKbArticleVersion = async (req, res, next) => {
   try {
     const kbArticle = await KnowledgeBaseArticle.findById(req.params.id).select(
       'versions'
@@ -272,7 +269,7 @@ exports.getKbArticleVersion = async (req, res, next) => {
 // @desc    Restore a knowledge base article to a specific version
 // @route   POST /api/v1/kb/:id/versions/:versionId/restore
 // @access  Private
-exports.restoreKbArticleVersion = async (req, res, next) => {
+export const restoreKbArticleVersion = async (req, res, next) => {
   try {
     const { id, versionId } = req.params;
     const kbArticle = await KnowledgeBaseArticle.findById(id);
@@ -308,7 +305,7 @@ exports.restoreKbArticleVersion = async (req, res, next) => {
     await kbArticle.save();
 
     // Add audit log for KB article version restoration
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_update', 'success', {
       articleId: kbArticle._id,
       articleTitle: kbArticle.title,
@@ -322,7 +319,7 @@ exports.restoreKbArticleVersion = async (req, res, next) => {
     console.error(err);
 
     // Add audit log for failed KB article version restoration
-    const { auditLog } = require('../middleware/auditLogMiddleware');
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'kb_update', 'failed', {
       articleId: req.params.id,
       restoredVersion: req.params.versionId,
@@ -337,7 +334,7 @@ exports.restoreKbArticleVersion = async (req, res, next) => {
 // @desc    Search for knowledge base articles
 // @route   POST /api/v1/kb/search
 // @access  Private
-exports.searchKbArticles = async (req, res, next) => {
+export const searchKbArticles = async (req, res, next) => {
   try {
     const { query, tags, categories } = req.body;
     let searchConditions = {};

@@ -1,23 +1,17 @@
-const express = require('express');
-// Merge params allows accessing :projectId if this router is mounted under projects/:projectId/tasks
-const router = express.Router({ mergeParams: true });
-
-// Import middleware
-const { protect, authorize } = require('../middleware/authMiddleware');
-const { ACCESS_LEVELS } = require('../config/permissions'); // Import ACCESS_LEVELS
-
-// Import controller functions
-const {
+import express from 'express';
+import { protect, authorize } from '../middleware/authMiddleware.js';
+import { ACCESS_LEVELS } from '../config/permissions.js';
+import {
   getTasks,
   createTask,
   getTask,
   updateTask,
   deleteTask,
   bulkUpdateTasks,
-} = require('../controllers/taskController');
+} from '../controllers/taskController.js';
+import noteRouter from './notes.js';
 
-// Re-route into other resource routers
-const noteRouter = require('./notes'); // Import the note router
+const router = express.Router({ mergeParams: true });
 
 // All routes below this will use the 'protect' middleware
 router.use(protect);
@@ -53,4 +47,4 @@ router
   // Deleting requires 'own' access
   .delete(authorize('tasks', ACCESS_LEVELS.OWN), deleteTask);
 
-module.exports = router;
+export default router;

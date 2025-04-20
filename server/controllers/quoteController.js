@@ -1,10 +1,9 @@
-const FavoriteQuote = require('../models/FavoriteQuote');
-const { auditLog } = require('../middleware/auditLogMiddleware');
+import FavoriteQuote from '../models/FavoriteQuote.js';
 
 // @desc    Add a quote to favorites
 // @route   POST /api/v1/quotes/favorite
 // @access  Private
-exports.addFavoriteQuote = async (req, res) => {
+export const addFavoriteQuote = async (req, res) => {
   try {
     const { quoteId, text, author } = req.body;
 
@@ -38,6 +37,7 @@ exports.addFavoriteQuote = async (req, res) => {
     });
 
     // Log the action
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'content_create', 'success', {
       contentType: 'favorite-quote',
       quoteId: favoriteQuote.quoteId,
@@ -59,7 +59,7 @@ exports.addFavoriteQuote = async (req, res) => {
 // @desc    Check if a quote is in user's favorites
 // @route   GET /api/v1/quotes/favorite/:quoteId
 // @access  Private
-exports.checkFavoriteQuote = async (req, res) => {
+export const checkFavoriteQuote = async (req, res) => {
   try {
     const { quoteId } = req.params;
 
@@ -84,7 +84,7 @@ exports.checkFavoriteQuote = async (req, res) => {
 // @desc    Get all favorite quotes for the logged-in user
 // @route   GET /api/v1/quotes/favorite
 // @access  Private
-exports.getFavoriteQuotes = async (req, res) => {
+export const getFavoriteQuotes = async (req, res) => {
   try {
     const favoriteQuotes = await FavoriteQuote.find({
       user: req.user._id,
@@ -107,7 +107,7 @@ exports.getFavoriteQuotes = async (req, res) => {
 // @desc    Remove a quote from favorites
 // @route   DELETE /api/v1/quotes/favorite/:quoteId
 // @access  Private
-exports.removeFavoriteQuote = async (req, res) => {
+export const removeFavoriteQuote = async (req, res) => {
   try {
     const { quoteId } = req.params;
 
@@ -124,6 +124,7 @@ exports.removeFavoriteQuote = async (req, res) => {
     }
 
     // Log the action
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'content_delete', 'success', {
       contentType: 'favorite-quote',
       quoteId,

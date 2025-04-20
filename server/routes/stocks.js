@@ -1,8 +1,8 @@
-const express = require('express');
-const { getStockQuote } = require('../controllers/stockController');
+import express from 'express';
+import { getStockQuote } from '../controllers/stockController.js';
 const router = express.Router();
 
 // GET /api/v1/stocks/:symbol
 router.get('/:symbol', getStockQuote);
 
-module.exports = router;
+export default router;

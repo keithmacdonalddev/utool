@@ -1,12 +1,12 @@
-const Notification = require('../models/Notification');
-const User = require('../models/User');
-const { logger } = require('../utils/logger');
-const { sendNotification } = require('../utils/socketManager');
+import Notification from '../models/Notification.js';
+import User from '../models/User.js';
+import { logger } from '../utils/logger.js';
+import { sendNotification } from '../utils/socketManager.js';
 
 // @desc    Create a new notification
 // @route   POST /api/v1/notifications
 // @access  Private
-exports.createNotification = async (req, res, next) => {
+export const createNotification = async (req, res, next) => {
   try {
     const { type, title, message, relatedItem, itemModel, url } = req.body;
 
@@ -104,7 +104,7 @@ exports.createNotification = async (req, res, next) => {
 
 // @desc    Create a reminder notification (internal use)
 // @access  Private (internal)
-exports.createReminderNotification = async (
+export const createReminderNotification = async (
   user,
   title,
   message,
@@ -178,7 +178,7 @@ exports.createReminderNotification = async (
 // @desc    Get all notifications for logged-in user
 // @route   GET /api/v1/notifications
 // @access  Private
-exports.getUserNotifications = async (req, res, next) => {
+export const getUserNotifications = async (req, res, next) => {
   try {
     // Get all notifications for the user, sorted by newest first
     const notifications = await Notification.find({ user: req.user.id })
@@ -202,7 +202,7 @@ exports.getUserNotifications = async (req, res, next) => {
 // @desc    Mark notifications as read
 // @route   PUT /api/v1/notifications/read
 // @access  Private
-exports.markAsRead = async (req, res, next) => {
+export const markAsRead = async (req, res, next) => {
   try {
     const { ids } = req.body;
 
@@ -239,7 +239,7 @@ exports.markAsRead = async (req, res, next) => {
 // @desc    Mark all notifications as read
 // @route   PUT /api/v1/notifications/read-all
 // @access  Private
-exports.markAllAsRead = async (req, res, next) => {
+export const markAllAsRead = async (req, res, next) => {
   try {
     // Mark all unread notifications for the user as read
     const result = await Notification.updateMany(
@@ -264,7 +264,7 @@ exports.markAllAsRead = async (req, res, next) => {
 // @desc    Get unread notification count
 // @route   GET /api/v1/notifications/unread-count
 // @access  Private
-exports.getUnreadCount = async (req, res, next) => {
+export const getUnreadCount = async (req, res, next) => {
   try {
     const count = await Notification.countDocuments({
       user: req.user.id,
@@ -287,7 +287,7 @@ exports.getUnreadCount = async (req, res, next) => {
 // @desc    Delete a notification
 // @route   DELETE /api/v1/notifications/:id
 // @access  Private
-exports.deleteNotification = async (req, res, next) => {
+export const deleteNotification = async (req, res, next) => {
   try {
     const notification = await Notification.findById(req.params.id);
 
@@ -324,7 +324,7 @@ exports.deleteNotification = async (req, res, next) => {
 // @desc    Clear all notifications
 // @route   DELETE /api/v1/notifications
 // @access  Private
-exports.clearAllNotifications = async (req, res, next) => {
+export const clearAllNotifications = async (req, res, next) => {
   try {
     const result = await Notification.deleteMany({ user: req.user.id });
 
@@ -344,7 +344,7 @@ exports.clearAllNotifications = async (req, res, next) => {
 
 // @desc    Process unsent notifications (internal)
 // @access  Private (internal)
-exports.processUnsentNotifications = async (io) => {
+export const processUnsentNotifications = async (io) => {
   try {
     const startTime = Date.now();
     logger.verbose('Starting notification processor job');
