@@ -365,16 +365,16 @@ const AuditLogsPage = () => {
   // Handle delete logs
   const handleDeleteLogs = () => {
     const dateRange = calculateDateRange(datePreset);
-    
+
     // Log the date range being used for deletion
     console.log('Deleting logs with date range:', dateRange);
-    
+
     dispatch(deleteAuditLogsByDateRange(dateRange))
       .unwrap()
       .then((result) => {
         // Show success message
         toast.success(`Success! ${result.count} audit logs were deleted.`);
-        
+
         // Refresh the logs display
         handleRefresh();
       })

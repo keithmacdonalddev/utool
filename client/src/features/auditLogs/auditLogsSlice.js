@@ -193,22 +193,22 @@ export const deleteAuditLogsByDateRange = createAsyncThunk(
       };
 
       // Debugging information
-      console.log('Deleting audit logs with date range:', { startDate, endDate });
-      
+      console.log('Deleting audit logs with date range:', {
+        startDate,
+        endDate,
+      });
+
       // Make DELETE request with date range in the body
-      const response = await axios.delete(
-        '/api/v1/audit-logs',
-        {
-          data: { startDate, endDate },
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          }
-        }
-      );
+      const response = await axios.delete('/api/v1/audit-logs', {
+        data: { startDate, endDate },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
       console.log('Delete response:', response.data);
-      
+
       return response.data;
     } catch (error) {
       console.error('Error deleting audit logs:');
