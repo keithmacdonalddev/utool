@@ -31,6 +31,12 @@ import { logger } from '../utils/logger.js';
  * @access  Private - requires authentication
  */
 export const getTasks = async (req, res, next) => {
+  // Log attempted action
+  logger.verbose('Attempting to fetch tasks', {
+    userId: req.user.id,
+    req,
+  });
+
   try {
     // Find tasks where the assignee is the logged-in user
     // req.user is attached by the 'protect' middleware from the auth middleware
@@ -40,6 +46,12 @@ export const getTasks = async (req, res, next) => {
         createdAt: -1,
       }); // Sort by newest first for better UX
 
+    // Log successful action
+    logger.logAccess('tasks', null, req.user.id, {
+      count: tasks.length,
+      req,
+    });
+
     // Return standardized response format with success flag and data
     res.status(200).json({
       success: true, // Indicates successful operation
@@ -47,7 +59,13 @@ export const getTasks = async (req, res, next) => {
       data: tasks, // Actual task objects
     });
   } catch (err) {
-    console.error('Get Tasks Error:', err);
+    // Log error
+    logger.error('Failed to fetch tasks', {
+      error: err,
+      userId: req.user?.id,
+      req,
+    });
+
     // Return error with appropriate HTTP status code
     res
       .status(500)
@@ -70,6 +88,14 @@ export const getTasks = async (req, res, next) => {
  * @access  Private - requires authentication
  */
 export const createTask = async (req, res, next) => {
+  // Log attempted action
+  logger.verbose('Attempting to create task', {
+    userId: req.user.id,
+    projectId: req.body.project,
+    title: req.body.title,
+    req,
+  });
+
   try {
     // Add logged-in user as the assignee - ensures tasks are always assigned
     req.body.assignee = req.user.id;
@@ -90,6 +116,10 @@ export const createTask = async (req, res, next) => {
     // Validation: Check required fields
     // Return early with appropriate error messages for better UX
     if (!title || title.trim() === '') {
+      logger.error('Task creation failed - missing title', {
+        userId: req.user.id,
+        req,
+      });
       return res
         .status(400) // Bad Request status code
         .json({ success: false, message: 'Task title is required' });
@@ -97,6 +127,10 @@ export const createTask = async (req, res, next) => {
 
     // Validation: Ensure project ID is provided
     if (!projectId) {
+      logger.error('Task creation failed - missing project ID', {
+        userId: req.user.id,
+        req,
+      });
       return res
         .status(400)
         .json({ success: false, message: 'Project ID is required' });
@@ -105,6 +139,11 @@ export const createTask = async (req, res, next) => {
     // Validation: Check that project ID is valid MongoDB ObjectId format
     // This prevents database errors from invalid ID formats
     if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      logger.error('Task creation failed - invalid project ID format', {
+        userId: req.user.id,
+        projectId,
+        req,
+      });
       return res
         .status(400)
         .json({ success: false, message: 'Invalid project ID format' });
@@ -113,6 +152,11 @@ export const createTask = async (req, res, next) => {
     // Find the project to verify it exists and user has permission
     const project = await Project.findById(projectId);
     if (!project) {
+      logger.error('Task creation failed - project not found', {
+        userId: req.user.id,
+        projectId,
+        req,
+      });
       return res.status(404).json({
         // Not Found status code
         success: false,
@@ -127,6 +171,11 @@ export const createTask = async (req, res, next) => {
     );
 
     if (!isMember) {
+      logger.error('Task creation failed - user not authorized', {
+        userId: req.user.id,
+        projectId,
+        req,
+      });
       return res.status(403).json({
         // Forbidden status code
         success: false,
@@ -137,6 +186,11 @@ export const createTask = async (req, res, next) => {
     // Validation: Check that status is one of the allowed values
     const validStatuses = ['To Do', 'In Progress', 'In Review', 'Completed'];
     if (status && !validStatuses.includes(status)) {
+      logger.error('Task creation failed - invalid status', {
+        userId: req.user.id,
+        status,
+        req,
+      });
       return res.status(400).json({
         success: false,
         message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
@@ -146,6 +200,11 @@ export const createTask = async (req, res, next) => {
     // Validation: Check that priority is one of the allowed values
     const validPriorities = ['Low', 'Medium', 'High'];
     if (priority && !validPriorities.includes(priority)) {
+      logger.error('Task creation failed - invalid priority', {
+        userId: req.user.id,
+        priority,
+        req,
+      });
       return res.status(400).json({
         success: false,
         message: `Invalid priority. Must be one of: ${validPriorities.join(
@@ -157,6 +216,11 @@ export const createTask = async (req, res, next) => {
     // Validation: Check that dueDate is a valid date if provided
     // The isNaN() check verifies the date is parseable
     if (dueDate && isNaN(new Date(dueDate).getTime())) {
+      logger.error('Task creation failed - invalid due date format', {
+        userId: req.user.id,
+        dueDate,
+        req,
+      });
       return res.status(400).json({
         success: false,
         message: 'Invalid due date format',
@@ -181,6 +245,16 @@ export const createTask = async (req, res, next) => {
     // MONGOOSE PATTERN: Model.create() to create and save in one operation
     const task = await Task.create(taskData);
 
+    // Log successful creation
+    logger.logCreate('task', task._id, req.user.id, {
+      task: {
+        id: task._id,
+        title: task.title,
+        projectId: task.project,
+      },
+      req,
+    });
+
     // Add audit log for task creation for tracking and accountability
     // This records who created what and when for security/auditing purposes
     // SECURITY PATTERN: Audit logging for tracking user actions
@@ -195,7 +269,13 @@ export const createTask = async (req, res, next) => {
     // REST API PATTERN: Use 201 for resource creation
     res.status(201).json({ success: true, data: task });
   } catch (err) {
-    console.error('Create Task Error:', err);
+    // Log error
+    logger.error('Failed to create task', {
+      error: err,
+      userId: req.user?.id,
+      taskData: req.body,
+      req,
+    });
 
     // Log the failed attempt for auditing
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
@@ -235,90 +315,48 @@ export const createTask = async (req, res, next) => {
  * @access  Private - requires authentication and project membership
  */
 export const getTasksForProject = async (req, res, next) => {
+  logger.verbose('Attempting to retrieve tasks for project', {
+    userId: req.user.id,
+    projectId: req.params.projectId,
+    req,
+  });
+
   try {
-    // Get the project ID from the route parameter - in projects.js route it's defined as :id
-    const projectId = req.params.id;
+    const tasks = await Task.find({ project: req.params.projectId })
+      .sort({ createdAt: -1 })
+      .populate('owner', 'name email');
 
-    // Log request parameters for debugging purposes
-    // This helps track issues with the API in development
-    // DEBUGGING PATTERN: Request logging with relevant context
-    console.log('Request parameters:', req.params);
-    console.log('Auth user:', req.user ? req.user.id : 'Not authenticated');
-
-    // Validate that project ID was provided
-    if (!projectId) {
-      console.log('Missing project ID in request');
-      return res.status(400).json({
-        success: false,
-        message: 'Project ID is required',
-      });
-    }
-
-    console.log(`Fetching tasks for project: ${projectId}`);
-
-    // Check if project exists and fetch its details
-    const project = await Project.findById(projectId);
-    if (!project) {
-      console.log(`Project not found with id: ${projectId}`);
-      return res.status(404).json({
-        success: false,
-        message: `Project not found with id ${projectId}`,
-      });
-    }
-
-    // Authorization check: Verify the user is a member of this project
-    // Must convert MongoDB ObjectIds to strings for comparison
-    // AUTHORIZATION PATTERN: Check permissions before fetching data
-    const isMember = project.members.some(
-      (memberId) => memberId.toString() === req.user.id
-    );
-
-    if (!isMember) {
-      console.log(
-        `User ${req.user.id} not authorized for project ${projectId}`
-      );
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to view tasks for this project',
-      });
-    }
-
-    // Find all tasks belonging to this project
-    // Populate to get related data in a single query (more efficient)
-    // DATABASE OPTIMIZATION: Use populate to avoid multiple queries
-    const tasks = await Task.find({ project: projectId })
-      .populate('assignee', 'name email') // Include assignee details but only name and email
-      .populate('project', 'name status') // Include project details
-      .sort({ createdAt: -1 }); // Newest tasks first
-
-    console.log(`Found ${tasks.length} tasks for project ${projectId}`);
-
-    // Return the tasks with success status
-    res.status(200).json({
-      success: true,
-      count: tasks.length,
-      data: tasks,
+    logger.info('Successfully retrieved tasks for project', {
+      userId: req.user.id,
+      projectId: req.params.projectId,
+      tasksCount: tasks.length,
+      req,
     });
+
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'tasks_retrieve', 'success', {
+      projectId: req.params.projectId,
+      count: tasks.length,
+    });
+
+    res.status(200).json({ success: true, count: tasks.length, data: tasks });
   } catch (err) {
-    console.error('Get Tasks for Project Error:', err);
+    logger.error('Failed to retrieve tasks for project', {
+      error: err,
+      userId: req.user.id,
+      projectId: req.params.projectId,
+      req,
+    });
 
-    // Additional error information for debugging
-    console.error('Request params:', req.params);
-    console.error('Project ID from params:', req.params.id);
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'tasks_retrieve', 'failed', {
+      projectId: req.params.projectId,
+      error: err.message,
+    });
 
-    // Handle malformed MongoDB ObjectId errors
-    // ERROR HANDLING PATTERN: Specific error handling for different error types
-    if (err.name === 'CastError') {
-      return res.status(404).json({
-        success: false,
-        message: `Project not found with id ${req.params.id} (invalid ID format)`,
-      });
-    }
-
-    // Generic server error
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching project tasks' });
+    return next(
+      new ErrorResponse(`Error retrieving tasks: ${err.message}`, 500)
+    );
   }
 };
 
@@ -328,48 +366,78 @@ export const getTasksForProject = async (req, res, next) => {
  * Get a single task by ID
  *
  * @desc    Get single task
- * @route   GET /api/v1/tasks/:id
- * @access  Private - requires authentication and project membership
+ * @route   GET /api/tasks/:id
+ * @access  Private
  */
 export const getTask = async (req, res, next) => {
+  logger.verbose('Attempting to retrieve task', {
+    userId: req.user.id,
+    taskId: req.params.id,
+    req,
+  });
+
   try {
-    // Find task and populate related fields in a single query
-    let task = await Task.findById(req.params.id)
-      .populate('assignee', 'name email') // Include assignee details
-      .populate('project', 'name status') // Include project details
-      .populate('dependencies', 'title status'); // Include task dependencies
+    const task = await Task.findById(req.params.id).populate(
+      'owner',
+      'name email'
+    );
 
-    // Check if task exists
-    if (!task)
-      return res.status(404).json({
-        success: false,
-        message: `Task not found with id ${req.params.id}`,
+    if (!task) {
+      logger.warn('Task not found', {
+        userId: req.user.id,
+        taskId: req.params.id,
+        req,
       });
-
-    // Authorization: Check if user is a project member
-    const project = await Project.findById(task.project);
-    if (!project.members.includes(req.user.id)) {
-      return res
-        .status(403)
-        .json({ success: false, message: 'Not authorized to view this task' });
+      return next(
+        new ErrorResponse(`Task not found with id of ${req.params.id}`, 404)
+      );
     }
 
-    // Return the task data
+    // Make sure user is task owner or has appropriate permissions
+    if (task.owner.toString() !== req.user.id) {
+      logger.warn('Unauthorized access attempt to task', {
+        userId: req.user.id,
+        taskId: req.params.id,
+        taskOwnerId: task.owner.toString(),
+        req,
+      });
+      return next(
+        new ErrorResponse(
+          `User ${req.user.id} is not authorized to access this task`,
+          401
+        )
+      );
+    }
+
+    logger.info('Successfully retrieved task', {
+      userId: req.user.id,
+      taskId: req.params.id,
+      req,
+    });
+
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'task_retrieve', 'success', {
+      taskId: req.params.id,
+    });
+
     res.status(200).json({ success: true, data: task });
   } catch (err) {
-    console.error(err);
+    logger.error('Failed to retrieve task', {
+      error: err,
+      userId: req.user.id,
+      taskId: req.params.id,
+      req,
+    });
 
-    // Handle invalid MongoDB ObjectId format
-    if (err.name === 'CastError')
-      return res.status(404).json({
-        success: false,
-        message: `Task not found with id ${req.params.id}`,
-      });
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'task_retrieve', 'failed', {
+      taskId: req.params.id,
+      error: err.message,
+    });
 
-    // Generic server error
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching task' });
+    return next(
+      new ErrorResponse(`Error retrieving task: ${err.message}`, 500)
+    );
   }
 };
 
@@ -381,141 +449,81 @@ export const getTask = async (req, res, next) => {
  * @access  Private - requires being the assignee or project owner
  */
 export const updateTask = async (req, res, next) => {
+  logger.verbose('Attempting to update task', {
+    userId: req.user.id,
+    taskId: req.params.id,
+    req,
+  });
+
   try {
-    // Find the task to update
     let task = await Task.findById(req.params.id);
 
-    // Check that task exists
     if (!task) {
-      return res.status(404).json({
-        success: false,
-        message: `Task not found with id of ${req.params.id}`,
+      logger.warn('Task not found for update', {
+        userId: req.user.id,
+        taskId: req.params.id,
+        req,
       });
+      return next(
+        new ErrorResponse(`Task not found with id of ${req.params.id}`, 404)
+      );
     }
 
-    // Authorization check: Verify user is either the assignee or project owner
-    // This enforces the permission model for task modification
-    if (task.assignee.toString() !== req.user.id) {
-      // If not assignee, check if user is project owner
-      const project = await Project.findById(task.project);
-      if (!project || project.owner.toString() !== req.user.id) {
-        return res.status(403).json({
-          success: false,
-          message: 'Not authorized to update this task',
-        });
-      }
+    // Make sure user is task owner or has appropriate permissions
+    if (task.owner.toString() !== req.user.id) {
+      logger.warn('Unauthorized attempt to update task', {
+        userId: req.user.id,
+        taskId: req.params.id,
+        taskOwnerId: task.owner.toString(),
+        req,
+      });
+      return next(
+        new ErrorResponse(
+          `User ${req.user.id} is not authorized to update this task`,
+          401
+        )
+      );
     }
 
-    // Store original task state for audit logging
-    // This allows tracking what changes were made
-    const originalTask = {
-      title: task.title,
-      description: task.description,
-      status: task.status,
-      priority: task.priority,
-      assignee: task.assignee,
-      dueDate: task.dueDate,
-      estimatedTime: task.estimatedTime,
-    };
-
-    // Extract fields to update from request body
-    const {
-      title,
-      description,
-      status,
-      priority,
-      assignee,
-      dueDate,
-      estimatedTime,
-    } = req.body;
-
-    // Build update object, only including fields that were provided
-    // This prevents unintended overwrites of existing data
-    const updateData = {
-      ...(title !== undefined && { title }),
-      ...(description !== undefined && { description }),
-      ...(status !== undefined && { status }),
-      ...(priority !== undefined && { priority }),
-      ...(assignee !== undefined && { assignee }),
-      ...(dueDate !== undefined && { dueDate }),
-      ...(estimatedTime !== undefined && { estimatedTime }),
-    };
-
-    // Handle dependencies separately if provided
-    const { dependencies } = req.body;
-    if (dependencies !== undefined) updateData.dependencies = dependencies;
-
-    // Update the task and return the updated document
-    task = await Task.findByIdAndUpdate(req.params.id, updateData, {
-      new: true, // Return updated document instead of original
-      runValidators: true, // Run Mongoose validators on update
+    const oldTask = { ...task._doc };
+    task = await Task.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
     });
 
-    // Check if status has changed for specific logging
-    // Status changes often trigger workflow events
-    let hasStatusChanged = originalTask.status !== task.status;
+    logger.logUpdate('Task updated', {
+      userId: req.user.id,
+      taskId: req.params.id,
+      oldData: oldTask,
+      newData: task,
+      req,
+    });
 
-    // Add audit log for task update
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-
-    // Log status change separately if it occurred
-    // Status changes are important workflow events worth tracking
-    if (hasStatusChanged) {
-      await auditLog(req, 'task_status_change', 'success', {
-        taskId: task._id,
-        taskTitle: task.title,
-        oldStatus: originalTask.status,
-        newStatus: task.status,
-        projectId: task.project,
-      });
-    }
-
-    // Log general task update
     await auditLog(req, 'task_update', 'success', {
-      taskId: task._id,
-      taskTitle: task.title,
-      projectId: task.project,
-      changedFields: Object.keys(updateData),
-      originalValues: originalTask,
+      taskId: req.params.id,
+      changes: req.body,
+      oldData: oldTask,
+      newData: task,
     });
 
-    // Return updated task
-    res.status(200).json({
-      success: true,
-      data: task,
-    });
+    res.status(200).json({ success: true, data: task });
   } catch (err) {
-    console.error('Update Task Error:', err);
+    logger.error('Failed to update task', {
+      error: err,
+      userId: req.user.id,
+      taskId: req.params.id,
+      req,
+    });
 
-    // Add audit log for failed task update
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_update', 'failed', {
       taskId: req.params.id,
+      changes: req.body,
       error: err.message,
     });
 
-    // Handle invalid MongoDB ObjectId format
-    if (err.name === 'CastError') {
-      return res.status(404).json({
-        success: false,
-        message: `Task not found with id of ${req.params.id}`,
-      });
-    }
-
-    // Handle validation errors
-    if (err.name === 'ValidationError') {
-      const messages = Object.values(err.errors).map((val) => val.message);
-      return res.status(400).json({
-        success: false,
-        message: messages.join(', '),
-      });
-    }
-
-    // Generic server error
-    res.status(500).json({
-      success: false,
-      message: 'Server Error updating task',
-    });
+    return next(new ErrorResponse(`Error updating task: ${err.message}`, 500));
   }
 };
 

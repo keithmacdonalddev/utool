@@ -13,6 +13,7 @@ const auditLog = async (req, action, status, metadata = {}) => {
     const userId = metadata.userId || req.user?._id;
 
     // Skip logging if we can't determine the user (except for auth actions that provide userId in metadata)
+    // Only allow 'login', 'register', and 'verify-email' to be logged without userId
     if (!userId && !['login', 'register', 'verify-email'].includes(action)) {
       return;
     }

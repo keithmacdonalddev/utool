@@ -48,6 +48,7 @@ dotenv.config();
 import User from './models/User.js';
 import { logger } from './utils/logger.js';
 import { authenticateSocket, handleConnection } from './utils/socketManager.js';
+import { logoutPriorityMiddleware } from './middleware/logoutPriorityMiddleware.js';
 
 // ESM __dirname workaround
 import { fileURLToPath } from 'url';
@@ -193,6 +194,10 @@ app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   next();
 });
+
+// Apply logout priority middleware to catch logout requests early
+// This helps prevent race conditions by prioritizing logout requests
+app.use(logoutPriorityMiddleware);
 
 // Custom middleware to log all incoming requests with verbose details
 // This provides detailed insights for debugging and monitoring

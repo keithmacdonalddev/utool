@@ -8,6 +8,11 @@ import { logger } from '../utils/logger.js';
 // @access  Private
 export const getProjects = async (req, res, next) => {
   try {
+    logger.info(`Attempting to fetch projects for user`, {
+      userId: req.user.id,
+      action: 'get_projects',
+    });
+
     // Find projects where the logged-in user is in the 'members' array
     const projects = await Project.find({ members: req.user.id })
       .populate('owner', 'name email')
@@ -27,13 +32,26 @@ export const getProjects = async (req, res, next) => {
       })
     );
 
+    logger.info(
+      `Successfully fetched ${projectsWithProgress.length} projects`,
+      {
+        userId: req.user.id,
+        action: 'get_projects_success',
+        count: projectsWithProgress.length,
+      }
+    );
+
     res.status(200).json({
       success: true,
       count: projectsWithProgress.length,
       data: projectsWithProgress,
     });
   } catch (err) {
-    console.error('Get Projects Error:', err);
+    logger.error('Failed to fetch projects', {
+      error: err,
+      userId: req.user.id,
+    });
+
     res
       .status(500)
       .json({ success: false, message: 'Server Error fetching projects' });
@@ -153,11 +171,22 @@ export const createProject = async (req, res, next) => {
 // @access  Private
 export const getProject = async (req, res, next) => {
   try {
+    logger.verbose(`Attempting to fetch project with ID ${req.params.id}`, {
+      userId: req.user.id,
+      action: 'get_project',
+      projectId: req.params.id,
+    });
+
     const project = await Project.findById(req.params.id)
       .populate('owner', 'name email')
       .populate('members', 'name email'); // Populate details
 
     if (!project) {
+      logger.warn(`Project not found with ID ${req.params.id}`, {
+        userId: req.user.id,
+        projectId: req.params.id,
+      });
+
       return res.status(404).json({
         success: false,
         message: `Project not found with id of ${req.params.id}`,
@@ -169,6 +198,11 @@ export const getProject = async (req, res, next) => {
       member._id.equals(req.user.id)
     );
     if (!isMember) {
+      logger.warn(`Unauthorized project access attempt`, {
+        userId: req.user.id,
+        projectId: req.params.id,
+      });
+
       return res.status(403).json({
         success: false,
         message: 'User not authorized to access this project',
@@ -184,9 +218,20 @@ export const getProject = async (req, res, next) => {
     project._doc.progress =
       totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
+    logger.info(`Successfully fetched project data`, {
+      userId: req.user.id,
+      projectId: project._id,
+      projectName: project.name,
+    });
+
     res.status(200).json({ success: true, data: project });
   } catch (err) {
-    console.error('Get Project Error:', err);
+    logger.error('Failed to fetch project', {
+      error: err,
+      userId: req.user.id,
+      projectId: req.params.id,
+    });
+
     // Handle invalid ObjectId format
     if (err.name === 'CastError') {
       return res.status(404).json({

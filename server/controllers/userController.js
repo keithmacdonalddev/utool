@@ -1,5 +1,6 @@
 import User from '../models/User.js';
 import { auditLog } from '../middleware/auditLogMiddleware.js';
+import { logger } from '../utils/logger.js';
 
 // Helper to get real client IP (works with trust proxy)
 function getClientIp(req) {
@@ -22,11 +23,21 @@ async function addIpToUser(user, ip) {
 // @access  Private/Admin
 export const getUsers = async (req, res, next) => {
   try {
+    logger.verbose('User requested to fetch all users', {
+      userId: req.user?.id,
+    });
     // TODO: Add pagination later
     const users = await User.find(); // Exclude sensitive fields if needed by default
+    logger.logAccess('User successfully retrieved all users', {
+      userId: req.user?.id,
+      count: users.length,
+    });
     res.status(200).json({ success: true, count: users.length, data: users });
   } catch (err) {
-    console.error('Get Users Error:', err);
+    logger.error('Error fetching all users', {
+      userId: req.user?.id,
+      error: err.message,
+    });
     res
       .status(500)
       .json({ success: false, message: 'Server error fetching users' });
@@ -38,9 +49,18 @@ export const getUsers = async (req, res, next) => {
 // @access  Private/Admin
 export const getUser = async (req, res, next) => {
   try {
+    logger.verbose(`User requested to fetch user with ID: ${req.params.id}`, {
+      userId: req.user?.id,
+      targetUserId: req.params.id,
+    });
+
     const user = await User.findById(req.params.id);
 
     if (!user) {
+      logger.warn(`User not found with ID: ${req.params.id}`, {
+        userId: req.user?.id,
+        targetUserId: req.params.id,
+      });
       return res.status(404).json({
         success: false,
         message: `User not found with id of ${req.params.id}`,
@@ -52,16 +72,26 @@ export const getUser = async (req, res, next) => {
     if (!req.user || req.user.role !== 'Admin') {
       delete userObj.ipAddresses;
     } else {
-      console.log(
-        '[ADMIN] Returning ipAddresses for user',
-        user._id,
-        userObj.ipAddresses
-      );
+      logger.info(`Admin retrieving user with IP addresses`, {
+        userId: req.user.id,
+        targetUserId: user._id,
+        ipAddresses: userObj.ipAddresses,
+      });
     }
+
+    logger.logAccess(`User successfully retrieved user data`, {
+      userId: req.user?.id,
+      targetUserId: user._id,
+    });
 
     res.status(200).json({ success: true, data: userObj });
   } catch (err) {
-    console.error('Get User Error:', err);
+    logger.error(`Error fetching user with ID: ${req.params.id}`, {
+      userId: req.user?.id,
+      targetUserId: req.params.id,
+      error: err.message,
+    });
+
     // Handle invalid ObjectId format
     if (err.name === 'CastError') {
       return res.status(400).json({
@@ -83,8 +113,17 @@ export const createUser = async (req, res, next) => {
   const { name, email, password, role, isVerified, avatar } = req.body;
 
   try {
+    logger.verbose('Admin attempted to create new user', {
+      userId: req.user?.id,
+      email,
+    });
+
     // Basic validation
     if (!name || !email || !password || !role) {
+      logger.warn('Invalid user creation request - missing required fields', {
+        userId: req.user?.id,
+        providedFields: Object.keys(req.body),
+      });
       return res.status(400).json({
         success: false,
         message: 'Please provide name, email, password, and role',
@@ -94,6 +133,10 @@ export const createUser = async (req, res, next) => {
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      logger.warn('User creation failed - email already exists', {
+        userId: req.user?.id,
+        email,
+      });
       return res.status(400).json({
         success: false,
         message: 'User with that email already exists',
@@ -116,6 +159,13 @@ export const createUser = async (req, res, next) => {
     // Add IP to user profile if not present
     await addIpToUser(user, getClientIp(req));
 
+    logger.logCreate('Admin successfully created new user', {
+      userId: req.user?.id,
+      createdUserId: user._id,
+      role: user.role,
+      isVerified: user.isVerified,
+    });
+
     // Log user creation with more specific action type
     await auditLog(req, 'content_create', 'success', {
       contentType: 'user',
@@ -129,7 +179,12 @@ export const createUser = async (req, res, next) => {
 
     res.status(201).json({ success: true, data: user });
   } catch (err) {
-    console.error('Create User Error:', err);
+    logger.error('Error creating new user', {
+      userId: req.user?.id,
+      email,
+      error: err.message,
+    });
+
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((val) => val.message);
       const errorMessage = messages.join('. ');
@@ -154,20 +209,31 @@ export const createUser = async (req, res, next) => {
 // @route   PUT /api/v1/users/:id
 // @access  Private/Admin
 export const updateUser = async (req, res, next) => {
-  console.log('Update user request received:', req.params.id, req.body);
+  logger.verbose(`Admin attempted to update user with ID: ${req.params.id}`, {
+    userId: req.user?.id,
+    targetUserId: req.params.id,
+    updateFields: Object.keys(req.body),
+  });
 
   try {
     // Find user first
     const user = await User.findById(req.params.id);
     if (!user) {
-      console.log('User not found:', req.params.id);
+      logger.warn(`Update failed - user not found with ID: ${req.params.id}`, {
+        userId: req.user?.id,
+        targetUserId: req.params.id,
+      });
       return res.status(404).json({
         success: false,
         message: `User not found with id of ${req.params.id}`,
       });
     }
 
-    console.log('Current user data:', user.toObject());
+    logger.debug('Current user data before update', {
+      userId: req.user?.id,
+      targetUserId: user._id,
+      currentData: user.toObject(),
+    });
 
     // Track changes for audit logs
     const oldValues = {};
@@ -191,9 +257,14 @@ export const updateUser = async (req, res, next) => {
 
     updatableFields.forEach((field) => {
       if (req.body[field] !== undefined) {
-        console.log(
-          `Updating ${field} from ${user[field]} to ${req.body[field]}`
-        );
+        logger.debug(`Updating ${field}`, {
+          userId: req.user?.id,
+          targetUserId: user._id,
+          field,
+          oldValue: user[field],
+          newValue: req.body[field],
+        });
+
         oldValues[field] = user[field];
         changedValues[field] = req.body[field];
         user[field] = req.body[field];
@@ -209,7 +280,10 @@ export const updateUser = async (req, res, next) => {
 
     // Handle password reset
     if (req.body.resetPassword && req.body.newPassword) {
-      console.log('Resetting password');
+      logger.info('Admin resetting user password', {
+        userId: req.user?.id,
+        targetUserId: user._id,
+      });
       user.password = req.body.newPassword;
       changedValues['passwordReset'] = true;
     }
@@ -218,13 +292,21 @@ export const updateUser = async (req, res, next) => {
     try {
       await user.validate();
     } catch (validationError) {
-      console.error('Validation failed:', validationError);
+      logger.error('User validation failed during update', {
+        userId: req.user?.id,
+        targetUserId: user._id,
+        error: validationError.message,
+      });
       throw validationError;
     }
 
     // Save with hooks
     const updatedUser = await user.save();
-    console.log('User successfully updated:', updatedUser.toObject());
+    logger.logUpdate('User successfully updated', {
+      userId: req.user?.id,
+      targetUserId: updatedUser._id,
+      changedFields: Object.keys(changedValues),
+    });
 
     // Extract and save IP address
     user.ipAddress = getClientIp(req);
@@ -272,7 +354,12 @@ export const updateUser = async (req, res, next) => {
       data: updatedUser,
     });
   } catch (err) {
-    console.error('Update User Error:', err);
+    logger.error('Error updating user', {
+      userId: req.user?.id,
+      targetUserId: req.params.id,
+      error: err.message,
+    });
+
     if (
       err.code === 11000 ||
       (err.name === 'MongoServerError' && err.keyValue?.email)
@@ -314,9 +401,18 @@ export const updateUser = async (req, res, next) => {
 // @access  Private/Admin
 export const deleteUser = async (req, res, next) => {
   try {
+    logger.verbose(`Admin attempted to delete user with ID: ${req.params.id}`, {
+      userId: req.user?.id,
+      targetUserId: req.params.id,
+    });
+
     const user = await User.findById(req.params.id);
 
     if (!user) {
+      logger.warn(`Delete failed - user not found with ID: ${req.params.id}`, {
+        userId: req.user?.id,
+        targetUserId: req.params.id,
+      });
       return res.status(404).json({
         success: false,
         message: `User not found with id of ${req.params.id}`,
@@ -336,6 +432,12 @@ export const deleteUser = async (req, res, next) => {
     // For now, just delete the user.
     await user.deleteOne();
 
+    logger.logDelete('Admin successfully deleted user', {
+      userId: req.user?.id,
+      deletedUserId: userData.id,
+      deletedUserInfo: userData,
+    });
+
     // Log user deletion with specific action type
     await auditLog(req, 'content_delete', 'success', {
       contentType: 'user',
@@ -348,7 +450,12 @@ export const deleteUser = async (req, res, next) => {
 
     res.status(200).json({ success: true, data: {} }); // Success, no data to return
   } catch (err) {
-    console.error('Delete User Error:', err);
+    logger.error('Error deleting user', {
+      userId: req.user?.id,
+      targetUserId: req.params.id,
+      error: err.message,
+    });
+
     if (err.name === 'CastError') {
       const errorMessage = `Invalid user ID format: ${req.params.id}`;
       await auditLog(req, 'content_delete', 'failed', {
@@ -374,9 +481,20 @@ export const deleteUser = async (req, res, next) => {
 // @access  Private
 export const getBatchUsers = async (req, res, next) => {
   try {
+    logger.verbose('User requested to fetch batch users', {
+      userId: req.user?.id,
+      requestedIds: req.body.userIds,
+    });
+
     const { userIds } = req.body;
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      logger.warn(
+        'Invalid batch users request - missing or empty userIds array',
+        {
+          userId: req.user?.id,
+        }
+      );
       return res.status(400).json({
         success: false,
         message: 'Please provide an array of user IDs',
@@ -387,13 +505,23 @@ export const getBatchUsers = async (req, res, next) => {
       'name email avatar _id'
     );
 
+    logger.logAccess('User successfully retrieved batch users', {
+      userId: req.user?.id,
+      requestedCount: userIds.length,
+      retrievedCount: users.length,
+    });
+
     res.status(200).json({
       success: true,
       count: users.length,
       data: users,
     });
   } catch (err) {
-    console.error('Batch Get Users Error:', err);
+    logger.error('Error fetching batch users', {
+      userId: req.user?.id,
+      error: err.message,
+    });
+
     res.status(500).json({
       success: false,
       message: 'Server error fetching batch users',

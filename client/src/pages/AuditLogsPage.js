@@ -103,7 +103,8 @@ const AuditLogsPage = () => {
 
   // Calculate date range based on preset
   const calculateDateRange = (preset) => {
-    const now = new Date('2025-04-20'); // Ensure we use the current date in the app's context (April 20, 2025)
+    // Use the real current date
+    const now = new Date();
     let start, end;
 
     switch (preset) {
@@ -128,9 +129,8 @@ const AuditLogsPage = () => {
         end = endOfDay(addDays(start, 6)); // End of last week
         break;
       case 'this_month':
-        // For April 2025, explicitly set the dates
-        start = new Date('2025-04-01');
-        end = new Date('2025-04-30');
+        start = startOfMonth(now);
+        end = now;
         break;
       case 'custom':
         // Return current custom values

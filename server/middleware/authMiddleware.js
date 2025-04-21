@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import asyncHandler from './async.js';
 import ErrorResponse from '../utils/errorResponse.js';
 import User from '../models/User.js';
+import { isTokenBlacklisted } from '../utils/tokenBlacklist.js'; // Import blacklist checker
 import {
   permissions,
   featureFlags,
@@ -60,6 +61,16 @@ export const protect = async (req, res, next) => {
     return res
       .status(401)
       .json({ success: false, message: 'Not authorized, no token' });
+  }
+
+  // Check if token is blacklisted (logged out)
+  if (isTokenBlacklisted(token)) {
+    return res
+      .status(401)
+      .json({
+        success: false,
+        message: 'Token has been invalidated, please log in again',
+      });
   }
 
   try {

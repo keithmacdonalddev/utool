@@ -10,6 +10,7 @@
 import axios from 'axios';
 import { store } from '../app/store'; // Import the Redux store
 import { toast } from 'react-toastify';
+import { isLogoutInProgress } from './authState'; // Import the global logout state checker
 
 /**
  * AXIOS INSTANCE PATTERN
@@ -103,6 +104,14 @@ const handleServerNotification = (response) => {
  */
 api.interceptors.request.use(
   (config) => {
+    // IMPORTANT: Check if logout is in progress - block ALL requests except logout itself
+    if (isLogoutInProgress() && !config.url.includes('/auth/logout')) {
+      console.log(`Request blocked during logout: ${config.url}`);
+      const error = new Error('Request canceled - logout in progress');
+      error.isLogoutError = true;
+      return Promise.reject(error);
+    }
+
     /**
      * AUTHENTICATION TOKEN INJECTION
      *
@@ -113,6 +122,22 @@ api.interceptors.request.use(
      * demonstrating how to integrate Redux with API requests.
      */
     const token = store.getState().auth.token;
+
+    // If we're making an authenticated request (to a protected endpoint)
+    // but we don't have a token, reject the request immediately
+    const isProtectedEndpoint =
+      !config.url.includes('/auth/login') &&
+      !config.url.includes('/auth/register') &&
+      !config.url.includes('/auth/verify-email');
+
+    if (isProtectedEndpoint && !token) {
+      // Create a canceled request error
+      const error = new Error(
+        'Request canceled - no authentication token available'
+      );
+      error.isAuthError = true;
+      return Promise.reject(error);
+    }
 
     if (token) {
       // Add Authorization header if token exists (Bearer token pattern)

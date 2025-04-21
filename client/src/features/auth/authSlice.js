@@ -118,21 +118,19 @@ export const logoutUser = createAsyncThunk(
   'auth/logout',
   async (_, thunkAPI) => {
     try {
-      // Optional: Call backend logout endpoint if needed
-      // This might be necessary to invalidate tokens on the server
-      // await api.post(AUTH_URL + 'logout');
+      // Import the secure logout utility
+      const { executeSecureLogout } = await import('../../utils/authState');
 
-      // Clear authentication data from localStorage
-      // This prevents the user from being logged in after page refresh
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
+      // First, make the API call to the server to log the action
+      await api.post(AUTH_URL + 'logout');
+
+      // Then use our secure logout mechanism that prevents additional requests
+      executeSecureLogout();
 
       // Return true to indicate success
       return true;
     } catch (error) {
       // Even if backend logout fails, we generally want to clear frontend state
-      // because forcing a user to stay logged in when they want to log out
-      // is a poor UX choice
       const message =
         (error.response &&
           error.response.data &&
@@ -141,8 +139,11 @@ export const logoutUser = createAsyncThunk(
         error.toString();
       console.error('Logout error:', message);
 
-      // Return false instead of rejecting so the user is still logged out
-      // on the frontend even if the backend call fails
+      // Still execute secure logout on error
+      const { executeSecureLogout } = await import('../../utils/authState');
+      executeSecureLogout();
+
+      // Return false instead of rejecting
       return false;
     }
   }

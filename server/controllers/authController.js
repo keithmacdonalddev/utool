@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import User from '../models/User.js';
+import { logger } from '../utils/logger.js';
 
 // Helper function to generate JWT
 const getSignedJwtToken = (id) => {
@@ -412,6 +413,111 @@ export const updateMe = async (req, res, next) => {
 };
 
 // TODO: Add updateMyPassword controller later
+
+// @desc    Logout user
+// @route   POST /api/v1/auth/logout
+// @access  Private (but can be called by anyone with a token)
+export const logout = async (req, res, next) => {
+  try {
+    // Get user info from either the authenticated user or our preserved logout info
+    const userInfo = req.user || req.logoutUserInfo;
+
+    // No need for another log here - the route middleware already logged it
+
+    // Make sure we have some kind of user identifier
+    if (!userInfo) {
+      logger.warn('Logout attempted without any user information', {
+        ip: req.ip || req.connection.remoteAddress,
+      });
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required for logout',
+      });
+    }
+
+    // Extract the token from the request
+    const token = req.headers.authorization?.split(' ')[1];
+
+    // Import blacklist utility and add token to blacklist
+    if (token) {
+      try {
+        const { blacklistToken } = await import('../utils/tokenBlacklist.js');
+        const blacklisted = blacklistToken(token);
+
+        // No need for another log here - the route middleware will log the response
+
+        if (blacklisted) {
+          logger.verbose(
+            `Token blacklisted for user: ${userInfo.email || userInfo.id}`
+          );
+        } else {
+          logger.warn(
+            `Failed to blacklist token for user: ${
+              userInfo.email || userInfo.id
+            }`
+          );
+        }
+      } catch (blacklistError) {
+        // Log but continue - don't fail the logout if blacklisting fails
+        logger.error('Error during token blacklisting', {
+          error: blacklistError.message,
+          stack: blacklistError.stack,
+        });
+      }
+    } else {
+      logger.warn('No token found to blacklist during logout');
+    }
+
+    logger.info(
+      `User logged out: ${userInfo.email || 'unknown'} (${
+        userInfo.id || 'unknown'
+      })`,
+      {
+        userId: userInfo.id,
+        email: userInfo.email || 'unknown',
+        ip: req.ip || req.connection.remoteAddress,
+        userAgent: req.headers['user-agent'],
+      }
+    );
+
+    try {
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+
+      // Only log the logout action because we have a valid userId
+      await auditLog(req, 'logout', 'success', {
+        userId: userInfo.id,
+      });
+    } catch (auditError) {
+      // Log but continue - don't fail the logout if audit logging fails
+      logger.error('Error during audit logging of logout', {
+        error: auditError.message,
+        stack: auditError.stack,
+      });
+    }
+
+    // Clear the auth cookie (if using cookies)
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+
+    return res
+      .status(200)
+      .json({ success: true, message: 'Logged out successfully.' });
+  } catch (err) {
+    logger.error('Logout error', {
+      error: err.message,
+      stack: err.stack,
+      userId: req.logoutUserInfo?.id || req.user?._id,
+    });
+
+    // Still attempt to return a response
+    return res
+      .status(500)
+      .json({ success: false, message: 'Server error during logout' });
+  }
+};
 
 // Get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {

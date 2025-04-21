@@ -7,6 +7,12 @@ import { auditLog } from '../middleware/auditLogMiddleware.js';
 // @route   GET /api/v1/notes/recent
 // @access  Private
 export const getRecentNotes = async (req, res, next) => {
+  // Log attempted action
+  logger.verbose('Attempting to fetch recent notes', {
+    userId: req.user.id,
+    req,
+  });
+
   try {
     logger.logAccess('notes', null, req.user.id, { req });
 
