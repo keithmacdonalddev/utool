@@ -93,10 +93,11 @@ export const fetchAuditLogs = createAsyncThunk(
         queryParams.append('status', filters.status);
       }
 
-      console.log(`Fetching audit logs: /api/v1/audit-logs?${queryParams}`);
+      console.log(`Fetching audit logs: /audit-logs?${queryParams}`);
 
       // Use our custom API client which includes authorization headers automatically
-      const response = await api.get(`/api/v1/audit-logs?${queryParams}`);
+      // Remove the redundant /api/v1/ prefix since it's already in the baseURL
+      const response = await api.get(`/audit-logs?${queryParams}`);
 
       console.log('API response status:', response.status);
       console.log('API response data:', response.data);
@@ -143,9 +144,8 @@ export const searchAuditLogs = createAsyncThunk(
       }
 
       // Use custom API client which handles auth headers
-      const { data } = await api.get(
-        `/api/v1/audit-logs/search?q=${searchQuery}`
-      );
+      // Remove the redundant /api/v1/ prefix
+      const { data } = await api.get(`/audit-logs/search?q=${searchQuery}`);
       return data;
     } catch (error) {
       return rejectWithValue(
@@ -174,7 +174,8 @@ export const deleteAuditLogsByDateRange = createAsyncThunk(
       });
 
       // Use custom API client which handles auth headers
-      const response = await api.delete('/api/v1/audit-logs', {
+      // Remove the redundant /api/v1/ prefix
+      const response = await api.delete('/audit-logs', {
         data: { startDate, endDate },
       });
 
