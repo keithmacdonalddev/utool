@@ -30,13 +30,13 @@ const api = axios.create({
    *
    * Supports:
    * - Local development (http://localhost:5000/api/v1)
-   * - Production deployments (https://utool.onrender.com/api/v1)
+   * - Production deployments (using relative paths to work with Vercel rewrites)
    * - Custom API URLs via REACT_APP_API_URL environment variable
    */
   baseURL:
     process.env.REACT_APP_API_URL || // Check for an environment variable first
     (process.env.NODE_ENV === 'production'
-      ? 'https://utool.onrender.com/api/v1' // Fallback production URL
+      ? '/api/v1' // Use relative path for production to work with Vercel rewrites
       : 'http://localhost:5000/api/v1'), // Fallback development URL
 
   /**

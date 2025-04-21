@@ -8,6 +8,10 @@
       "destination": "https://utool.onrender.com/api/:path*"
     },
     {
+      "source": "/socket.io/:path*",
+      "destination": "https://utool.onrender.com/socket.io/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

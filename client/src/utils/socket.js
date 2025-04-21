@@ -1,12 +1,12 @@
 import io from 'socket.io-client';
 import { store } from '../app/store';
 
-// In production, use the Render backend URL
+// In production, use relative path to work with Vercel rewrites
 // In development, use the standard backend URL
 const isDevelopment = process.env.NODE_ENV === 'development';
 const SERVER_URL = isDevelopment
   ? process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000'
-  : process.env.REACT_APP_API_URL || 'https://utool.onrender.com'; // Use the correct Render URL
+  : process.env.REACT_APP_API_URL || ''; // Empty string means relative path - connects to same origin
 
 // Create the socket instance
 const socket = io(SERVER_URL, {
@@ -36,6 +36,7 @@ const updateAuthToken = () => {
 export const connectWithAuth = () => {
   updateAuthToken();
 
+  // Don't attempt to connect if we don't have a token
   if (!socket.auth.token) {
     return false;
   }
