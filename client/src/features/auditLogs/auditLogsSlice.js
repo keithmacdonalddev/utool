@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
+import api from '../../utils/api'; // Use custom API client instead of axios
 
 // Thunk to fetch audit logs
 export const fetchAuditLogs = createAsyncThunk(
@@ -93,20 +93,10 @@ export const fetchAuditLogs = createAsyncThunk(
         queryParams.append('status', filters.status);
       }
 
-      // Include auth token in the request headers
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      };
-
       console.log(`Fetching audit logs: /api/v1/audit-logs?${queryParams}`);
 
-      // Try our request
-      const response = await axios.get(
-        `/api/v1/audit-logs?${queryParams}`,
-        config
-      );
+      // Use our custom API client which includes authorization headers automatically
+      const response = await api.get(`/api/v1/audit-logs?${queryParams}`);
 
       console.log('API response status:', response.status);
       console.log('API response data:', response.data);
@@ -152,16 +142,9 @@ export const searchAuditLogs = createAsyncThunk(
         return rejectWithValue({ message: 'Authentication required' });
       }
 
-      // Include auth token in the request headers
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      };
-
-      const { data } = await axios.get(
-        `/api/v1/audit-logs/search?q=${searchQuery}`,
-        config
+      // Use custom API client which handles auth headers
+      const { data } = await api.get(
+        `/api/v1/audit-logs/search?q=${searchQuery}`
       );
       return data;
     } catch (error) {
@@ -184,27 +167,15 @@ export const deleteAuditLogsByDateRange = createAsyncThunk(
         return rejectWithValue({ message: 'Authentication required' });
       }
 
-      // Include auth token in the request headers
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
-
       // Debugging information
       console.log('Deleting audit logs with date range:', {
         startDate,
         endDate,
       });
 
-      // Make DELETE request with date range in the body
-      const response = await axios.delete('/api/v1/audit-logs', {
+      // Use custom API client which handles auth headers
+      const response = await api.delete('/api/v1/audit-logs', {
         data: { startDate, endDate },
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
       });
 
       console.log('Delete response:', response.data);
