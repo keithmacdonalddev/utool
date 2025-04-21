@@ -300,7 +300,7 @@ app.use(
 
 // Add CORS headers for preflight OPTIONS requests (extra safety)
 
-app.options(/(.*)/, cors());
+app.options('*', cors());
 
 // Setup Morgan for HTTP request logging
 
