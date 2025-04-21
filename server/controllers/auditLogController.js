@@ -1,6 +1,7 @@
 import AuditLog from '../models/AuditLog.js';
 import ErrorResponse from '../utils/errorResponse.js';
 import asyncHandler from '../middleware/async.js';
+import { logger } from '../utils/logger.js';
 
 // @desc    Get all audit logs
 // @route   GET /api/v1/audit-logs
@@ -14,13 +15,35 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
   // Convert timestamp[gte]/timestamp[lte] to MongoDB format
   if (reqQuery['timestamp[gte]'] || reqQuery['timestamp[lte]']) {
     reqQuery.timestamp = {};
+
+    // Process start timestamp (>=)
     if (reqQuery['timestamp[gte]']) {
-      reqQuery.timestamp.$gte = new Date(reqQuery['timestamp[gte]']);
+      const startDate = new Date(reqQuery['timestamp[gte]']);
+      reqQuery.timestamp.$gte = startDate;
+      console.log('Start date filter:', startDate.toISOString());
+      console.log('Filtering logs after:', startDate.toLocaleString());
       delete reqQuery['timestamp[gte]'];
     }
+
+    // Process end timestamp (<=)
     if (reqQuery['timestamp[lte]']) {
-      reqQuery.timestamp.$lte = new Date(reqQuery['timestamp[lte]']);
+      const endDate = new Date(reqQuery['timestamp[lte]']);
+      reqQuery.timestamp.$lte = endDate;
+      console.log('End date filter:', endDate.toISOString());
+      console.log('Filtering logs before:', endDate.toLocaleString());
       delete reqQuery['timestamp[lte]'];
+    }
+
+    // When using "Past Hour" filter, log the time range more explicitly
+    if (reqQuery.timestamp.$gte && reqQuery.timestamp.$lte) {
+      const startTime = reqQuery.timestamp.$gte;
+      const endTime = reqQuery.timestamp.$lte;
+      const diffMinutes = Math.round((endTime - startTime) / (1000 * 60));
+
+      if (diffMinutes <= 60) {
+        console.log(`Time range is approximately ${diffMinutes} minutes`);
+        console.log(`This appears to be a "Past Hour" filter`);
+      }
     }
   }
 
@@ -40,6 +63,15 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
   // Check if we have timestamp filters
   if (parsedQuery.timestamp) {
     console.log('Timestamp filters present:', parsedQuery.timestamp);
+
+    // Add explicit readable time range for easier debugging
+    if (parsedQuery.timestamp.$gte && parsedQuery.timestamp.$lte) {
+      const start = new Date(parsedQuery.timestamp.$gte);
+      const end = new Date(parsedQuery.timestamp.$lte);
+      console.log(
+        `Time Range: ${start.toLocaleString()} to ${end.toLocaleString()}`
+      );
+    }
   }
 
   // Finding resource
@@ -77,6 +109,28 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
   // Executing query
   const auditLogs = await query;
   console.log(`Retrieved ${auditLogs.length} audit logs`);
+
+  // For debugging, show the time range of returned logs
+  if (auditLogs.length > 0) {
+    const oldestLog = new Date(
+      Math.min(...auditLogs.map((log) => new Date(log.timestamp)))
+    );
+    const newestLog = new Date(
+      Math.max(...auditLogs.map((log) => new Date(log.timestamp)))
+    );
+
+    console.log('Oldest log timestamp:', oldestLog.toLocaleString());
+    console.log('Newest log timestamp:', newestLog.toLocaleString());
+
+    if (parsedQuery.timestamp && parsedQuery.timestamp.$gte) {
+      const startFilter = new Date(parsedQuery.timestamp.$gte);
+      console.log(
+        'Oldest log is',
+        Math.round((oldestLog - startFilter) / (1000 * 60)),
+        'minutes after filter start'
+      );
+    }
+  }
 
   // Pagination result
   const pagination = {};
@@ -126,3 +180,57 @@ export const searchAuditLogs = asyncHandler(async (req, res, next) => {
     data: logs,
   });
 });
+
+// @desc    Delete audit logs by date range
+// @route   DELETE /api/v1/audit-logs
+// @access  Private/Admin
+export const deleteAuditLogsByDateRange = asyncHandler(
+  async (req, res, next) => {
+    const { startDate, endDate } = req.body;
+
+    if (!startDate || !endDate) {
+      return next(
+        new ErrorResponse('Please provide both start and end dates', 400)
+      );
+    }
+
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      // Validate dates
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return next(new ErrorResponse('Invalid date format', 400));
+      }
+
+      // Create filter object
+      const filter = {
+        timestamp: {
+          $gte: start,
+          $lte: end,
+        },
+      };
+
+      // Count logs before deletion for reporting
+      const count = await AuditLog.countDocuments(filter);
+
+      // Delete logs matching the filter
+      const result = await AuditLog.deleteMany(filter);
+
+      logger.info(
+        `Deleted ${
+          result.deletedCount
+        } audit logs from ${start.toISOString()} to ${end.toISOString()}`
+      );
+
+      res.status(200).json({
+        success: true,
+        count: result.deletedCount,
+        message: `Successfully deleted ${result.deletedCount} audit logs`,
+      });
+    } catch (error) {
+      logger.error('Error deleting audit logs:', error);
+      return next(new ErrorResponse('Error deleting audit logs', 500));
+    }
+  }
+);

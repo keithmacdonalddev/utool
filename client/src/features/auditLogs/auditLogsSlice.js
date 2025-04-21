@@ -25,9 +25,16 @@ export const fetchAuditLogs = createAsyncThunk(
 
       // Working with MongoDB-style query operators for effective date filtering
       if (filters.startDate) {
-        // For "this month" filter specifically targeting April 2025 logs
-        if (filters.startDate.startsWith('2025-04')) {
-          // Use Unix timestamp for April 1, 2025
+        // Special handling for "Past Hour" filter
+        if (
+          filters.startDate.includes('T') &&
+          filters.startDate.includes('Z')
+        ) {
+          // This is an ISO string with time - use it directly
+          queryParams.append('timestamp[gte]', filters.startDate);
+          console.log('Using precise start timestamp:', filters.startDate);
+        } else if (filters.startDate.startsWith('2025-04')) {
+          // For specific April 2025 filtering
           const april2025Start = new Date(
             '2025-04-01T00:00:00.000Z'
           ).toISOString();
@@ -37,21 +44,25 @@ export const fetchAuditLogs = createAsyncThunk(
             april2025Start
           );
         } else {
-          // Normal date handling
+          // Normal date handling - default to start of day
           const startDate = new Date(filters.startDate);
           startDate.setHours(0, 0, 0, 0);
           queryParams.append('timestamp[gte]', startDate.toISOString());
           console.log(
-            'Using regular start date filter:',
+            'Using day-level start date filter:',
             startDate.toISOString()
           );
         }
       }
 
       if (filters.endDate) {
-        // For "this month" filter specifically targeting April 2025 logs
-        if (filters.endDate.startsWith('2025-04')) {
-          // Use Unix timestamp for April 30, 2025 end of day
+        // Special handling for "Past Hour" filter
+        if (filters.endDate.includes('T') && filters.endDate.includes('Z')) {
+          // This is an ISO string with time - use it directly
+          queryParams.append('timestamp[lte]', filters.endDate);
+          console.log('Using precise end timestamp:', filters.endDate);
+        } else if (filters.endDate.startsWith('2025-04')) {
+          // For specific April 2025 filtering
           const april2025End = new Date(
             '2025-04-30T23:59:59.999Z'
           ).toISOString();
@@ -61,11 +72,14 @@ export const fetchAuditLogs = createAsyncThunk(
             april2025End
           );
         } else {
-          // Normal date handling with end of day
+          // Normal date handling - default to end of day
           const endDate = new Date(filters.endDate);
           endDate.setHours(23, 59, 59, 999);
           queryParams.append('timestamp[lte]', endDate.toISOString());
-          console.log('Using regular end date filter:', endDate.toISOString());
+          console.log(
+            'Using day-level end date filter:',
+            endDate.toISOString()
+          );
         }
       }
 
@@ -158,6 +172,63 @@ export const searchAuditLogs = createAsyncThunk(
   }
 );
 
+// Thunk to delete audit logs by date range
+export const deleteAuditLogsByDateRange = createAsyncThunk(
+  'auditLogs/deleteAuditLogs',
+  async ({ startDate, endDate }, { rejectWithValue, getState }) => {
+    try {
+      // Get auth token from Redux state
+      const { token } = getState().auth;
+
+      if (!token) {
+        return rejectWithValue({ message: 'Authentication required' });
+      }
+
+      // Include auth token in the request headers
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      };
+
+      // Debugging information
+      console.log('Deleting audit logs with date range:', { startDate, endDate });
+      
+      // Make DELETE request with date range in the body
+      const response = await axios.delete(
+        '/api/v1/audit-logs',
+        {
+          data: { startDate, endDate },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
+      console.log('Delete response:', response.data);
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting audit logs:');
+
+      if (error.response) {
+        console.error('🚫 Response status:', error.response.status);
+        console.error('🚫 Response data:', error.response.data);
+      } else if (error.request) {
+        console.error('🚫 No response received:', error.request);
+      } else {
+        console.error('🚫 Error message:', error.message);
+      }
+
+      return rejectWithValue(
+        error.response?.data || { message: error.message }
+      );
+    }
+  }
+);
+
 const initialState = {
   logs: [],
   totalCount: 0,
@@ -172,6 +243,9 @@ const initialState = {
   },
   searchResults: [],
   searchLoading: false,
+  deleteLoading: false,
+  deleteSuccess: false,
+  deleteMessage: '',
 };
 
 const auditLogsSlice = createSlice({
@@ -222,6 +296,22 @@ const auditLogsSlice = createSlice({
         state.searchLoading = false;
         state.error = action.payload || {
           message: 'Failed to search audit logs',
+        };
+      })
+      // deleteAuditLogsByDateRange cases
+      .addCase(deleteAuditLogsByDateRange.pending, (state) => {
+        state.deleteLoading = true;
+        state.error = null;
+      })
+      .addCase(deleteAuditLogsByDateRange.fulfilled, (state, action) => {
+        state.deleteLoading = false;
+        state.deleteSuccess = true;
+        state.deleteMessage = action.payload.message;
+      })
+      .addCase(deleteAuditLogsByDateRange.rejected, (state, action) => {
+        state.deleteLoading = false;
+        state.error = action.payload || {
+          message: 'Failed to delete audit logs',
         };
       });
   },

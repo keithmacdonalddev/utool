@@ -15,6 +15,7 @@ import {
   searchAuditLogs,
   setFilters,
   clearFilters,
+  deleteAuditLogsByDateRange,
 } from '../features/auditLogs/auditLogsSlice';
 import {
   Search,
@@ -24,7 +25,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  Trash2,
+  AlertTriangle,
+  CheckCircle,
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 /**
  * AuditLogsPage Component
@@ -57,6 +62,7 @@ const AuditLogsPage = () => {
   const [statusFilter, setStatusFilter] = useState(filters.status || '');
   const [datePreset, setDatePreset] = useState('past_hour'); // Default to past hour
   const [showCustomDateInputs, setShowCustomDateInputs] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   // Date preset options
   const datePresets = [
@@ -143,10 +149,10 @@ const AuditLogsPage = () => {
         end = now;
     }
 
-    // Format dates with ISO strings for more precise filtering
+    // Use full ISO strings for precise time filtering
     return {
-      startDate: format(start, 'yyyy-MM-dd'),
-      endDate: format(end, 'yyyy-MM-dd'),
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
     };
   };
 
@@ -219,10 +225,24 @@ const AuditLogsPage = () => {
     }
   }, [dispatch, page, limit, datePreset, actionFilter, statusFilter]);
 
-  // Apply filters handler
+  // Handle apply filters button click
   const handleApplyFilters = () => {
-    const dateRange = calculateDateRange(datePreset);
-    console.log('Applying filters with date range:', dateRange);
+    // Get fresh date calculations to ensure we're using the most current time
+    let dateRange;
+    if (datePreset === 'past_hour') {
+      // Special handling for "Past Hour" to ensure precise time filtering
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      dateRange = {
+        startDate: oneHourAgo.toISOString(),
+        endDate: now.toISOString(),
+      };
+      console.log('Applying precise Past Hour filter:', dateRange);
+    } else {
+      // Normal date range calculation for other presets
+      dateRange = calculateDateRange(datePreset);
+      console.log('Applying standard date filter:', dateRange);
+    }
 
     const newFilters = {
       action: actionFilter,
@@ -231,8 +251,23 @@ const AuditLogsPage = () => {
       endDate: dateRange.endDate,
     };
 
+    // Force reset to page 1 when changing filters
+    setPage(1);
+
+    // Apply the filters through Redux
     dispatch(setFilters(newFilters));
-    setPage(1); // Reset to first page when filters change
+
+    // Immediately fetch logs with the new filters
+    dispatch(
+      fetchAuditLogs({
+        page: 1, // Always start at page 1 when applying new filters
+        limit,
+        action: actionFilter,
+        status: statusFilter,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+      })
+    );
   };
 
   // Clear all filters
@@ -327,6 +362,31 @@ const AuditLogsPage = () => {
     );
   };
 
+  // Handle delete logs
+  const handleDeleteLogs = () => {
+    const dateRange = calculateDateRange(datePreset);
+    
+    // Log the date range being used for deletion
+    console.log('Deleting logs with date range:', dateRange);
+    
+    dispatch(deleteAuditLogsByDateRange(dateRange))
+      .unwrap()
+      .then((result) => {
+        // Show success message
+        toast.success(`Success! ${result.count} audit logs were deleted.`);
+        
+        // Refresh the logs display
+        handleRefresh();
+      })
+      .catch((error) => {
+        // Show error message
+        toast.error(`Error deleting logs: ${error.message || 'Unknown error'}`);
+      })
+      .finally(() => {
+        setDeleteModalOpen(false);
+      });
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -415,14 +475,14 @@ const AuditLogsPage = () => {
               <Calendar size={16} className="inline mr-1" />
               <span>
                 {datePreset !== 'custom' ? (
-                  <>
-                    <span className="font-medium">
-                      {datePresets.find((p) => p.value === datePreset)?.label}
-                    </span>
-                    : {startDate} to {endDate}
-                  </>
+                  <span className="font-medium">
+                    {datePresets.find((p) => p.value === datePreset)?.label}
+                  </span>
                 ) : (
-                  <span className="font-medium">Custom Range</span>
+                  <span className="font-medium">
+                    Custom Range: {new Date(startDate).toLocaleDateString()} to{' '}
+                    {new Date(endDate).toLocaleDateString()}
+                  </span>
                 )}
               </span>
             </div>
@@ -520,6 +580,13 @@ const AuditLogsPage = () => {
               title="Refresh"
             >
               <RefreshCw size={18} />
+            </button>
+            <button
+              onClick={() => setDeleteModalOpen(true)}
+              className="p-2 border border-red-300 hover:bg-red-100 dark:border-red-600 dark:hover:bg-red-700 rounded-md"
+              title="Delete Logs"
+            >
+              <Trash2 size={18} className="text-red-600 dark:text-red-400" />
             </button>
           </div>
         </div>
@@ -666,9 +733,52 @@ const AuditLogsPage = () => {
             Page {page} of {Math.ceil(totalCount / limit)}
           </div>
           <div className="flex space-x-2">
+            {/* First Page Button */}
+            <button
+              onClick={() => setPage(1)}
+              disabled={page <= 1}
+              title="First Page"
+              className={`px-3 py-1 rounded ${
+                page <= 1
+                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="11 17 6 12 11 7"></polyline>
+                <polyline points="18 17 13 12 18 7"></polyline>
+              </svg>
+            </button>
+
+            {/* Jump Back 10 Pages Button */}
+            <button
+              onClick={() => setPage(Math.max(1, page - 10))}
+              disabled={page <= 1}
+              title="Back 10 Pages"
+              className={`px-3 py-1 rounded ${
+                page <= 1
+                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              -10
+            </button>
+
+            {/* Previous Page Button */}
             <button
               onClick={handlePrevPage}
               disabled={page <= 1}
+              title="Previous Page"
               className={`px-3 py-1 rounded ${
                 page <= 1
                   ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
@@ -677,9 +787,17 @@ const AuditLogsPage = () => {
             >
               <ChevronLeft size={16} />
             </button>
+
+            {/* Current Page Indicator */}
+            <span className="px-4 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 font-medium">
+              {page}
+            </span>
+
+            {/* Next Page Button */}
             <button
               onClick={handleNextPage}
               disabled={!pagination.next}
+              title="Next Page"
               className={`px-3 py-1 rounded ${
                 !pagination.next
                   ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
@@ -687,6 +805,53 @@ const AuditLogsPage = () => {
               }`}
             >
               <ChevronRight size={16} />
+            </button>
+
+            {/* Jump Forward 10 Pages Button */}
+            <button
+              onClick={() => {
+                const maxPage = Math.ceil(totalCount / limit);
+                setPage(Math.min(maxPage, page + 10));
+              }}
+              disabled={page >= Math.ceil(totalCount / limit)}
+              title="Forward 10 Pages"
+              className={`px-3 py-1 rounded ${
+                page >= Math.ceil(totalCount / limit)
+                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              +10
+            </button>
+
+            {/* Last Page Button */}
+            <button
+              onClick={() => {
+                const maxPage = Math.ceil(totalCount / limit);
+                setPage(maxPage);
+              }}
+              disabled={page >= Math.ceil(totalCount / limit)}
+              title="Last Page"
+              className={`px-3 py-1 rounded ${
+                page >= Math.ceil(totalCount / limit)
+                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="13 17 18 12 13 7"></polyline>
+                <polyline points="6 17 11 12 6 7"></polyline>
+              </svg>
             </button>
           </div>
         </div>
@@ -782,6 +947,51 @@ const AuditLogsPage = () => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Confirm Delete
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Are you sure you want to delete the audit logs for the
+                  selected date range?
+                </p>
+              </div>
+              <button
+                onClick={() => setDeleteModalOpen(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center text-yellow-600 dark:text-yellow-400 mb-4">
+                <AlertTriangle size={24} className="mr-2" />
+                <p className="text-sm">This action cannot be undone.</p>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setDeleteModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-md text-gray-900 dark:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteLogs}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>

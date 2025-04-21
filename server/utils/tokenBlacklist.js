@@ -12,8 +12,9 @@
 
 import jwt from 'jsonwebtoken';
 import { logger } from './logger.js';
+import crypto from 'crypto';
 
-// In-memory token blacklist (token ID => expiration timestamp)
+// In-memory token blacklist (token hash => expiration timestamp)
 // Note: In production with multiple servers, use Redis or another shared cache instead
 const blacklistedTokens = new Map();
 
@@ -24,6 +25,15 @@ setInterval(() => {
 }, CLEANUP_INTERVAL);
 
 /**
+ * Creates a unique hash for a token to use as blacklist key
+ * @param {string} token - The JWT token
+ * @returns {string} - The hash of the token
+ */
+const createTokenHash = (token) => {
+  return crypto.createHash('sha256').update(token).digest('hex');
+};
+
+/**
  * Blacklist a token to prevent its further use
  * @param {string} token - The JWT token to blacklist
  * @returns {boolean} - True if token was successfully blacklisted
@@ -32,19 +42,10 @@ export const blacklistToken = (token) => {
   try {
     if (!token) return false;
 
-    // Decode token to get its ID and expiration (without verification)
+    // Decode token to get ID and expiration (without verification)
     const decodedToken = jwt.decode(token);
     if (!decodedToken) {
       logger.warn('Failed to blacklist invalid token format');
-      return false;
-    }
-
-    // In our JWT structure, the user ID is in decodedToken.id
-    // But handle both possibilities - some JWTs use 'sub' for subject
-    const tokenId = decodedToken.id || decodedToken.sub;
-
-    if (!tokenId) {
-      logger.warn('Token has no ID or subject field', { token: decodedToken });
       return false;
     }
 
@@ -54,11 +55,17 @@ export const blacklistToken = (token) => {
       ? decodedToken.exp * 1000 // Convert from seconds to milliseconds
       : Date.now() + 24 * 60 * 60 * 1000;
 
-    // Add to blacklist with expiration
-    blacklistedTokens.set(tokenId.toString(), expiration);
+    // Extract user ID for logging purposes only
+    const userId = decodedToken.id || decodedToken.sub || 'unknown';
 
-    logger.info(`Token blacklisted for user: ${tokenId}`, {
-      userId: tokenId,
+    // Create a hash of the full token as the blacklist key
+    const tokenHash = createTokenHash(token);
+
+    // Add to blacklist with expiration
+    blacklistedTokens.set(tokenHash, expiration);
+
+    logger.info(`Token blacklisted for user: ${userId}`, {
+      userId,
       expiration: new Date(expiration).toISOString(),
     });
 
@@ -81,18 +88,19 @@ export const isTokenBlacklisted = (token) => {
   try {
     if (!token) return false;
 
-    // Decode token to get ID (without verification)
-    const decodedToken = jwt.decode(token);
-    if (!decodedToken) return false;
+    // Hash the token to check against the blacklist
+    const tokenHash = createTokenHash(token);
 
-    // Check for ID in both common locations
-    const tokenId = decodedToken.id || decodedToken.sub;
-    if (!tokenId) return false;
+    // Check if token hash exists in blacklist
+    const isBlacklisted = blacklistedTokens.has(tokenHash);
 
-    // Check if token ID exists in blacklist
-    const isBlacklisted = blacklistedTokens.has(tokenId.toString());
     if (isBlacklisted) {
-      logger.verbose(`Blocked blacklisted token for user: ${tokenId}`);
+      // Extract user ID for logging purposes only
+      const decodedToken = jwt.decode(token);
+      const userId = decodedToken
+        ? decodedToken.id || decodedToken.sub || 'unknown'
+        : 'unknown';
+      logger.verbose(`Blocked blacklisted token for user: ${userId}`);
     }
 
     return isBlacklisted;
@@ -112,9 +120,9 @@ export const cleanupExpiredTokens = () => {
   const now = Date.now();
   let expiredCount = 0;
 
-  blacklistedTokens.forEach((expiration, tokenId) => {
+  blacklistedTokens.forEach((expiration, tokenHash) => {
     if (expiration < now) {
-      blacklistedTokens.delete(tokenId);
+      blacklistedTokens.delete(tokenHash);
       expiredCount++;
     }
   });
