@@ -19,7 +19,7 @@ import {
   getTasksForProject,
   resetTaskStatus,
   updateTask,
-  deleteTask
+  deleteTask,
 } from '../features/tasks/taskSlice';
 import TaskList from '../components/tasks/TaskList';
 import TaskCreateModal from '../components/tasks/TaskCreateModal';
@@ -28,7 +28,9 @@ import { PlusCircle, X, Edit } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 import useFriends from '../hooks/useFriends';
 
-const TaskDetailsSidebar = lazy(() => import('../components/tasks/TaskDetailsSidebar'));
+const TaskDetailsSidebar = lazy(() =>
+  import('../components/tasks/TaskDetailsSidebar')
+);
 
 /**
  * ProjectDetailsPage Component
@@ -217,7 +219,7 @@ const ProjectDetailsPage = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleTaskClick = (taskId) => {
-    const task = tasks.find(t => t._id === taskId);
+    const task = tasks.find((t) => t._id === taskId);
     if (task) {
       setSelectedTask(task);
       setIsSidebarOpen(true);
@@ -233,11 +235,13 @@ const ProjectDetailsPage = () => {
 
   const handleTaskUpdate = async (updatedTask) => {
     try {
-      await dispatch(updateTask({
-        id: updatedTask._id,
-        taskData: updatedTask
-      })).unwrap();
-      
+      await dispatch(
+        updateTask({
+          id: updatedTask._id,
+          taskData: updatedTask,
+        })
+      ).unwrap();
+
       dispatch(getTasksForProject(id));
       showNotification('Task updated successfully', 'success');
     } catch (error) {
@@ -320,7 +324,13 @@ const ProjectDetailsPage = () => {
   return (
     <div className="container mx-auto p-4 bg-background text-foreground space-y-6">
       {/* Add Task Details Sidebar with lazy loading and error boundary */}
-      <Suspense fallback={<div className="fixed top-0 right-0 h-full w-full sm:w-96 bg-dark-800 flex items-center justify-center">Loading sidebar...</div>}>
+      <Suspense
+        fallback={
+          <div className="fixed top-0 right-0 h-full w-full sm:w-96 bg-dark-800 flex items-center justify-center">
+            Loading sidebar...
+          </div>
+        }
+      >
         {selectedTask && (
           <TaskDetailsSidebar
             projectId={id}
@@ -356,173 +366,189 @@ const ProjectDetailsPage = () => {
         </Link>
       </div>
 
-      {/* CONDITIONAL SECTION PATTERN: Only render if data exists */}
-      {project.description && (
-        <div className="bg-card rounded-lg p-4 shadow">
-          <h2 className="text-lg font-semibold mb-2 text-primary">
-            Description
-          </h2>
-          <p className="text-foreground whitespace-pre-wrap">
-            {project.description}
-          </p>
-        </div>
-      )}
+      {/* Group Description, Details, and Progress in one row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Description Card */}
+        {project.description && (
+          <div className="bg-card rounded-lg p-4 shadow">
+            <h2 className="text-lg font-semibold mb-2 text-primary">
+              Description
+            </h2>
+            <p className="text-foreground whitespace-pre-wrap">
+              {project.description}
+            </p>
+          </div>
+        )}
 
-      {/* CARD LAYOUT PATTERN: Card with section title + content grid */}
-      <div className="bg-card rounded-lg p-4 shadow">
-        <h2 className="text-lg font-semibold mb-4 text-primary">
-          Project Details
-        </h2>
-        {/* RESPONSIVE GRID PATTERN: Adjust columns based on screen size */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Status */}
-          <div>
-            <span className="text-sm text-foreground opacity-80 block mb-1">
-              Status
-            </span>
-            {/* DYNAMIC STYLING PATTERN: Classes determined by data */}
-            <span
-              className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getStatusPillClasses(
-                project.status
-              )}`}
-            >
-              {project.status}
-            </span>
-          </div>
-          {/* Priority */}
-          <div>
-            <span className="text-sm text-foreground opacity-80 block mb-1">
-              Priority
-            </span>
-            <span
-              className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getPriorityPillClasses(
-                project.priority
-              )}`}
-            >
-              {/* FALLBACK VALUE PATTERN: Using || for default value */}
-              {project.priority || 'Medium'}
-            </span>
-          </div>
-          {/* Due Date */}
-          <div>
-            <span className="text-sm text-foreground opacity-80 block mb-1">
-              Due Date
-            </span>
-            <span className="text-foreground font-medium">
-              {formatDate(project.endDate)}
-            </span>
-          </div>
-          {/* Members dropdown UI */}
-          <div>
-            <span className="text-sm text-foreground opacity-80 block mb-1">
-              Members
-            </span>
-            <div className="flex flex-wrap gap-2 items-center">
-              {/* DROPDOWN PATTERN: Toggle visibility with state */}
-              <div className="relative">
-                <button
-                  onClick={() =>
-                    setShowAddMemberDropdown(!showAddMemberDropdown)
-                  }
-                  className="h-8 w-8 flex items-center justify-center bg-dark-600 text-accent-purple hover:bg-dark-500 hover:text-accent-blue rounded-full transition-colors border-2 border-dark-600 hover:border-primary"
-                  title="Add Member"
-                >
-                  <PlusCircle size={18} />
-                </button>
-                {/* CONDITIONAL DROPDOWN RENDERING */}
-                {showAddMemberDropdown && (
-                  <div className="absolute left-0 mt-2 w-64 bg-card border border-dark-700 rounded-md shadow-lg z-10 p-2">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-medium text-foreground">
-                        Add Friend as Member
-                      </span>
-                      <button
-                        onClick={() => setShowAddMemberDropdown(false)}
-                        className="text-gray-400 hover:text-white"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                    {/* CONDITIONAL CONTENT BASED ON DATA AVAILABILITY */}
-                    {availableUsersToAdd.length > 0 ? (
-                      <>
-                        {/* CONTROLLED FORM ELEMENT PATTERN */}
-                        <select
-                          value={selectedUserToAdd}
-                          onChange={(e) => setSelectedUserToAdd(e.target.value)}
-                          className="w-full px-2 py-1.5 rounded-md border bg-dark-700 text-foreground border-dark-600 focus:outline-none focus:ring-1 focus:ring-primary mb-2 text-sm"
-                        >
-                          <option value="">Select friend...</option>
-                          {/* LIST RENDERING PATTERN WITH MAP */}
-                          {availableUsersToAdd.map((user) => (
-                            <option key={user._id} value={user._id}>
-                              {user.name} ({user.email})
-                            </option>
-                          ))}
-                        </select>
-                        {/* CONDITIONAL BUTTON DISABLING */}
+        {/* Project Details Card */}
+        <div className="bg-card rounded-lg p-4 shadow">
+          <h2 className="text-lg font-semibold mb-4 text-primary">
+            Project Details
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Status, Priority, Due Date, Members as before */}
+            <div>
+              <span className="text-sm text-foreground opacity-80 block mb-1">
+                Status
+              </span>
+              {/* DYNAMIC STYLING PATTERN: Classes determined by data */}
+              <span
+                className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getStatusPillClasses(
+                  project.status
+                )}`}
+              >
+                {project.status}
+              </span>
+            </div>
+            {/* Priority */}
+            <div>
+              <span className="text-sm text-foreground opacity-80 block mb-1">
+                Priority
+              </span>
+              <span
+                className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getPriorityPillClasses(
+                  project.priority
+                )}`}
+              >
+                {/* FALLBACK VALUE PATTERN: Using || for default value */}
+                {project.priority || 'Medium'}
+              </span>
+            </div>
+            {/* Due Date */}
+            <div>
+              <span className="text-sm text-foreground opacity-80 block mb-1">
+                Due Date
+              </span>
+              <span className="text-foreground font-medium">
+                {formatDate(project.endDate)}
+              </span>
+            </div>
+            {/* Members dropdown UI */}
+            <div>
+              <span className="text-sm text-foreground opacity-80 block mb-1">
+                Members
+              </span>
+              <div className="flex flex-wrap gap-2 items-center">
+                {/* DROPDOWN PATTERN: Toggle visibility with state */}
+                <div className="relative">
+                  <button
+                    onClick={() =>
+                      setShowAddMemberDropdown(!showAddMemberDropdown)
+                    }
+                    className="h-8 w-8 flex items-center justify-center bg-dark-600 text-accent-purple hover:bg-dark-500 hover:text-accent-blue rounded-full transition-colors border-2 border-dark-600 hover:border-primary"
+                    title="Add Member"
+                  >
+                    <PlusCircle size={18} />
+                  </button>
+                  {/* CONDITIONAL DROPDOWN RENDERING */}
+                  {showAddMemberDropdown && (
+                    <div className="absolute left-0 mt-2 w-64 bg-card border border-dark-700 rounded-md shadow-lg z-10 p-2">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium text-foreground">
+                          Add Friend as Member
+                        </span>
                         <button
-                          onClick={handleAddMember}
-                          disabled={!selectedUserToAdd}
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 px-3 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => setShowAddMemberDropdown(false)}
+                          className="text-gray-400 hover:text-white"
                         >
-                          Add
+                          <X size={16} />
                         </button>
-                      </>
-                    ) : (
-                      <p className="text-xs text-gray-400">
-                        No more friends to add.
-                      </p>
+                      </div>
+                      {/* CONDITIONAL CONTENT BASED ON DATA AVAILABILITY */}
+                      {availableUsersToAdd.length > 0 ? (
+                        <>
+                          {/* CONTROLLED FORM ELEMENT PATTERN */}
+                          <select
+                            value={selectedUserToAdd}
+                            onChange={(e) =>
+                              setSelectedUserToAdd(e.target.value)
+                            }
+                            className="w-full px-2 py-1.5 rounded-md border bg-dark-700 text-foreground border-dark-600 focus:outline-none focus:ring-1 focus:ring-primary mb-2 text-sm"
+                          >
+                            <option value="">Select friend...</option>
+                            {/* LIST RENDERING PATTERN WITH MAP */}
+                            {availableUsersToAdd.map((user) => (
+                              <option key={user._id} value={user._id}>
+                                {user.name} ({user.email})
+                              </option>
+                            ))}
+                          </select>
+                          {/* CONDITIONAL BUTTON DISABLING */}
+                          <button
+                            onClick={handleAddMember}
+                            disabled={!selectedUserToAdd}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 px-3 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Add
+                          </button>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-400">
+                          No more friends to add.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* MEMBER LIST PATTERN: Avatars with fallback images */}
+                {project.members && project.members.length > 0 ? (
+                  <div className="flex items-center">
+                    {project.members.slice(0, 5).map((member, i) => (
+                      <img
+                        key={member._id}
+                        src={
+                          member.avatar ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                            member.name || member.email || '?'
+                          )}&background=random&color=fff&size=32`
+                        }
+                        alt={member.name}
+                        className={`h-8 w-8 rounded-full object-cover border-2 border-dark-600 ${
+                          i === 0 ? '' : '-ml-2'
+                        } hover:border-primary transition-colors`}
+                        title={member.name}
+                      />
+                    ))}
+                    {project.members.length > 5 && (
+                      <div
+                        className="-ml-2 h-8 w-8 bg-dark-600 rounded-full border-2 border-dark-600 flex items-center justify-center text-xs text-gray-200"
+                        title={project.members
+                          .slice(5)
+                          .map((m) => m.name)
+                          .join(', ')}
+                      >
+                        +{project.members.length - 5}
+                      </div>
                     )}
                   </div>
+                ) : (
+                  <span className="text-foreground opacity-70 text-sm ml-2">
+                    No members assigned.
+                  </span>
                 )}
               </div>
-              {/* MEMBER LIST PATTERN: Avatars with fallback images */}
-              {project.members && project.members.length > 0 ? (
-                project.members.map((member) => (
-                  <div key={member._id} className="relative group">
-                    <img
-                      src={
-                        member.avatar ||
-                        `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                          member.name || member.email || '?'
-                        )}&background=random&color=fff&size=32`
-                      }
-                      alt={member.name}
-                      className="h-8 w-8 rounded-full object-cover border-2 border-dark-600 group-hover:border-primary transition-colors"
-                      title={member.name} // Tooltip on hover
-                    />
-                  </div>
-                ))
-              ) : (
-                <span className="text-foreground opacity-70 text-sm ml-2">
-                  No members assigned.
-                </span>
-              )}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* PROGRESS INDICATOR PATTERN: Visual representation of completion */}
-      <div className="bg-card rounded-lg p-4 shadow">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-lg font-semibold text-primary">
-            Progress: {project.progress || 0}%
-          </h2>
-          {/* CONDITIONAL SUCCESS MESSAGE */}
-          {project.progress === 100 && (
-            <span className="text-green-500 text-sm font-medium">
-              Complete!
-            </span>
-          )}
-        </div>
-        {/* PROGRESS BAR WITH DYNAMIC WIDTH */}
-        <div className="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
-          <div
-            className="bg-primary h-4 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${project.progress || 0}%` }} // Dynamic inline style
-          ></div>
+        {/* Progress Card */}
+        <div className="bg-card rounded-lg p-4 shadow">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-lg font-semibold text-primary">
+              Progress: {project.progress || 0}%
+            </h2>
+            {project.progress === 100 && (
+              <span className="text-green-500 text-sm font-medium">
+                Complete!
+              </span>
+            )}
+          </div>
+          <div className="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
+            <div
+              className="bg-primary h-4 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${project.progress || 0}%` }}
+            ></div>
+          </div>
         </div>
       </div>
 
@@ -553,19 +579,65 @@ const ProjectDetailsPage = () => {
         />
 
         {/* TASK LIST WITH CONDITIONAL STATES */}
-        {tasksLoading && (
-          <p className="text-foreground opacity-70">Loading tasks...</p>
+        {!tasksLoading && !tasksError && tasks.length > 0 && (
+          <div className="overflow-visible bg-dark-800 rounded-lg border border-dark-700">
+            <table className="min-w-full divide-y divide-dark-700">
+              <thead>
+                <tr className="bg-primary bg-opacity-20">
+                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                    Title
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                    Priority
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                    Due Date
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-card divide-y divide-dark-700">
+                {tasks.map((task) => (
+                  <tr
+                    key={task._id}
+                    className="hover:bg-dark-700 transition-colors cursor-pointer"
+                    onClick={() => handleTaskClick(task._id)}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
+                      {task.title}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs">
+                      <div className="relative group max-w-xs">
+                        <span className="block truncate">
+                          {task.description}
+                        </span>
+                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                          {task.description}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                      {task.status}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                      {task.priority}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                      {formatDate(task.dueDate)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-        {tasksError && (
-          <p className="text-red-500">Error loading tasks: {tasksMessage}</p>
-        )}
-        {!tasksLoading && !tasksError && (
-          <TaskList
-            projectId={id}
-            tasks={tasks}
-            onTaskClick={handleTaskClick}
-          />
-        )}
+
+        {/* End of tasks section */}
       </div>
     </div>
   );
