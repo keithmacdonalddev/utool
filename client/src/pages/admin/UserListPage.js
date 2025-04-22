@@ -388,13 +388,13 @@ const UserListPage = () => {
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-center text-xs font-bold text-[#F8FAFC] uppercase tracking-wider"
+                    className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider"
                   >
                     Verified
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-center text-xs font-bold text-[#F8FAFC] uppercase tracking-wider"
+                    className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider"
                   >
                     Actions
                   </th>
@@ -453,14 +453,14 @@ const UserListPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-[#F8FAFC]">
                       {user.role}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-center">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
                       {user.isVerified ? (
                         <CheckCircle className="h-5 w-5 text-green-500 inline" />
                       ) : (
                         <XCircle className="h-5 w-5 text-red-500 inline" />
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
+                    <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium space-x-2">
                       <Link
                         to={`/admin/users/${user._id}/edit`}
                         title="Edit User"

@@ -289,10 +289,10 @@ const TasksPage = () => {
         className="hover:bg-dark-700 transition-colors cursor-pointer"
         onClick={() => (window.location.href = `/tasks/${task._id}`)}
       >
-        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC]">
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC] text-left">
           {task.title}
         </td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm">
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-left">
           <span
             className={`inline-flex px-2 py-0.5 text-xs rounded-full ${getStatusBgColorClass(
               task.status
@@ -301,7 +301,7 @@ const TasksPage = () => {
             {task.status}
           </span>
         </td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm">
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-left">
           <span
             className={`inline-flex px-2 py-0.5 text-xs rounded-full ${getPriorityBgColorClass(
               task.priority
@@ -310,10 +310,10 @@ const TasksPage = () => {
             {task.priority}
           </span>
         </td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
           {task.project ? getProjectName(task.project) : 'None'}
         </td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
           {formatDate(task.dueDate)}
         </td>
       </tr>

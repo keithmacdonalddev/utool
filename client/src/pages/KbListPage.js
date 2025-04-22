@@ -288,10 +288,10 @@ const KbListPage = () => {
       className="hover:bg-dark-700 transition-colors cursor-pointer"
       onClick={() => (window.location.href = `/kb/${article._id}`)}
     >
-      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC]">
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC] text-left">
         {article.title}
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
         <div className="flex flex-wrap gap-1">
           {article.tags?.slice(0, 2).map((tag, index) => (
             <span
@@ -308,13 +308,13 @@ const KbListPage = () => {
           )}
         </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
         <div className="flex items-center">
           <Eye size={14} className="mr-1" />
           <span>{article.views || 0}</span>
         </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
         {article.updatedAt ? formatDate(article.updatedAt) : 'Not updated'}
       </td>
     </tr>

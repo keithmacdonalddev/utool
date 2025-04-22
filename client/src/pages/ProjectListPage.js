@@ -81,16 +81,16 @@ const ProjectListPage = memo(() => {
         className="hover:bg-dark-700 transition-colors cursor-pointer"
         onClick={() => (window.location.href = `/projects/${project._id}`)}
       >
-        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC]">
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC] text-left">
           {project.name}
         </td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
           {project.status}
         </td>
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
           {formatDate(project.dueDate || project.endDate)}
         </td>
-        <td className="px-6 py-4 whitespace-nowrap">
+        <td className="px-6 py-4 whitespace-nowrap text-left">
           <div className="flex items-center">
             <div className="w-full bg-gray-600 rounded-full h-2 mr-2 overflow-hidden">
               <div
