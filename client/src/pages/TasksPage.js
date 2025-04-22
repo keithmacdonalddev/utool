@@ -86,10 +86,32 @@ const TasksPage = () => {
   };
 
   // Get project name from project ID
-  const getProjectName = (projectId) => {
-    if (!projectId) return 'No Project';
-    const project = projects?.find((p) => p._id === projectId);
-    return project ? project.name : 'Unknown Project';
+  const getProjectName = (projectField) => {
+    // Case 1: No project at all
+    if (!projectField) return 'Standalone Task';
+
+    // Case 2: The project field is already populated as an object with name
+    if (typeof projectField === 'object' && projectField.name) {
+      return projectField.name;
+    }
+
+    // Case 3: We need to find the project in the projects array
+    // First check if projects are still loading
+    if (!projects || projects.length === 0) {
+      return 'Loading project info...';
+    }
+
+    // Convert projectField to string to ensure consistent comparison
+    const projectIdStr = String(projectField);
+
+    const project = projects.find((p) => String(p._id) === projectIdStr);
+
+    if (project) {
+      return project.name;
+    } else {
+      console.debug('Project not found for ID:', projectField);
+      return 'Standalone Task';
+    }
   };
 
   // Format date for display

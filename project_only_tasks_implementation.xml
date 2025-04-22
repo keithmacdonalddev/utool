@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project_task_restructure>
+  <core_requirement>
+    <description>Restructure application to make tasks exclusively project-based with zero standalone task functionality</description>
+  </core_requirement>
+
+  <architectural_changes>
+    <change>Remove all standalone task routes/pages</change>
+    <change>Modify all task components to require project context</change>
+    <change>Update all API endpoints to mandate project ID</change>
+    <change>Enforce project association at database/model level</change>
+  </architectural_changes>
+
+  <client_side_requirements>
+    <requirement completed="false">Remove TasksPage and related standalone components</requirement>
+    <requirement completed="false">Modify TaskCreateModal to require project selection</requirement>
+    <requirement completed="false">Update QuickTaskWidget to work only within project views</requirement>
+    <requirement completed="false">Revise taskSlice.js to handle project-scoped operations</requirement>
+    <requirement completed="false">Update App.js routing to remove standalone task routes</requirement>
+    <requirement completed="false">Modify Sidebar to remove standalone tasks link</requirement>
+    <requirement completed="false">Update Dashboard to show project-scoped tasks only</requirement>
+  </client_side_requirements>
+
+  <server_side_requirements>
+    <requirement completed="false">Update Task model to enforce project association</requirement>
+    <requirement completed="false">Modify taskController.js to validate project ownership</requirement>
+    <requirement completed="false">Update tasks.js routes to require project ID parameter</requirement>
+    <requirement completed="false">Add middleware for project validation</requirement>
+  </server_side_requirements>
+
+  <data_migration>
+    <requirement completed="false">Create migration script for orphaned tasks</requirement>
+    <requirement completed="false">Assign to default project</requirement>
+    <requirement completed="false">Handle edge cases</requirement>
+    <requirement completed="false">Provide detailed logging</requirement>
+    <requirement completed="false">Include rollback capability</requirement>
+  </data_migration>
+
+  <verification_checks>
+    <check completed="false">Confirm no standalone task routes exist</check>
+    <check completed="false">Verify API endpoints reject requests without project ID</check>
+    <check completed="false">Check all UI paths enforce project context</check>
+    <check completed="false">Validate model associations</check>
+    <check completed="false">Test all task flows within project scope</check>
+  </verification_checks>
+
+  <implementation_rules>
+    <rule>Atomic, incremental changes</rule>
+    <rule>Backward compatibility during transition</rule>
+    <rule>Comprehensive logging</rule>
+    <rule>Zero tolerance for orphaned tasks</rule>
+    <rule>Strict project validation at all layers</rule>
+  </implementation_rules>
+</project_task_restructure>
