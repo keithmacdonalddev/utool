@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
-import { useDispatch } from 'react-redux';
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import { createTask } from '../../features/tasks/taskSlice';
 import { X } from 'lucide-react';
 
-const TaskCreateModal = ({ isOpen, onClose, projectId }) => {
+const TaskCreateModal = ({ isOpen, onClose, projectId = null }) => {
   const dispatch = useDispatch();
+  // Get projects from Redux store for project dropdown
+  const { projects } = useSelector((state) => state.projects);
+
   const [form, setForm] = useState({
     title: '',
     description: '',
     status: 'Not Started',
-    priority: 'Medium',
+    priority: 'Low', // Set default to Low
     dueDate: '',
+    project: projectId || '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update form when projectId prop changes
+  useEffect(() => {
+    setForm((prevForm) => ({
+      ...prevForm,
+      project: projectId || '',
+    }));
+  }, [projectId]);
 
   if (!isOpen) return null;
 
@@ -27,11 +39,13 @@ const TaskCreateModal = ({ isOpen, onClose, projectId }) => {
 
     setIsSubmitting(true);
     try {
-      // Include projectId from props
+      // Use the selected project from form or the projectId prop
+      const selectedProjectId = form.project || projectId || undefined;
+
       await dispatch(
         createTask({
           title: form.title,
-          projectId,
+          projectId: selectedProjectId,
           description: form.description,
           status: form.status,
           priority: form.priority,
@@ -45,8 +59,9 @@ const TaskCreateModal = ({ isOpen, onClose, projectId }) => {
         title: '',
         description: '',
         status: 'Not Started',
-        priority: 'Medium',
+        priority: 'Low',
         dueDate: '',
+        project: projectId || '',
       });
     } catch (error) {
       console.error('Failed to create task:', error);
@@ -108,6 +123,32 @@ const TaskCreateModal = ({ isOpen, onClose, projectId }) => {
               placeholder="Task description"
             />
           </div>
+
+          {/* Only show project field if no project was passed from parent component */}
+          {!projectId && (
+            <div>
+              <label
+                htmlFor="project"
+                className="block text-sm font-medium text-foreground mb-1"
+              >
+                Project (Optional)
+              </label>
+              <select
+                id="project"
+                name="project"
+                value={form.project}
+                onChange={handleChange}
+                className="w-full p-2 bg-dark-700 text-foreground border border-dark-600 rounded focus:outline-none focus:border-primary"
+              >
+                <option value="">-- No Project (Standalone Task) --</option>
+                {projects?.map((project) => (
+                  <option key={project._id} value={project._id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>

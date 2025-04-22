@@ -4,7 +4,15 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux'; // Import useSelector
 import api from '../utils/api';
-import { Tag, Layers, ArrowLeft, Eye, Grid, List } from 'lucide-react'; // Added Grid and List icons
+import {
+  Tag,
+  Layers,
+  ArrowLeft,
+  Eye,
+  Grid,
+  List,
+  AlignJustify,
+} from 'lucide-react'; // Added AlignJustify icon
 import KbSearchBar from '../components/kb/KbSearchBar';
 import Button from '../components/common/Button';
 
@@ -15,7 +23,6 @@ const VIEW_PREFERENCE_KEY = 'kb_view_preference';
 const saveToLocalStorage = (key, value) => {
   try {
     localStorage.setItem(key, value);
-    console.log(`Saved view preference: ${value}`);
     return true;
   } catch (error) {
     console.error('Failed to save to localStorage:', error);
@@ -26,9 +33,6 @@ const saveToLocalStorage = (key, value) => {
 const getFromLocalStorage = (key, defaultValue) => {
   try {
     const savedValue = localStorage.getItem(key);
-    console.log(
-      `Loaded view preference: ${savedValue || 'none - using default'}`
-    );
     return savedValue !== null && savedValue !== undefined
       ? savedValue
       : defaultValue;
@@ -60,6 +64,12 @@ const KbListPage = () => {
   const setViewModeWithStorage = (newMode) => {
     setViewMode(newMode);
     saveToLocalStorage(VIEW_PREFERENCE_KEY, newMode);
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not set';
+    return new Date(dateString).toLocaleDateString();
   };
 
   // --- Fetch/Search Articles ---
@@ -151,8 +161,7 @@ const KbListPage = () => {
     <Link
       key={article._id}
       to={`/kb/${article._id}`}
-      className="block bg-card border border-dark-700 shadow-card rounded-xl p-4 text-white transition duration-300 ease-in-out hover:shadow-md hover:border-accent-purple mx-0.5 mb-3
-      focus:outline-none focus:ring-2 focus:ring-accent-purple focus:ring-offset-1 focus:ring-offset-dark-800"
+      className="block bg-card border border-dark-700 rounded-lg p-4 mb-3 hover:bg-dark-700 transition-colors"
     >
       <div className="flex justify-between">
         <div className="flex-grow">
@@ -269,13 +278,46 @@ const KbListPage = () => {
           </div>
         )}
       </div>
-
-      {/* Action Buttons Area */}
-      <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end items-center">
-        {/* Subtle View Cue */}
-        <span className="text-xs text-gray-400">Click card to view</span>
-      </div>
     </Link>
+  );
+
+  // Render a single article as a table row
+  const renderTableItem = (article) => (
+    <tr
+      key={article._id}
+      className="hover:bg-dark-700 transition-colors cursor-pointer"
+      onClick={() => (window.location.href = `/kb/${article._id}`)}
+    >
+      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC]">
+        {article.title}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+        <div className="flex flex-wrap gap-1">
+          {article.tags?.slice(0, 2).map((tag, index) => (
+            <span
+              key={index}
+              className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full text-xs"
+            >
+              {tag}
+            </span>
+          ))}
+          {article.tags?.length > 2 && (
+            <span className="text-xs text-gray-400">
+              +{article.tags.length - 2}
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+        <div className="flex items-center">
+          <Eye size={14} className="mr-1" />
+          <span>{article.views || 0}</span>
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+        {article.updatedAt ? formatDate(article.updatedAt) : 'Not updated'}
+      </td>
+    </tr>
   );
 
   return (
@@ -320,6 +362,17 @@ const KbListPage = () => {
             >
               <List size={18} />
             </button>
+            <button
+              onClick={() => setViewModeWithStorage('table')}
+              className={`p-2 rounded-md ${
+                viewMode === 'table'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Table View"
+            >
+              <AlignJustify size={18} />
+            </button>
           </div>
 
           {/* Only show New Article button to admin users */}
@@ -355,7 +408,7 @@ const KbListPage = () => {
             {message}
           </p>
         )}
-        {/* Articles Grid/List View - Render only if not loading and articles exist */}
+        {/* Articles Grid/List/Table View - Render only if not loading and articles exist */}
         {!isLoading &&
           !message &&
           articles.length > 0 &&
@@ -363,13 +416,47 @@ const KbListPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {articles.map((article) => renderGridItem(article))}
             </div>
-          ) : (
+          ) : viewMode === 'list' ? (
             <div className="flex flex-col px-2 overflow-hidden">
               <div className="overflow-y-auto -mx-2 px-2 pt-2 pb-2">
-                {' '}
-                {/* Added pt-2 for top padding */}
                 {articles.map((article) => renderListItem(article))}
               </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto bg-dark-800 rounded-lg border border-dark-700">
+              <table className="min-w-full divide-y divide-dark-700">
+                <thead>
+                  <tr className="bg-primary bg-opacity-20">
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Title
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Tags
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Views
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Last Updated
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-card divide-y divide-dark-700">
+                  {articles.map((article) => renderTableItem(article))}
+                </tbody>
+              </table>
             </div>
           ))}
       </div>

@@ -48,7 +48,6 @@ const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
-const TaskCreatePage = lazy(() => import('./pages/TaskCreatePage'));
 
 function App() {
   // Extract user authentication state from Redux store
@@ -147,7 +146,6 @@ function App() {
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/notes/trash" element={<TrashPage />} />
                   <Route path="/tasks" element={<TasksPage />} />
-                  <Route path="/tasks/new" element={<TaskCreatePage />} />
                   <Route path="/tasks/:id" element={<TaskDetailsPage />} />
                   <Route
                     path="/favorite-quotes"

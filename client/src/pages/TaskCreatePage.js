@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { ArrowLeft } from 'lucide-react';
 import { createTask } from '../features/tasks/taskSlice';
+import { getProjects } from '../features/projects/projectSlice';
 
 const TaskCreatePage = () => {
   const dispatch = useDispatch();
@@ -11,10 +12,20 @@ const TaskCreatePage = () => {
     title: '',
     description: '',
     status: 'Not Started',
-    priority: 'Medium',
+    priority: 'Low', // Changed default from Medium to Low
     dueDate: '',
-    project: '', // Optional project ID
+    project: '', // This will store the project ID
   });
+
+  // Get projects from Redux store
+  const { projects, isLoading: projectsLoading } = useSelector(
+    (state) => state.projects
+  );
+
+  // Fetch projects when component mounts
+  useEffect(() => {
+    dispatch(getProjects());
+  }, [dispatch]);
 
   const onChange = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -27,7 +38,7 @@ const TaskCreatePage = () => {
     }
 
     try {
-      // Use createTask thunk with required fields
+      // Use createTask thunk with all fields
       await dispatch(
         createTask({
           title: form.title,
@@ -66,7 +77,7 @@ const TaskCreatePage = () => {
             name="title"
             value={form.title}
             onChange={onChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             required
           />
         </div>
@@ -76,7 +87,7 @@ const TaskCreatePage = () => {
             name="description"
             value={form.description}
             onChange={onChange}
-            className="w-full p-2 border rounded"
+            className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             rows={3}
           />
         </div>
@@ -87,7 +98,7 @@ const TaskCreatePage = () => {
               name="status"
               value={form.status}
               onChange={onChange}
-              className="p-2 border rounded"
+              className="p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             >
               <option value="Not Started">Not Started</option>
               <option value="In Progress">In Progress</option>
@@ -100,7 +111,7 @@ const TaskCreatePage = () => {
               name="priority"
               value={form.priority}
               onChange={onChange}
-              className="p-2 border rounded"
+              className="p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             >
               <option value="Low">Low</option>
               <option value="Medium">Medium</option>
@@ -114,26 +125,32 @@ const TaskCreatePage = () => {
               name="dueDate"
               value={form.dueDate}
               onChange={onChange}
-              className="p-2 border rounded"
+              className="p-2 border rounded bg-dark-700 text-foreground border-dark-600"
             />
           </div>
         </div>
 
-        {/* Project Selection - Optional */}
+        {/* Project Selection - Replace text input with dropdown */}
         <div>
           <label className="block text-sm font-medium">
             Project (Optional)
           </label>
-          <input
-            type="text"
+          <select
             name="project"
             value={form.project}
             onChange={onChange}
-            placeholder="Project ID"
-            className="w-full p-2 border rounded"
-          />
+            className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
+          >
+            <option value="">-- No Project (Standalone Task) --</option>
+            {projects &&
+              projects.map((project) => (
+                <option key={project._id} value={project._id}>
+                  {project.name}
+                </option>
+              ))}
+          </select>
           <p className="text-xs text-gray-400 mt-1">
-            Leave blank for standalone task
+            Select a project or leave as standalone task
           </p>
         </div>
 

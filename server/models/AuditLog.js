@@ -38,6 +38,7 @@ const AuditLogSchema = new mongoose.Schema(
         'task_update',
         'task_delete',
         'task_status_change',
+        'task_retrieve',
 
         // Knowledge Base actions
         'kb_create',

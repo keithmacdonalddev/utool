@@ -611,25 +611,25 @@ const AuditLogsPage = () => {
 
       {/* Logs Table */}
       <div className="bg-white dark:bg-gray-800 overflow-auto rounded-lg shadow">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-700">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
+          <thead className="bg-primary bg-opacity-20 dark:bg-gray-700">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                 User
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                 Action
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                 IP Address
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                 Timestamp
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                 Actions
               </th>
             </tr>
@@ -637,7 +637,10 @@ const AuditLogsPage = () => {
           <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center">
+                <td
+                  colSpan={6}
+                  className="px-6 py-4 text-center border-b border-gray-200 dark:border-gray-700"
+                >
                   <div className="flex justify-center">
                     <svg
                       className="animate-spin h-5 w-5 text-blue-600"
@@ -668,7 +671,7 @@ const AuditLogsPage = () => {
                   key={log._id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap text-left border-b border-gray-200 dark:border-gray-700">
                     {log.userId ? (
                       <>
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
@@ -682,12 +685,12 @@ const AuditLogsPage = () => {
                       'Anonymous'
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap text-left border-b border-gray-200 dark:border-gray-700">
                     <div className="text-sm text-gray-900 dark:text-white">
                       {log.action.replace(/_/g, ' ')}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap text-left border-b border-gray-200 dark:border-gray-700">
                     <span
                       className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
                         log.status
@@ -696,13 +699,13 @@ const AuditLogsPage = () => {
                       {log.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                  <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                     {log.ipAddress}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                  <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                     {new Date(log.timestamp).toLocaleString()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium border-b border-gray-200 dark:border-gray-700">
                     <button
                       onClick={() => handleViewLogDetails(log)}
                       className="text-blue-600 hover:text-blue-900 dark:text-blue-500 dark:hover:text-blue-400"
@@ -716,7 +719,7 @@ const AuditLogsPage = () => {
               <tr>
                 <td
                   colSpan={6}
-                  className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400"
+                  className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
                 >
                   No audit logs found
                 </td>

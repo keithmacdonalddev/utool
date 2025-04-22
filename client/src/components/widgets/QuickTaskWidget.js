@@ -70,7 +70,7 @@ const QuickTaskWidget = () => {
           View All Tasks
         </Link>
         <Link
-          to="/tasks/new"
+          to="/tasks?new=true"
           className="text-sm text-[#F8FAFC] font-bold hover:text-accent-purple hover:underline"
         >
           + New Task

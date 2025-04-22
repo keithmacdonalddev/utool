@@ -89,12 +89,12 @@ export const getTasks = async (req, res, next) => {
  * @access  Private - requires authentication
  */
 export const createTask = async (req, res, next) => {
-  // Log attempted action
+  // Log attempted action - don't include the full req object
   logger.verbose('Attempting to create task', {
     userId: req.user.id,
     projectId: req.body.project,
     title: req.body.title,
-    req,
+    // Remove req object to avoid circular reference
   });
 
   try {
@@ -112,115 +112,114 @@ export const createTask = async (req, res, next) => {
       dueDate,
       estimatedTime,
       project: projectId,
+      assignee,
     } = req.body;
 
+    // Create basic task with required fields
+    const taskData = {
+      title,
+      assignee,
+      ...(description && { description }),
+      ...(status && { status }),
+      ...(priority && { priority }),
+      ...(dueDate && { dueDate }),
+      ...(estimatedTime && { estimatedTime }),
+    };
+
+    // Only add project if it exists
+    if (projectId) {
+      taskData.project = projectId;
+
+      // Project-related validations only if project ID exists
+      if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        logger.error('Task creation failed - invalid project ID format', {
+          userId: req.user.id,
+          projectId,
+        });
+        return res
+          .status(400)
+          .json({ success: false, message: 'Invalid project ID format' });
+      }
+
+      // Find the project to verify it exists and user has permission
+      const project = await Project.findById(projectId);
+      if (!project) {
+        logger.error('Task creation failed - project not found', {
+          userId: req.user.id,
+          projectId,
+        });
+        return res.status(404).json({
+          success: false,
+          message: `Project not found with id ${projectId}`,
+        });
+      }
+
+      // Authorization check: Ensure user is a member of the project
+      const isMember = project.members.some(
+        (memberId) => memberId.toString() === req.user.id
+      );
+
+      if (!isMember) {
+        logger.error('Task creation failed - user not authorized', {
+          userId: req.user.id,
+          projectId,
+        });
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to add tasks to this project',
+        });
+      }
+    }
+
     // Validation: Check required fields
-    // Return early with appropriate error messages for better UX
     if (!title || title.trim() === '') {
       logger.error('Task creation failed - missing title', {
         userId: req.user.id,
-        req,
       });
       return res
-        .status(400) // Bad Request status code
+        .status(400)
         .json({ success: false, message: 'Task title is required' });
     }
 
-    // Validation: Ensure project ID is provided
-    if (!projectId) {
-      logger.error('Task creation failed - missing project ID', {
-        userId: req.user.id,
-        req,
-      });
-      return res
-        .status(400)
-        .json({ success: false, message: 'Project ID is required' });
+    // Validation: Check that status is one of the allowed values if provided
+    if (status) {
+      const validStatuses = ['Not Started', 'In Progress', 'Completed'];
+      if (!validStatuses.includes(status)) {
+        logger.error('Task creation failed - invalid status', {
+          userId: req.user.id,
+          status,
+        });
+        return res.status(400).json({
+          success: false,
+          message: `Invalid status. Must be one of: ${validStatuses.join(
+            ', '
+          )}`,
+        });
+      }
     }
 
-    // Validation: Check that project ID is valid MongoDB ObjectId format
-    // This prevents database errors from invalid ID formats
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-      logger.error('Task creation failed - invalid project ID format', {
-        userId: req.user.id,
-        projectId,
-        req,
-      });
-      return res
-        .status(400)
-        .json({ success: false, message: 'Invalid project ID format' });
-    }
-
-    // Find the project to verify it exists and user has permission
-    const project = await Project.findById(projectId);
-    if (!project) {
-      logger.error('Task creation failed - project not found', {
-        userId: req.user.id,
-        projectId,
-        req,
-      });
-      return res.status(404).json({
-        // Not Found status code
-        success: false,
-        message: `Project not found with id ${projectId}`,
-      });
-    }
-
-    // Authorization check: Ensure user is a member of the project
-    // This uses .some() to check if the user's ID is in the project members array
-    const isMember = project.members.some(
-      (memberId) => memberId.toString() === req.user.id
-    );
-
-    if (!isMember) {
-      logger.error('Task creation failed - user not authorized', {
-        userId: req.user.id,
-        projectId,
-        req,
-      });
-      return res.status(403).json({
-        // Forbidden status code
-        success: false,
-        message: 'Not authorized to add tasks to this project',
-      });
-    }
-
-    // Validation: Check that status is one of the allowed values
-    const validStatuses = ['To Do', 'In Progress', 'In Review', 'Completed'];
-    if (status && !validStatuses.includes(status)) {
-      logger.error('Task creation failed - invalid status', {
-        userId: req.user.id,
-        status,
-        req,
-      });
-      return res.status(400).json({
-        success: false,
-        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
-      });
-    }
-
-    // Validation: Check that priority is one of the allowed values
-    const validPriorities = ['Low', 'Medium', 'High'];
-    if (priority && !validPriorities.includes(priority)) {
-      logger.error('Task creation failed - invalid priority', {
-        userId: req.user.id,
-        priority,
-        req,
-      });
-      return res.status(400).json({
-        success: false,
-        message: `Invalid priority. Must be one of: ${validPriorities.join(
-          ', '
-        )}`,
-      });
+    // Validation: Check that priority is one of the allowed values if provided
+    if (priority) {
+      const validPriorities = ['Low', 'Medium', 'High'];
+      if (!validPriorities.includes(priority)) {
+        logger.error('Task creation failed - invalid priority', {
+          userId: req.user.id,
+          priority,
+        });
+        return res.status(400).json({
+          success: false,
+          message: `Invalid priority. Must be one of: ${validPriorities.join(
+            ', '
+          )}`,
+        });
+      }
     }
 
     // Validation: Check that dueDate is a valid date if provided
-    // The isNaN() check verifies the date is parseable
     if (dueDate && isNaN(new Date(dueDate).getTime())) {
       logger.error('Task creation failed - invalid due date format', {
         userId: req.user.id,
         dueDate,
-        req,
       });
       return res.status(400).json({
         success: false,
@@ -228,22 +227,7 @@ export const createTask = async (req, res, next) => {
       });
     }
 
-    // Create task object with validated data
-    // Uses spread operator with conditional properties for optional fields
-    // JAVASCRIPT PATTERN: Conditional object property inclusion
-    const taskData = {
-      title,
-      assignee: req.user.id,
-      project: projectId,
-      ...(description && { description }), // Only include if provided
-      ...(status && { status }),
-      ...(priority && { priority }),
-      ...(dueDate && { dueDate }),
-      ...(estimatedTime && { estimatedTime }),
-    };
-
     // Save the task to the database
-    // MONGOOSE PATTERN: Model.create() to create and save in one operation
     const task = await Task.create(taskData);
 
     // Log successful creation
@@ -253,12 +237,9 @@ export const createTask = async (req, res, next) => {
         title: task.title,
         projectId: task.project,
       },
-      req,
     });
 
     // Add audit log for task creation for tracking and accountability
-    // This records who created what and when for security/auditing purposes
-    // SECURITY PATTERN: Audit logging for tracking user actions
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_create', 'success', {
       taskId: task._id,
@@ -267,7 +248,6 @@ export const createTask = async (req, res, next) => {
     });
 
     // Return the created task with 201 Created status code
-    // REST API PATTERN: Use 201 for resource creation
     res.status(201).json({ success: true, data: task });
   } catch (err) {
     // Log error
@@ -275,7 +255,6 @@ export const createTask = async (req, res, next) => {
       error: err,
       userId: req.user?.id,
       taskData: req.body,
-      req,
     });
 
     // Log the failed attempt for auditing
@@ -287,8 +266,6 @@ export const createTask = async (req, res, next) => {
     });
 
     // Handle Mongoose validation errors with specific messages
-    // This provides more helpful feedback to the client
-    // ERROR HANDLING PATTERN: Different responses for different error types
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((val) => val.message);
       return res
@@ -325,7 +302,7 @@ export const getTasksForProject = async (req, res, next) => {
   try {
     const tasks = await Task.find({ project: req.params.projectId })
       .sort({ createdAt: -1 })
-      .populate('owner', 'name email');
+      .populate('assignee', 'name email');
 
     logger.info('Successfully retrieved tasks for project', {
       userId: req.user.id,
@@ -335,7 +312,7 @@ export const getTasksForProject = async (req, res, next) => {
     });
 
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-    await auditLog(req, 'tasks_retrieve', 'success', {
+    await auditLog(req, 'task_retrieve', 'success', {
       projectId: req.params.projectId,
       count: tasks.length,
     });
@@ -350,7 +327,7 @@ export const getTasksForProject = async (req, res, next) => {
     });
 
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-    await auditLog(req, 'tasks_retrieve', 'failed', {
+    await auditLog(req, 'task_retrieve', 'failed', {
       projectId: req.params.projectId,
       error: err.message,
     });
@@ -378,10 +355,9 @@ export const getTask = async (req, res, next) => {
   });
 
   try {
-    const task = await Task.findById(req.params.id).populate(
-      'owner',
-      'name email'
-    );
+    const task = await Task.findById(req.params.id)
+      .populate('assignee', 'name email')
+      .populate('project', 'name description');
 
     if (!task) {
       logger.warn('Task not found', {
@@ -394,12 +370,12 @@ export const getTask = async (req, res, next) => {
       );
     }
 
-    // Make sure user is task owner or has appropriate permissions
-    if (task.owner.toString() !== req.user.id) {
+    // Make sure user is task assignee or has appropriate permissions
+    if (task.assignee._id.toString() !== req.user.id) {
       logger.warn('Unauthorized access attempt to task', {
         userId: req.user.id,
         taskId: req.params.id,
-        taskOwnerId: task.owner.toString(),
+        taskAssigneeId: task.assignee._id.toString(),
         req,
       });
       return next(
@@ -470,12 +446,12 @@ export const updateTask = async (req, res, next) => {
       );
     }
 
-    // Make sure user is task owner or has appropriate permissions
-    if (task.owner.toString() !== req.user.id) {
+    // Make sure user is task assignee or has appropriate permissions
+    if (task.assignee.toString() !== req.user.id) {
       logger.warn('Unauthorized attempt to update task', {
         userId: req.user.id,
         taskId: req.params.id,
-        taskOwnerId: task.owner.toString(),
+        taskAssigneeId: task.assignee.toString(),
         req,
       });
       return next(

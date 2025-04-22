@@ -46,6 +46,111 @@ const NotesPage = () => {
     setShowEditor(true);
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not set';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  // Render note as a table row for the table view
+  const renderTableView = () => {
+    if (notes.length === 0) {
+      return (
+        <div className="text-center text-gray-500 py-8">No notes found.</div>
+      );
+    }
+
+    return (
+      <div className="overflow-x-auto bg-dark-800 rounded-lg border border-dark-700 mt-6">
+        <table className="min-w-full divide-y divide-dark-700">
+          <thead>
+            <tr className="bg-primary bg-opacity-20">
+              <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
+                Title
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
+                Tags
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
+                Last Updated
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-card divide-y divide-dark-700">
+            {notes.map((note) => (
+              <tr
+                key={note._id}
+                className="hover:bg-dark-700 transition-colors cursor-pointer"
+                onClick={() => {
+                  dispatch(setSelectedNote(note));
+                  setShowEditor(true);
+                }}
+              >
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC] text-left">
+                  {note.title}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                  <div className="flex flex-wrap gap-1 text-left">
+                    {note.tags?.slice(0, 2).map((tag) => (
+                      <span
+                        key={tag}
+                        className="bg-[#23242B] border border-[#393A41] text-[#F8FAFC] px-2 py-0.5 rounded-full text-xs"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    {note.tags?.length > 2 && (
+                      <span className="text-xs text-gray-400">
+                        +{note.tags.length - 2}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                  {note.pinned && (
+                    <span className="mr-2" title="Pinned">
+                      📌
+                    </span>
+                  )}
+                  {note.favorite && (
+                    <span className="mr-2" title="Favorite">
+                      ★
+                    </span>
+                  )}
+                  {note.archived && (
+                    <span className="mr-2" title="Archived">
+                      🗄️
+                    </span>
+                  )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                  {formatDate(note.updatedAt)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-left">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dispatch(setSelectedNote(note));
+                      setShowEditor(true);
+                    }}
+                    className="text-accent-blue hover:underline mr-3"
+                  >
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-dark-800 text-text pb-12">
       {/* Minimal Header */}
@@ -82,7 +187,6 @@ const NotesPage = () => {
       </div>
 
       {/* Sticky Filter Bar */}
-
       <div className="max-w-5xl mx-auto px-4">
         <FilterBar view={view} setView={setView} />
       </div>
@@ -131,7 +235,7 @@ const NotesPage = () => {
                   </div>
                 </div>
               )
-            ) : (
+            ) : view === 'list' ? (
               <NotesListView
                 notes={notes}
                 onEdit={(note) => {
@@ -139,6 +243,8 @@ const NotesPage = () => {
                   setShowEditor(true);
                 }}
               />
+            ) : (
+              renderTableView()
             )}
           </>
         )}

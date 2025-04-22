@@ -1,50 +1,59 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
-  X,
   ArrowUp,
   ArrowDown,
   Filter,
   ChevronDown,
-  Loader,
+  CheckCircle,
+  AlertTriangle,
+  Calendar,
+  Grid,
+  List,
+  AlignJustify,
 } from 'lucide-react';
 import Button from '../components/common/Button';
-import {
-  getTasks,
-  getTask,
-  resetTaskStatus,
-  updateTask,
-} from '../features/tasks/taskSlice';
-import TaskList from '../components/tasks/TaskList';
+import { getTasks, resetTaskStatus } from '../features/tasks/taskSlice';
+import TaskCreateModal from '../components/tasks/TaskCreateModal';
 import { getProjects } from '../features/projects/projectSlice';
+import { useNotifications } from '../context/NotificationContext';
 
 const TasksPage = () => {
+  const location = useLocation();
   const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const { tasks, currentTask, isLoading, isError, message } = useSelector(
+  const { showNotification } = useNotifications();
+  const { tasks, isLoading, isError, message } = useSelector(
     (state) => state.tasks
   );
   const { projects } = useSelector((state) => state.projects);
-  const [activeTaskId, setActiveTaskId] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('In Progress'); // Default to 'In Progress'
-  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false); // State for dropdown visibility
-  const [isTaskDetailLoading, setIsTaskDetailLoading] = useState(false); // Separate loading state for task details
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // View mode state with localStorage persistence
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('taskViewMode') || 'grid';
+  });
+
+  // Function to set view mode and save it to localStorage
+  const setViewModeWithStorage = (mode) => {
+    localStorage.setItem('taskViewMode', mode);
+    setViewMode(mode);
+  };
 
   // Add sorting state
   const [sortCriteria, setSortCriteria] = useState('dueDate');
   const [sortOrder, setSortOrder] = useState('asc');
 
-  // Form state for editing the active task
-  const [form, setForm] = useState({
-    title: '',
-    description: '',
-    status: '',
-    priority: '',
-    dueDate: '',
-    project: '',
-  });
+  // Check URL for query parameter
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('new') === 'true') {
+      setIsCreateModalOpen(true);
+    }
+  }, [location]);
 
   useEffect(() => {
     dispatch(getTasks());
@@ -54,64 +63,99 @@ const TasksPage = () => {
     };
   }, [dispatch]);
 
-  useEffect(() => {
-    if (activeTaskId) {
-      setIsTaskDetailLoading(true); // Set task detail loading to true
-      dispatch(getTask(activeTaskId))
-        .unwrap()
-        .finally(() => {
-          setIsTaskDetailLoading(false); // Set it back to false when done
-        });
-    }
-  }, [dispatch, activeTaskId]);
-
-  useEffect(() => {
-    if (currentTask && activeTaskId === currentTask._id) {
-      setForm({
-        title: currentTask.title || '',
-        description: currentTask.description || '',
-        status: currentTask.status || 'Not Started',
-        priority: currentTask.priority || 'Low',
-        dueDate: currentTask.dueDate
-          ? new Date(currentTask.dueDate).toISOString().substr(0, 10)
-          : '',
-        project: currentTask.project?._id || '',
-      });
-    }
-  }, [currentTask, activeTaskId]);
-
-  const handleTaskClick = (taskId) => {
-    setActiveTaskId(taskId);
+  // Open create task modal
+  const openCreateModal = () => {
+    setIsCreateModalOpen(true);
   };
 
-  const closeTaskDetails = () => {
-    setActiveTaskId(null);
+  // Close create task modal
+  const closeCreateModal = () => {
+    setIsCreateModalOpen(false);
   };
 
-  // Form handling
-  const onChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  // Toggle sort order and update sort criteria
+  const handleSortChange = (criteria) => {
+    if (sortCriteria === criteria) {
+      // If same criteria, toggle order
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If new criteria, set to ascending by default
+      setSortCriteria(criteria);
+      setSortOrder('asc');
+    }
+  };
 
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    setIsTaskDetailLoading(true);
-    try {
-      await dispatch(
-        updateTask({
-          taskId: activeTaskId,
-          updates: form,
-        })
-      ).unwrap();
+  // Get project name from project ID
+  const getProjectName = (projectId) => {
+    if (!projectId) return 'No Project';
+    const project = projects?.find((p) => p._id === projectId);
+    return project ? project.name : 'Unknown Project';
+  };
 
-      // Instead of refreshing the entire task list, just get the updated task
-      dispatch(getTask(activeTaskId));
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return 'No due date';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
 
-      // Show a success message or toast notification here if you have one
-    } catch (error) {
-      console.error('Failed to update task:', error);
-      // Show error notification if needed
-    } finally {
-      setIsTaskDetailLoading(false);
+  // Get priority color class
+  const getPriorityColorClass = (priority) => {
+    switch (priority) {
+      case 'High':
+        return 'text-red-400';
+      case 'Medium':
+        return 'text-yellow-400';
+      case 'Low':
+        return 'text-green-400';
+      default:
+        return 'text-gray-400';
+    }
+  };
+
+  // Get status color class
+  const getStatusColorClass = (status) => {
+    switch (status) {
+      case 'Completed':
+        return 'text-green-400';
+      case 'In Progress':
+        return 'text-blue-400';
+      case 'Not Started':
+        return 'text-gray-400';
+      default:
+        return 'text-gray-400';
+    }
+  };
+
+  // Get status background color class for badges
+  const getStatusBgColorClass = (status) => {
+    switch (status) {
+      case 'Completed':
+        return 'bg-green-500 text-green-100';
+      case 'In Progress':
+        return 'bg-blue-500 text-blue-100';
+      case 'Not Started':
+        return 'bg-gray-500 text-gray-100';
+      default:
+        return 'bg-gray-500 text-gray-100';
+    }
+  };
+
+  // Get priority background color class for badges
+  const getPriorityBgColorClass = (priority) => {
+    switch (priority) {
+      case 'High':
+        return 'bg-red-500 text-red-100';
+      case 'Medium':
+        return 'bg-yellow-500 text-yellow-100';
+      case 'Low':
+        return 'bg-green-500 text-green-100';
+      default:
+        return 'bg-gray-500 text-gray-100';
     }
   };
 
@@ -159,22 +203,129 @@ const TasksPage = () => {
     });
   };
 
-  // Toggle sort order and update sort criteria
-  const handleSortChange = (criteria) => {
-    if (sortCriteria === criteria) {
-      // If same criteria, toggle order
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      // If new criteria, set to ascending by default
-      setSortCriteria(criteria);
-      setSortOrder('asc');
-    }
+  // Render task as a grid item
+  const renderGridItem = (task) => {
+    return (
+      <Link
+        to={`/tasks/${task._id}`}
+        key={task._id}
+        className="block bg-card border border-dark-700 rounded-lg shadow p-4 hover:bg-dark-700 transition"
+      >
+        <h3 className="text-xl font-semibold text-[#F8FAFC] truncate">
+          {task.title}
+        </h3>
+        <div className="flex gap-2 mt-2">
+          <span
+            className={`px-2 py-0.5 text-xs rounded-full ${getStatusBgColorClass(
+              task.status
+            )}`}
+          >
+            {task.status}
+          </span>
+          <span
+            className={`px-2 py-0.5 text-xs rounded-full ${getPriorityBgColorClass(
+              task.priority
+            )}`}
+          >
+            {task.priority}
+          </span>
+        </div>
+        <div className="mt-2 text-sm text-[#C7C9D1]">
+          <p>{task.project ? getProjectName(task.project) : 'No Project'}</p>
+          <p className="mt-1">{formatDate(task.dueDate)}</p>
+        </div>
+      </Link>
+    );
   };
 
-  // Only show loading state when initially loading task list, not when loading a single task
+  // Render task as a list item
+  const renderListItem = (task) => {
+    return (
+      <Link
+        to={`/tasks/${task._id}`}
+        key={task._id}
+        className="block bg-card border border-dark-700 rounded-lg p-4 mb-3 hover:bg-dark-700 transition-colors"
+      >
+        <div className="flex justify-between items-center">
+          <div className="flex-1">
+            <h3 className="text-xl font-semibold text-[#F8FAFC]">
+              {task.title}
+            </h3>
+            <p className="text-sm text-[#C7C9D1] mt-1">
+              Project: {task.project ? getProjectName(task.project) : 'None'}
+            </p>
+            <div className="flex gap-2 mt-2">
+              <span
+                className={`px-2 py-0.5 text-xs rounded-full ${getStatusBgColorClass(
+                  task.status
+                )}`}
+              >
+                {task.status}
+              </span>
+              <span
+                className={`px-2 py-0.5 text-xs rounded-full ${getPriorityBgColorClass(
+                  task.priority
+                )}`}
+              >
+                {task.priority}
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+            <div className="text-sm text-[#C7C9D1] mb-1">
+              {formatDate(task.dueDate)}
+            </div>
+          </div>
+        </div>
+      </Link>
+    );
+  };
+
+  // Render task as a table row
+  const renderTableItem = (task) => {
+    return (
+      <tr
+        key={task._id}
+        className="hover:bg-dark-700 transition-colors cursor-pointer"
+        onClick={() => (window.location.href = `/tasks/${task._id}`)}
+      >
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC]">
+          {task.title}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm">
+          <span
+            className={`inline-flex px-2 py-0.5 text-xs rounded-full ${getStatusBgColorClass(
+              task.status
+            )}`}
+          >
+            {task.status}
+          </span>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm">
+          <span
+            className={`inline-flex px-2 py-0.5 text-xs rounded-full ${getPriorityBgColorClass(
+              task.priority
+            )}`}
+          >
+            {task.priority}
+          </span>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+          {task.project ? getProjectName(task.project) : 'None'}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
+          {formatDate(task.dueDate)}
+        </td>
+      </tr>
+    );
+  };
+
+  // Only show loading state when initially loading task list
   const isInitialLoading = isLoading && tasks.length === 0;
   if (isInitialLoading)
-    return <div className="container mx-auto p-4">Loading tasks...</div>;
+    return (
+      <div className="container mx-auto p-4 text-center">Loading tasks...</div>
+    );
   if (isError)
     return (
       <div className="container mx-auto p-4 text-red-600">Error: {message}</div>
@@ -185,8 +336,11 @@ const TasksPage = () => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header Row */}
-      <div className="flex justify-between items-center p-4">
+      {/* Task Create Modal */}
+      <TaskCreateModal isOpen={isCreateModalOpen} onClose={closeCreateModal} />
+
+      {/* Header Row: Back Link, Title, View Toggle, Create Button */}
+      <div className="flex justify-between items-center mb-3 px-4 md:px-0 pt-4">
         <div className="flex items-center gap-4">
           <Link
             to="/dashboard"
@@ -195,20 +349,61 @@ const TasksPage = () => {
           >
             <ArrowLeft size={18} />
           </Link>
-          <h1 className="text-2xl font-bold text-foreground">All Tasks</h1>
+          <h1 className="text-2xl font-bold text-[#F8FAFC]">All Tasks</h1>
         </div>
-        <Button
-          variant="primary"
-          className="py-2 px-6 text-base font-bold shadow"
-          onClick={() => navigate('/tasks/new')}
-        >
-          + New Task
-        </Button>
+
+        <div className="flex items-center gap-3">
+          {/* View Toggle Buttons */}
+          <div className="bg-dark-700 rounded-lg p-1 flex">
+            <button
+              onClick={() => setViewModeWithStorage('grid')}
+              className={`p-2 rounded-md ${
+                viewMode === 'grid'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Grid View"
+            >
+              <Grid size={18} />
+            </button>
+            <button
+              onClick={() => setViewModeWithStorage('list')}
+              className={`p-2 rounded-md ${
+                viewMode === 'list'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+            <button
+              onClick={() => setViewModeWithStorage('table')}
+              className={`p-2 rounded-md ${
+                viewMode === 'table'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Table View"
+            >
+              <AlignJustify size={18} />
+            </button>
+          </div>
+
+          <Button
+            variant="primary"
+            className="py-2 px-6 text-base font-bold shadow"
+            style={{ color: '#F8FAFC' }}
+            onClick={openCreateModal}
+          >
+            + New Task
+          </Button>
+        </div>
       </div>
 
-      {/* Combined Filter and Sort Controls */}
+      {/* Filter and Sort Controls */}
       {tasks.length > 0 && (
-        <div className="px-4 mb-4">
+        <div className="px-4 md:px-0 mb-4">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3 bg-card border border-dark-700 rounded-md">
             {/* Status Filter Dropdown */}
             <div className="relative inline-block text-left">
@@ -347,150 +542,67 @@ const TasksPage = () => {
         </div>
       )}
 
-      {/* Split View Container */}
-      <div className="flex flex-1 overflow-hidden px-4 pb-4">
-        {/* Task List - 1/3 width */}
-        <div className="w-1/3 overflow-hidden border-r border-dark-700">
-          <div className="h-full overflow-y-auto px-4 -mr-4 pr-8">
-            {filteredAndSortedTasks && filteredAndSortedTasks.length > 0 ? (
-              <TaskList
-                tasks={filteredAndSortedTasks}
-                onTaskClick={handleTaskClick}
-                activeTaskId={activeTaskId}
-                simplified={true}
-              />
-            ) : (
-              <p className="py-4 text-center text-gray-400">
-                {tasks.length > 0
-                  ? `No ${
-                      statusFilter !== 'All' ? statusFilter : ''
-                    } tasks found.`
-                  : 'No tasks found.'}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Task Details - 2/3 width */}
-        <div className="w-2/3 pl-4 overflow-y-auto">
-          {isTaskDetailLoading ? (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              <Loader size={32} className="animate-spin" />
+      {/* Scrollable Content Area */}
+      <div className="flex-grow overflow-y-auto p-4 md:px-0">
+        {filteredAndSortedTasks && filteredAndSortedTasks.length > 0 ? (
+          viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredAndSortedTasks.map((task) => renderGridItem(task))}
             </div>
-          ) : activeTaskId && currentTask ? (
-            <div className="bg-card rounded-lg border border-dark-700 p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">{currentTask.title}</h2>
-                <button
-                  onClick={closeTaskDetails}
-                  className="p-1 rounded-full hover:bg-dark-700"
-                  aria-label="Close task details"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <form onSubmit={onSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium">Title</label>
-                  <input
-                    name="title"
-                    value={form.title}
-                    onChange={onChange}
-                    className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">
-                    Description
-                  </label>
-                  <textarea
-                    name="description"
-                    value={form.description}
-                    onChange={onChange}
-                    className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
-                    rows={5}
-                  />
-                </div>
-
-                {/* Project Selection */}
-                <div>
-                  <label className="block text-sm font-medium">Project</label>
-                  <select
-                    name="project"
-                    value={form.project}
-                    onChange={onChange}
-                    className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
-                  >
-                    <option value="">-- No Project (Standalone Task) --</option>
-                    {projects &&
-                      projects.map((project) => (
-                        <option key={project._id} value={project._id}>
-                          {project.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="flex flex-wrap gap-4">
-                  <div className="w-full sm:w-auto flex-1">
-                    <label className="block text-sm font-medium">Status</label>
-                    <select
-                      name="status"
-                      value={form.status}
-                      onChange={onChange}
-                      className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
-                    >
-                      <option value="Not Started">Not Started</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Completed">Completed</option>
-                    </select>
-                  </div>
-                  <div className="w-full sm:w-auto flex-1">
-                    <label className="block text-sm font-medium">
-                      Priority
-                    </label>
-                    <select
-                      name="priority"
-                      value={form.priority}
-                      onChange={onChange}
-                      className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
-                  <div className="w-full sm:w-auto flex-1">
-                    <label className="block text-sm font-medium">
-                      Due Date
-                    </label>
-                    <input
-                      type="date"
-                      name="dueDate"
-                      value={form.dueDate}
-                      onChange={onChange}
-                      className="w-full p-2 border rounded bg-dark-700 text-foreground border-dark-600"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </form>
+          ) : viewMode === 'list' ? (
+            <div className="flex flex-col overflow-hidden">
+              {filteredAndSortedTasks.map((task) => renderListItem(task))}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              <p>Select a task to view details</p>
+            <div className="overflow-x-auto bg-dark-800 rounded-lg border border-dark-700">
+              <table className="min-w-full divide-y divide-dark-700">
+                <thead>
+                  <tr className="bg-primary bg-opacity-20">
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Title
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Status
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Priority
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Project
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Due Date
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-card divide-y divide-dark-700">
+                  {filteredAndSortedTasks.map((task) => renderTableItem(task))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+          )
+        ) : (
+          <p className="py-4 text-center text-gray-400">
+            {tasks.length > 0
+              ? `No ${statusFilter !== 'All' ? statusFilter : ''} tasks found.`
+              : 'No tasks found.'}
+          </p>
+        )}
       </div>
     </div>
   );

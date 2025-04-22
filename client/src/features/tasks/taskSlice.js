@@ -43,15 +43,28 @@ const initialState = {
  * @param {Object} payload - Object with task properties
  * @param {string} payload.title - Task title
  * @param {string} payload.projectId - Project ID this task belongs to
+ * @param {string} payload.description - Task description
+ * @param {string} payload.status - Task status
+ * @param {string} payload.priority - Task priority
+ * @param {string} payload.dueDate - Task due date
  * @returns {Promise<Object>} - Promise with the created task data
  */
 export const createTask = createAsyncThunk(
   'tasks/create',
-  async ({ title, projectId }, thunkAPI) => {
-    // Expect title and projectId
+  async (
+    { title, projectId, description, status, priority, dueDate },
+    thunkAPI
+  ) => {
     try {
-      // Make API request using our axios instance
-      const response = await api.post(TASK_URL, { title, project: projectId }); // Send both
+      // Make API request with all task fields
+      const response = await api.post(TASK_URL, {
+        title,
+        project: projectId,
+        description,
+        status,
+        priority,
+        dueDate,
+      });
       return response.data.data; // Return the newly created task data
     } catch (error) {
       // ERROR HANDLING PATTERN: Extract message from various error response structures

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { fetchNotes } from '../../features/notes/noteSlice';
 import Button from '../common/Button';
-import { Search, Grid, List } from 'lucide-react';
+import { Search, Grid, List, AlignJustify } from 'lucide-react';
 import Card from '../common/Card';
 
 const SORT_OPTIONS = [
@@ -80,25 +80,45 @@ const FilterBar = ({ view, setView }) => {
           ))}
         </select>
 
-        <div className="ml-auto flex gap-2">
-          <Button
-            type="button"
-            variant={view === 'grid' ? 'primary' : 'secondary'}
-            className="px-4"
-            onClick={() => setView('grid')}
-            aria-label="Grid view"
-          >
-            <Grid size={16} className="mr-1" /> Grid
-          </Button>
-          <Button
-            type="button"
-            variant={view === 'list' ? 'primary' : 'secondary'}
-            className="px-4"
-            onClick={() => setView('list')}
-            aria-label="List view"
-          >
-            <List size={16} className="mr-1" /> List
-          </Button>
+        <div className="ml-auto">
+          <div className="bg-dark-700 rounded-lg p-1 flex">
+            <button
+              type="button"
+              onClick={() => setView('grid')}
+              className={`p-2 rounded-md ${
+                view === 'grid'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Grid View"
+            >
+              <Grid size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('list')}
+              className={`p-2 rounded-md ${
+                view === 'list'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="List View"
+            >
+              <List size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('table')}
+              className={`p-2 rounded-md ${
+                view === 'table'
+                  ? 'bg-primary text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+              title="Table View"
+            >
+              <AlignJustify size={18} />
+            </button>
+          </div>
         </div>
       </form>
     </Card>
