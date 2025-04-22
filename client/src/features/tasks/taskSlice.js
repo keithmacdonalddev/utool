@@ -11,8 +11,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../utils/api'; // Use our configured axios instance
 
-const TASK_URL = '/tasks/'; // Relative to base URL in api.js
-
 /**
  * Initial state object for the tasks slice
  *
@@ -25,6 +23,7 @@ const TASK_URL = '/tasks/'; // Relative to base URL in api.js
 const initialState = {
   tasks: [], // Collection of task objects
   currentTask: null, // Currently selected/viewed task
+  currentProjectId: null, // Current project context
   isError: false, // Error state flag
   isSuccess: false, // Success state flag
   isLoading: false, // Loading state flag for UI spinners/indicators
@@ -42,7 +41,7 @@ const initialState = {
  *
  * @param {Object} payload - Object with task properties
  * @param {string} payload.title - Task title
- * @param {string} payload.projectId - Project ID this task belongs to
+ * @param {string} payload.projectId - Project ID this task belongs to (required)
  * @param {string} payload.description - Task description
  * @param {string} payload.status - Task status
  * @param {string} payload.priority - Task priority
@@ -56,10 +55,16 @@ export const createTask = createAsyncThunk(
     thunkAPI
   ) => {
     try {
-      // Make API request with all task fields
-      const response = await api.post(TASK_URL, {
+      // Validate required project ID
+      if (!projectId) {
+        return thunkAPI.rejectWithValue(
+          'Project ID is required for task creation'
+        );
+      }
+
+      // Make API request with all task fields to the project-scoped endpoint
+      const response = await api.post(`/projects/${projectId}/tasks`, {
         title,
-        project: projectId,
         description,
         status,
         priority,
@@ -81,51 +86,29 @@ export const createTask = createAsyncThunk(
 );
 
 /**
- * Get All Tasks Async Thunk
- *
- * Pattern: No arguments needed, use _ placeholder parameter
- * Fetches all tasks for the current user from the API
- */
-export const getTasks = createAsyncThunk(
-  'tasks/getAll',
-  async (_, thunkAPI) => {
-    // No arguments needed for this specific request
-    try {
-      const response = await api.get(TASK_URL);
-      return response.data.data; // Return the array of tasks
-    } catch (error) {
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      return thunkAPI.rejectWithValue(message);
-    }
-  }
-);
-
-/**
  * Get Tasks For Project Async Thunk
  *
  * Gets tasks that belong to a specific project
  * Shows error handling and validation patterns
  *
- * @param {string} projectId - ID of the project to fetch tasks for
+ * @param {string} projectId - ID of the project to fetch tasks for (required)
  */
 export const getTasksForProject = createAsyncThunk(
   'tasks/getForProject',
   async (projectId, thunkAPI) => {
     // VALIDATION PATTERN: Early return for invalid input
     if (!projectId) {
-      // No project context, return empty list
-      return [];
+      return thunkAPI.rejectWithValue('Project ID is required to fetch tasks');
     }
+
     try {
       // Use the project-specific task route
       // API PATTERN: RESTful nested resource URL
       const response = await api.get(`/projects/${projectId}/tasks`);
-      return response.data.data; // Return the array of tasks for this project
+      return {
+        tasks: response.data.data,
+        projectId,
+      }; // Return the array of tasks for this project and the project ID
     } catch (error) {
       const message =
         (error.response &&
@@ -145,15 +128,26 @@ export const getTasksForProject = createAsyncThunk(
  * from a single payload object for cleaner function calls
  *
  * @param {Object} payload - Update payload
+ * @param {string} payload.projectId - ID of the project the task belongs to (required)
  * @param {string} payload.taskId - ID of the task to update
  * @param {Object} payload.updates - Object with fields to update
  */
 export const updateTask = createAsyncThunk(
   'tasks/update',
-  async ({ taskId, updates }, thunkAPI) => {
+  async ({ projectId, taskId, updates }, thunkAPI) => {
+    // Validate required fields
+    if (!projectId || !taskId) {
+      return thunkAPI.rejectWithValue(
+        'Project ID and Task ID are required to update a task'
+      );
+    }
+
     try {
-      // URL PATTERN: Combine base URL with specific ID
-      const response = await api.put(`${TASK_URL}${taskId}`, updates);
+      // URL PATTERN: Project-scoped task URL
+      const response = await api.put(
+        `/projects/${projectId}/tasks/${taskId}`,
+        updates
+      );
       return response.data.data;
     } catch (error) {
       const message =
@@ -173,16 +167,25 @@ export const updateTask = createAsyncThunk(
  * DELETE PATTERN: Return the ID on success to allow
  * filtering from state in the reducer
  *
- * @param {string} taskId - ID of task to delete
- * @returns {string} taskId - Same ID, used for state updates
+ * @param {Object} payload - Delete payload
+ * @param {string} payload.projectId - ID of the project the task belongs to (required)
+ * @param {string} payload.taskId - ID of task to delete
+ * @returns {Object} - Contains taskId used for state updates
  */
 export const deleteTask = createAsyncThunk(
   'tasks/delete',
-  async (taskId, thunkAPI) => {
+  async ({ projectId, taskId }, thunkAPI) => {
+    // Validate required fields
+    if (!projectId || !taskId) {
+      return thunkAPI.rejectWithValue(
+        'Project ID and Task ID are required to delete a task'
+      );
+    }
+
     try {
-      await api.delete(`${TASK_URL}${taskId}`);
+      await api.delete(`/projects/${projectId}/tasks/${taskId}`);
       // Return the ID so we can filter it from state
-      return taskId;
+      return { taskId };
     } catch (error) {
       const message =
         (error.response &&
@@ -202,18 +205,33 @@ export const deleteTask = createAsyncThunk(
  * More efficient than updating each task individually
  *
  * @param {Object} payload - Bulk update properties
+ * @param {string} payload.projectId - Project ID the tasks belong to (required)
  * @param {string[]} payload.taskIds - Array of task IDs to update
  * @param {Object} payload.updates - Update object to apply to all tasks
  */
 export const bulkUpdateTasks = createAsyncThunk(
   'tasks/bulkUpdate',
-  async ({ taskIds, updates }, thunkAPI) => {
+  async ({ projectId, taskIds, updates }, thunkAPI) => {
+    // Validate required fields
+    if (!projectId || !taskIds || taskIds.length === 0) {
+      return thunkAPI.rejectWithValue(
+        'Project ID and Task IDs are required for bulk updates'
+      );
+    }
+
     try {
-      const response = await api.put('/tasks/bulk-update', {
+      const response = await api.put(
+        `/projects/${projectId}/tasks/bulk-update`,
+        {
+          taskIds,
+          update: updates, // Note the field name difference (API expects "update")
+        }
+      );
+      return {
+        modifiedCount: response.data.modifiedCount,
         taskIds,
-        update: updates, // Note the field name difference (API expects "update")
-      });
-      return { modifiedCount: response.data.modifiedCount, taskIds };
+        projectId,
+      };
     } catch (error) {
       const message =
         (error.response &&
@@ -232,14 +250,80 @@ export const bulkUpdateTasks = createAsyncThunk(
  * Fetches detailed information for a single task
  * Sets the currentTask property in state
  *
- * @param {string} taskId - ID of task to fetch
+ * @param {Object} payload - Fetch parameters
+ * @param {string} payload.projectId - ID of the project the task belongs to (required)
+ * @param {string} payload.taskId - ID of task to fetch
  */
 export const getTask = createAsyncThunk(
   'tasks/getOne',
-  async (taskId, thunkAPI) => {
+  async ({ projectId, taskId }, thunkAPI) => {
+    // Validate required fields
+    if (!projectId || !taskId) {
+      return thunkAPI.rejectWithValue(
+        'Project ID and Task ID are required to retrieve a task'
+      );
+    }
+
     try {
-      const response = await api.get(`${TASK_URL}${taskId}`);
+      const response = await api.get(`/projects/${projectId}/tasks/${taskId}`);
       return response.data.data;
+    } catch (error) {
+      const message =
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
+        error.message ||
+        error.toString();
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
+/**
+ * Get Recent Tasks Across All Projects
+ *
+ * This thunk fetches the user's most recent tasks across all their projects
+ * It's used by dashboard widgets that need to display tasks regardless of project context
+ *
+ * @returns {Promise<Array>} - Promise with array of recent tasks
+ */
+export const getRecentTasks = createAsyncThunk(
+  'tasks/getRecent',
+  async (_, thunkAPI) => {
+    try {
+      // First, fetch all projects the user has access to
+      const projectsResponse = await api.get('/projects');
+      const projects = projectsResponse.data.data;
+
+      if (!projects || projects.length === 0) {
+        return { tasks: [] };
+      }
+
+      // Get tasks from the user's most recent projects (limit to avoid too many requests)
+      const recentProjects = projects.slice(0, 3);
+      const taskPromises = recentProjects.map(
+        (project) =>
+          api
+            .get(`/projects/${project._id}/tasks`)
+            .then((response) => response.data.data)
+            .catch((err) => []) // Return empty array if fetching tasks for a project fails
+      );
+
+      // Wait for all task requests to complete
+      const projectTasks = await Promise.all(taskPromises);
+
+      // Flatten the arrays and add project information to each task
+      const allTasks = projectTasks.flat().map((task) => ({
+        ...task,
+        projectName:
+          recentProjects.find((p) => p._id === task.project)?.name ||
+          'Unknown Project',
+      }));
+
+      // Sort by creation date (newest first)
+      allTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+      return { tasks: allTasks };
     } catch (error) {
       const message =
         (error.response &&
@@ -279,7 +363,23 @@ export const taskSlice = createSlice({
       state.isError = false;
       state.message = '';
     },
-    // Add other specific reducers if needed (e.g., manually updating a task locally)
+
+    /**
+     * Set current project context for tasks
+     * This helps components know which project they're working with
+     */
+    setTaskProjectContext: (state, action) => {
+      state.currentProjectId = action.payload;
+    },
+
+    /**
+     * Clear tasks when switching projects or contexts
+     * This prevents tasks from one project appearing in another
+     */
+    clearTasks: (state) => {
+      state.tasks = [];
+      state.currentTask = null;
+    },
   },
   // Handle async action states using builder callback pattern
   extraReducers: (builder) => {
@@ -305,23 +405,6 @@ export const taskSlice = createSlice({
         state.message = action.payload; // Error message from rejectWithValue
       })
 
-      // Get Tasks Cases
-      .addCase(getTasks.pending, (state) => {
-        state.isLoading = true;
-      })
-      .addCase(getTasks.fulfilled, (state, action) => {
-        // IMMUTABLE UPDATE PATTERN: Replacing arrays
-        state.isLoading = false;
-        state.isSuccess = true; // Indicate success
-        state.tasks = action.payload; // Replace existing tasks with fetched ones
-      })
-      .addCase(getTasks.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload; // Error message
-        state.tasks = []; // Clear tasks on error? Or keep stale data?
-      })
-
       // Get Tasks for Project Cases
       .addCase(getTasksForProject.pending, (state) => {
         state.isLoading = true; // Reuse general loading flag for now
@@ -330,8 +413,9 @@ export const taskSlice = createSlice({
         state.isLoading = false;
         state.isSuccess = true;
         // Replace the tasks state with only the tasks for the current project
-        // This might need adjustment if you want to cache tasks for multiple projects
-        state.tasks = action.payload;
+        state.tasks = action.payload.tasks;
+        // Store the current project ID context
+        state.currentProjectId = action.payload.projectId;
       })
       .addCase(getTasksForProject.rejected, (state, action) => {
         state.isLoading = false;
@@ -341,6 +425,9 @@ export const taskSlice = createSlice({
       })
 
       // Update Task Cases
+      .addCase(updateTask.pending, (state) => {
+        state.isLoading = true;
+      })
       .addCase(updateTask.fulfilled, (state, action) => {
         // ARRAY UPDATE PATTERN: Map to replace an item in an array
         state.isLoading = false;
@@ -349,6 +436,7 @@ export const taskSlice = createSlice({
         state.tasks = state.tasks.map((t) =>
           t._id === action.payload._id ? action.payload : t
         );
+        state.message = 'Task updated successfully!';
       })
       .addCase(updateTask.rejected, (state, action) => {
         state.isLoading = false;
@@ -357,12 +445,18 @@ export const taskSlice = createSlice({
       })
 
       // Delete Task Cases
+      .addCase(deleteTask.pending, (state) => {
+        state.isLoading = true;
+      })
       .addCase(deleteTask.fulfilled, (state, action) => {
         // ARRAY FILTER PATTERN: Remove an item from an array
         state.isLoading = false;
         state.isSuccess = true;
         // Remove the deleted task from the array based on ID
-        state.tasks = state.tasks.filter((t) => t._id !== action.payload);
+        state.tasks = state.tasks.filter(
+          (t) => t._id !== action.payload.taskId
+        );
+        state.message = 'Task deleted successfully!';
       })
       .addCase(deleteTask.rejected, (state, action) => {
         state.isLoading = false;
@@ -371,13 +465,15 @@ export const taskSlice = createSlice({
       })
 
       // Bulk Update Cases
+      .addCase(bulkUpdateTasks.pending, (state) => {
+        state.isLoading = true;
+      })
       .addCase(bulkUpdateTasks.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        // Optionally mark tasks or re-fetch
-        // For more complex updates, we might want to refresh the tasks
-        // by dispatching getTasks or getTasksForProject instead of
-        // trying to update the local state
+        state.message = `${action.payload.modifiedCount} tasks updated successfully!`;
+        // The proper way to update would be to re-fetch the tasks
+        // but for now, we just set a success message
       })
       .addCase(bulkUpdateTasks.rejected, (state, action) => {
         state.isLoading = false;
@@ -401,11 +497,28 @@ export const taskSlice = createSlice({
         state.isError = true;
         state.message = action.payload;
         state.currentTask = null; // Clear current task on error
+      })
+
+      // Get Recent Tasks Cases
+      .addCase(getRecentTasks.pending, (state) => {
+        state.isLoading = true;
+      })
+      .addCase(getRecentTasks.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isSuccess = true;
+        state.tasks = action.payload.tasks;
+      })
+      .addCase(getRecentTasks.rejected, (state, action) => {
+        state.isLoading = false;
+        state.isError = true;
+        state.message = action.payload;
       });
   },
 });
 
 // Export the reducer's actions
-export const { resetTaskStatus } = taskSlice.actions;
+export const { resetTaskStatus, setTaskProjectContext, clearTasks } =
+  taskSlice.actions;
+
 // Export the reducer as default
 export default taskSlice.reducer;

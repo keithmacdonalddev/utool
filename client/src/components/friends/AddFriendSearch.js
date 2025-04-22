@@ -7,7 +7,7 @@ import {
   getFriendRequests,
 } from '../../features/friends/friendSlice';
 import { Input } from '../common/Input'; // Assuming common Input component
-import { Button } from '../common/Button'; // Assuming common Button component
+import Button from '../common/Button'; // Fixed: Changed from named import to default import
 import { UserPlus, Search, XCircle } from 'lucide-react';
 import UserAvatar from '../common/UserAvatar'; // Assuming common UserAvatar component
 import Spinner from '../common/Spinner'; // Assuming common Spinner component

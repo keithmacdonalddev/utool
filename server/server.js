@@ -6,57 +6,57 @@
 
 ┌─────────────────────────────────────────────────────────────┐
 
-│ SERVER ARCHITECTURE EDUCATIONAL GUIDE                       │
+│ SERVER ARCHITECTURE EDUCATIONAL GUIDE                       │
 
-│                                                             │
+│                                                             │
 
 │ This Express.js server implements a modern API architecture │
 
-│ with the following key components:                          │
+│ with the following key components:                          │
 
-│                                                             │
+│                                                             │
 
-│ 1. LAYERED ARCHITECTURE                                     │
+│ 1. LAYERED ARCHITECTURE                                     │
 
-│    - Routes: Define API endpoints and HTTP methods          │
+│    - Routes: Define API endpoints and HTTP methods          │
 
-│    - Controllers: Handle business logic for each route      │
+│    - Controllers: Handle business logic for each route      │
 
-│    - Models: Define data schema and database interactions   │
+│    - Models: Define data schema and database interactions   │
 
-│    - Middleware: Process requests before reaching routes    │
+│    - Middleware: Process requests before reaching routes    │
 
-│                                                             │
+│                                                             │
 
-│ 2. REAL-TIME CAPABILITIES                                   │
+│ 2. REAL-TIME CAPABILITIES                                   │
 
-│    - Socket.IO integration for bidirectional communication  │
+│    - Socket.IO integration for bidirectional communication  │
 
-│    - JWT-based socket authentication                        │
+│    - JWT-based socket authentication                        │
 
-│    - Event-based messaging system                           │
+│    - Event-based messaging system                           │
 
-│                                                             │
+│                                                             │
 
-│ 3. CROSS-CUTTING CONCERNS                                   │
+│ 3. CROSS-CUTTING CONCERNS                                   │
 
-│    - Comprehensive logging (morgan + custom logger)         │
+│    - Comprehensive logging (morgan + custom logger)         │
 
-│    - CORS security with dynamic origin validation           │
+│    - CORS security with dynamic origin validation           │
 
-│    - Request timing and performance monitoring              │
+│    - Request timing and performance monitoring              │
 
-│    - Health check endpoints for infrastructure monitoring   │
+│    - Health check endpoints for infrastructure monitoring   │
 
-│                                                             │
+│                                                             │
 
-│ 4. REST API DESIGN PRINCIPLES                               │
+│ 4. REST API DESIGN PRINCIPLES                               │
 
-│    - Feature-based route organization                       │
+│    - Feature-based route organization                       │
 
-│    - Consistent API versioning (/api/v1/...)                │
+│    - Consistent API versioning (/api/v1/...)                │
 
-│    - Resource-oriented endpoint naming                      │
+│    - Resource-oriented endpoint naming                      │
 
 └─────────────────────────────────────────────────────────────┘
 
@@ -221,8 +221,6 @@ const MONGO_URI = process.env.MONGO_URI;
 // Each file contains related route handlers organized by feature
 
 import authRoutes from './routes/auth.js';
-
-import taskRoutes from './routes/tasks.js';
 
 import noteRoutesGeneral from './routes/noteRoutesGeneral.js';
 
@@ -444,7 +442,8 @@ app.get('/api/v1/status', (req, res) => {
 
 app.use('/api/v1/auth', authRoutes);
 
-app.use('/api/v1/tasks', taskRoutes);
+// No standalone task routes - tasks must be accessed through projects
+// app.use('/api/v1/tasks', taskRoutes); // REMOVED: All task operations must go through projects
 
 app.use('/api/v1/notes', personalNotesRouter);
 
@@ -486,6 +485,20 @@ app.get('/', (req, res) => {
   logger.info('Root route accessed');
 
   res.send('API is running...');
+});
+
+// Add a catch-all route for standalone task requests to redirect/inform users
+app.all('/api/v1/tasks/*any', (req, res) => {
+  logger.warn(`Attempted access to standalone task route: ${req.originalUrl}`, {
+    method: req.method,
+    userId: req.user?.id,
+  });
+
+  res.status(400).json({
+    success: false,
+    message:
+      'Tasks can only be accessed within project context. Please use /api/v1/projects/:projectId/tasks instead.',
+  });
 });
 
 // Error handling middleware with enhanced logging

@@ -9,10 +9,16 @@ import {
   updateProject,
   deleteProject,
 } from '../controllers/projectController.js';
-import { getTasksForProject } from '../controllers/taskController.js';
+
+// Import task router to re-route all task operations
+import taskRouter from './tasks.js';
 
 // Protect all routes
 router.use(protect);
+
+// Re-route task operations within project context
+// This ensures all task operations are performed in the context of a project
+router.use('/:projectId/tasks', taskRouter);
 
 // Define routes with authorization
 router
@@ -31,12 +37,6 @@ router
   .put(authorize('projects', ACCESS_LEVELS.OWN), updateProject)
   // Deleting requires 'own' access (middleware handles ownership check)
   .delete(authorize('projects', ACCESS_LEVELS.OWN), deleteProject);
-
-// Route to get tasks for a specific project
-// Requires 'read' access to the project itself
-router
-  .route('/:id/tasks') // Changed param name to :id to match ownership check logic
-  .get(authorize('projects', ACCESS_LEVELS.READ), getTasksForProject);
 
 // Routes for managing members (add later)
 // router.route('/:id/members')

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
-import { getTasks } from '../../features/tasks/taskSlice';
+import { getRecentTasks } from '../../features/tasks/taskSlice';
 
 const QuickTaskWidget = () => {
   const dispatch = useDispatch();
@@ -10,15 +10,14 @@ const QuickTaskWidget = () => {
   );
 
   useEffect(() => {
-    // Fetch tasks when component mounts
-    dispatch(getTasks());
+    // Fetch tasks across all projects when component mounts
+    dispatch(getRecentTasks());
   }, [dispatch]);
 
-  // Filter out completed tasks, then sort by creation date (newest first) and take the first 3
+  // Filter out completed tasks, then take the first 3
   const recentTasks = tasks
     ? [...tasks]
         .filter((task) => task.status !== 'Completed') // Exclude completed tasks
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, 3)
     : [];
 
@@ -42,7 +41,7 @@ const QuickTaskWidget = () => {
                 className="border-b border-dark-700 pb-1 last:border-b-0"
               >
                 <Link
-                  to={`/tasks/${task._id}`}
+                  to={`/projects/${task.project}/tasks/${task._id}`}
                   className="text-sm text-[#F8FAFC] font-bold hover:text-accent-purple hover:underline truncate block"
                 >
                   {task.title}
@@ -50,7 +49,11 @@ const QuickTaskWidget = () => {
                 <div className="flex justify-between">
                   <p className="text-xs text-[#C7C9D1]">{task.status}</p>
                   <p className="text-xs text-[#C7C9D1]">
-                    {new Date(task.createdAt).toLocaleDateString()}
+                    {task.projectName && (
+                      <span className="bg-dark-600 px-1 rounded text-xs">
+                        {task.projectName}
+                      </span>
+                    )}
                   </p>
                 </div>
               </li>
@@ -64,13 +67,13 @@ const QuickTaskWidget = () => {
       {/* Links for View All and New Task */}
       <div className="mt-3 flex justify-between items-center">
         <Link
-          to="/tasks"
+          to="/projects"
           className="text-sm text-[#F8FAFC] font-bold hover:text-accent-purple hover:underline"
         >
-          View All Tasks
+          View Projects
         </Link>
         <Link
-          to="/tasks?new=true"
+          to="/projects"
           className="text-sm text-[#F8FAFC] font-bold hover:text-accent-purple hover:underline"
         >
           + New Task

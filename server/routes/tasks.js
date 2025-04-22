@@ -2,12 +2,14 @@ import express from 'express';
 import { protect, authorize } from '../middleware/authMiddleware.js';
 import { ACCESS_LEVELS } from '../config/permissions.js';
 import {
-  getTasks,
+  getTasksForProject,
   createTask,
   getTask,
   updateTask,
   deleteTask,
   bulkUpdateTasks,
+  validateProjectAccess,
+  migrateOrphanedTasks,
 } from '../controllers/taskController.js';
 import noteRouter from './notes.js';
 
@@ -16,15 +18,22 @@ const router = express.Router({ mergeParams: true });
 // All routes below this will use the 'protect' middleware
 router.use(protect);
 
+// Project access validation middleware for all task operations
+router.use(validateProjectAccess);
+
 // Mount the note router for task-specific notes
-// Ensure user has at least read access to the task before accessing its notes
 router.use(
   '/:taskId/notes',
   authorize('tasks', ACCESS_LEVELS.READ),
   noteRouter
 );
 
-// Define bulk update route for tasks
+// Admin-only route to migrate orphaned tasks
+router
+  .route('/migrate-orphaned')
+  .post(authorize('admin', ACCESS_LEVELS.OWN), migrateOrphanedTasks);
+
+// Define bulk update route for tasks within a project
 router
   .route('/bulk-update')
   .put(authorize('tasks', ACCESS_LEVELS.OWN), bulkUpdateTasks);
@@ -32,19 +41,19 @@ router
 // Define routes with authorization
 router
   .route('/')
-  // Reading tasks requires 'read' access
-  .get(authorize('tasks', ACCESS_LEVELS.READ), getTasks)
-  // Creating tasks requires 'own' access
+  // Get all tasks for a specific project
+  .get(authorize('tasks', ACCESS_LEVELS.READ), getTasksForProject)
+  // Create task within a project
   .post(authorize('tasks', ACCESS_LEVELS.OWN), createTask);
 
-// Routes for specific task ID
+// Routes for specific task ID within a project
 router
   .route('/:id')
-  // Reading a specific task requires 'read' access
+  // Get a specific task within a project
   .get(authorize('tasks', ACCESS_LEVELS.READ), getTask)
-  // Updating requires 'own' access
+  // Update a task within a project
   .put(authorize('tasks', ACCESS_LEVELS.OWN), updateTask)
-  // Deleting requires 'own' access
+  // Delete a task within a project
   .delete(authorize('tasks', ACCESS_LEVELS.OWN), deleteTask);
 
 export default router;

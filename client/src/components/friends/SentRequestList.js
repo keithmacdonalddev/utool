@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { rejectOrCancelFriendRequest } from '../../features/friends/friendSlice';
-import { Button } from '../common/Button';
+import Button from '../common/Button'; // Fixed: Changed from named import to default import
 import { XCircle } from 'lucide-react';
 import UserAvatar from '../common/UserAvatar';
 import Spinner from '../common/Spinner';

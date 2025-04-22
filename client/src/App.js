@@ -36,8 +36,9 @@ const KbEditPage = lazy(() => import('./pages/KbEditPage'));
 const KbVersionHistoryPage = lazy(() => import('./pages/KbVersionHistoryPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const FavoriteQuotesPage = lazy(() => import('./pages/FavoriteQuotesPage'));
-const TasksPage = lazy(() => import('./pages/TasksPage'));
-const TaskDetailsPage = lazy(() => import('./pages/TaskDetailsPage'));
+// Task pages removed - tasks are now only accessible within projects
+// const TasksPage = lazy(() => import('./pages/TasksPage'));
+// const TaskDetailsPage = lazy(() => import('./pages/TaskDetailsPage'));
 const FriendsPage = lazy(() => import('./pages/FriendsPage'));
 // Notes Feature
 const NotesPage = lazy(() => import('./pages/NotesPage'));
@@ -145,8 +146,11 @@ function App() {
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/notes/trash" element={<TrashPage />} />
-                  <Route path="/tasks" element={<TasksPage />} />
-                  <Route path="/tasks/:id" element={<TaskDetailsPage />} />
+
+                  {/* Standalone task routes removed - tasks are only accessible through projects */}
+                  {/* <Route path="/tasks" element={<TasksPage />} /> */}
+                  {/* <Route path="/tasks/:id" element={<TaskDetailsPage />} /> */}
+
                   <Route
                     path="/favorite-quotes"
                     element={<FavoriteQuotesPage />}
@@ -177,6 +181,12 @@ function App() {
 
               {/* Root path redirects to dashboard */}
               <Route path="/" element={<Navigate replace to="/dashboard" />} />
+
+              {/* Redirect standalone task routes to projects */}
+              <Route
+                path="/tasks/*"
+                element={<Navigate replace to="/projects" />}
+              />
 
               {/* 404 Not Found route - catches all unmatched paths */}
               <Route path="*" element={<NotFoundPage />} />

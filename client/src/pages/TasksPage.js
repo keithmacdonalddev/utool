@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowUp,
@@ -17,11 +17,13 @@ import {
 import Button from '../components/common/Button';
 import { getTasks, resetTaskStatus } from '../features/tasks/taskSlice';
 import TaskCreateModal from '../components/tasks/TaskCreateModal';
+import TaskDetailsSidebar from '../components/tasks/TaskDetailsSidebar';
 import { getProjects } from '../features/projects/projectSlice';
 import { useNotifications } from '../context/NotificationContext';
 
 const TasksPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const { showNotification } = useNotifications();
   const { tasks, isLoading, isError, message } = useSelector(
@@ -31,6 +33,11 @@ const TasksPage = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // State for task details sidebar
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [selectedProjectId, setSelectedProjectId] = useState(null); // <-- Add state for project ID
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // View mode state with localStorage persistence
   const [viewMode, setViewMode] = useState(() => {
@@ -47,21 +54,50 @@ const TasksPage = () => {
   const [sortCriteria, setSortCriteria] = useState('dueDate');
   const [sortOrder, setSortOrder] = useState('asc');
 
-  // Check URL for query parameter
+  // Effect to handle initial task loading and URL parsing
   useEffect(() => {
+    // Fetch initial data
+    dispatch(getTasks());
+    dispatch(getProjects());
+
+    // Check for 'new' query param
     const searchParams = new URLSearchParams(location.search);
     if (searchParams.get('new') === 'true') {
       setIsCreateModalOpen(true);
     }
-  }, [location]);
 
-  useEffect(() => {
-    dispatch(getTasks());
-    dispatch(getProjects());
+    // Cleanup function
     return () => {
       dispatch(resetTaskStatus());
     };
-  }, [dispatch]);
+  }, [dispatch, location.search]); // Depend on dispatch and search params
+
+  // Effect to handle opening sidebar based on URL path *after* tasks have loaded
+  useEffect(() => {
+    const pathParts = location.pathname.split('/');
+    if (pathParts.length > 2 && pathParts[1] === 'tasks') {
+      const taskIdFromUrl = pathParts[2];
+
+      // Only proceed if tasks are loaded and the sidebar isn't already open for this task
+      if (!isLoading && tasks.length > 0 && selectedTaskId !== taskIdFromUrl) {
+        const task = tasks.find((t) => t._id === taskIdFromUrl);
+        if (task) {
+          const projectId = task.project?._id || task.project;
+          setSelectedTaskId(taskIdFromUrl);
+          setSelectedProjectId(projectId); // <-- Set projectId here
+          setIsSidebarOpen(true);
+        } else {
+          // Task not found in the list, maybe navigate away or show error?
+          console.warn(
+            `Task with ID ${taskIdFromUrl} not found in loaded tasks.`
+          );
+          // Optionally navigate back if task doesn't exist
+          // navigate('/tasks', { replace: true });
+        }
+      }
+    }
+    // This effect should run when tasks load or location path changes
+  }, [location.pathname, tasks, isLoading, dispatch, navigate, selectedTaskId]);
 
   // Open create task modal
   const openCreateModal = () => {
@@ -71,6 +107,47 @@ const TasksPage = () => {
   // Close create task modal
   const closeCreateModal = () => {
     setIsCreateModalOpen(false);
+  };
+
+  // Handle task selection
+  const handleTaskClick = (taskId) => {
+    // Find the task object to get its project ID
+    const task = tasks.find((t) => t._id === taskId);
+    const projectId = task?.project?._id || task?.project; // Handle populated or just ID
+
+    setSelectedTaskId(taskId);
+    setSelectedProjectId(projectId); // <-- Set the project ID
+    setIsSidebarOpen(true);
+    // Update the URL without causing a page reload
+    navigate(`/tasks/${taskId}`, { replace: true });
+  };
+
+  // Handle closing the sidebar
+  const handleCloseSidebar = () => {
+    setIsSidebarOpen(false);
+    // Update URL back to the tasks list
+    navigate('/tasks', { replace: true });
+    // Small delay before clearing the task ID to allow for smooth animation
+    setTimeout(() => {
+      setSelectedTaskId(null);
+      setSelectedProjectId(null); // <-- Reset the project ID
+    }, 300);
+  };
+
+  // Handle task update
+  const handleTaskUpdate = () => {
+    // Refresh tasks list
+    dispatch(getTasks());
+    showNotification('Task updated successfully', 'success');
+  };
+
+  // Handle task deletion
+  const handleTaskDelete = () => {
+    // Close sidebar and refresh tasks list
+    setIsSidebarOpen(false);
+    navigate('/tasks', { replace: true });
+    dispatch(getTasks());
+    showNotification('Task deleted successfully', 'success');
   };
 
   // Toggle sort order and update sort criteria
@@ -228,10 +305,10 @@ const TasksPage = () => {
   // Render task as a grid item
   const renderGridItem = (task) => {
     return (
-      <Link
-        to={`/tasks/${task._id}`}
+      <div
         key={task._id}
-        className="block bg-card border border-dark-700 rounded-lg shadow p-4 hover:bg-dark-700 transition"
+        onClick={() => handleTaskClick(task._id)}
+        className="block bg-card border border-dark-700 rounded-lg shadow p-4 hover:bg-dark-700 transition cursor-pointer"
       >
         <h3 className="text-xl font-semibold text-[#F8FAFC] truncate">
           {task.title}
@@ -256,17 +333,17 @@ const TasksPage = () => {
           <p>{task.project ? getProjectName(task.project) : 'No Project'}</p>
           <p className="mt-1">{formatDate(task.dueDate)}</p>
         </div>
-      </Link>
+      </div>
     );
   };
 
   // Render task as a list item
   const renderListItem = (task) => {
     return (
-      <Link
-        to={`/tasks/${task._id}`}
+      <div
         key={task._id}
-        className="block bg-card border border-dark-700 rounded-lg p-4 mb-3 hover:bg-dark-700 transition-colors"
+        onClick={() => handleTaskClick(task._id)}
+        className="block bg-card border border-dark-700 rounded-lg p-4 mb-3 hover:bg-dark-700 transition-colors cursor-pointer"
       >
         <div className="flex justify-between items-center">
           <div className="flex-1">
@@ -299,7 +376,7 @@ const TasksPage = () => {
             </div>
           </div>
         </div>
-      </Link>
+      </div>
     );
   };
 
@@ -309,7 +386,7 @@ const TasksPage = () => {
       <tr
         key={task._id}
         className="hover:bg-dark-700 transition-colors cursor-pointer"
-        onClick={() => (window.location.href = `/tasks/${task._id}`)}
+        onClick={() => handleTaskClick(task._id)}
       >
         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC] text-left">
           {task.title}
@@ -360,6 +437,16 @@ const TasksPage = () => {
     <div className="flex flex-col h-full">
       {/* Task Create Modal */}
       <TaskCreateModal isOpen={isCreateModalOpen} onClose={closeCreateModal} />
+
+      {/* Task Details Sidebar */}
+      <TaskDetailsSidebar
+        projectId={selectedProjectId} // <-- Pass the selected project ID
+        taskId={selectedTaskId}
+        isOpen={isSidebarOpen}
+        onClose={handleCloseSidebar}
+        onUpdate={handleTaskUpdate}
+        onDelete={handleTaskDelete}
+      />
 
       {/* Header Row: Back Link, Title, View Toggle, Create Button */}
       <div className="flex justify-between items-center mb-3 px-4 md:px-0 pt-4">

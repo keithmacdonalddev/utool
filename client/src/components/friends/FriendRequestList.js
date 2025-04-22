@@ -4,7 +4,7 @@ import {
   acceptFriendRequest,
   rejectOrCancelFriendRequest,
 } from '../../features/friends/friendSlice';
-import { Button } from '../common/Button';
+import Button from '../common/Button'; // Fixed: Changed from named import to default import
 import { UserCheck, UserX } from 'lucide-react';
 import UserAvatar from '../common/UserAvatar';
 import Spinner from '../common/Spinner';

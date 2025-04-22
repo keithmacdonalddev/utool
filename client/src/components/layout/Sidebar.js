@@ -15,6 +15,7 @@ import {
   StickyNote, // Added for Notes
   Trash2, // Added for Trash
   History, // Added for Audit Logs
+  CheckSquare, // Added for Tasks icon
 } from 'lucide-react'; // Removed UserGroup import which isn't available
 
 const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
@@ -174,19 +175,7 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
             <Star size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Favorite Quotes</span>
           </NavLink>
-          <NavLink
-            to="/tasks"
-            className={({ isActive }) =>
-              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
-                isActive ? activeLinkClasses : inactiveLinkClasses
-              }`
-            }
-            onClick={toggleSidebar}
-            title="Tasks"
-          >
-            <FolderKanban size={20} className="flex-shrink-0" />
-            <span className={linkTextClasses}>Tasks</span>
-          </NavLink>
+          {/* Tasks link removed - tasks are now exclusively project-based */}
           {/* Add Friends Link */}
           <NavLink
             to="/friends"
@@ -201,7 +190,6 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
             <Users size={20} className="flex-shrink-0" /> {/* Use Users icon */}
             <span className={linkTextClasses}>Friends</span>
           </NavLink>
-          {/* TODO: Add Tasks link */}
           {/* Admin Links */}
           {user?.role === 'Admin' && (
             <>

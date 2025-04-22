@@ -20,62 +20,91 @@ import { logger } from '../utils/logger.js';
 import ErrorResponse from '../utils/errorResponse.js'; // Add this import
 
 /**
- * Get all tasks for the authenticated user
- *
- * EXPRESS CONTROLLER PATTERN:
- * - Function signature follows Express convention (req, res, next)
- * - Async/await pattern with try/catch for asynchronous operations
- * - Standardized JSON response format
- *
- * @desc    Get tasks for logged-in user
- * @route   GET /api/v1/tasks
- * @access  Private - requires authentication
+ * @desc    Get tasks for the authenticated user within a specific project
+ * @route   GET /api/v1/projects/:projectId/tasks
+ * @access  Private - requires authentication and project membership
  */
-export const getTasks = async (req, res, next) => {
-  // Log attempted action
-  logger.verbose('Attempting to fetch tasks', {
+export const getTasksForProject = async (req, res, next) => {
+  logger.verbose('Attempting to retrieve tasks for project', {
     userId: req.user.id,
+    projectId: req.params.projectId,
     req,
   });
 
   try {
-    // Find tasks where the assignee is the logged-in user
-    // req.user is attached by the 'protect' middleware from the auth middleware
-    const tasks = await Task.find({ assignee: req.user.id })
-      .populate('project', 'name status') // Populate project details (only name and status fields)
-      .sort({
-        createdAt: -1,
-      }); // Sort by newest first for better UX
+    // Validate project exists and user has access to it
+    const project = await Project.findById(req.params.projectId);
 
-    // Log successful action
-    logger.logAccess('tasks', null, req.user.id, {
+    if (!project) {
+      logger.warn('Project not found', {
+        userId: req.user.id,
+        projectId: req.params.projectId,
+      });
+      return next(
+        new ErrorResponse(
+          `Project not found with id of ${req.params.projectId}`,
+          404
+        )
+      );
+    }
+
+    // Check if user is a member of the project
+    if (
+      !project.members.includes(req.user.id) &&
+      project.owner.toString() !== req.user.id
+    ) {
+      logger.warn('Unauthorized access to project tasks', {
+        userId: req.user.id,
+        projectId: req.params.projectId,
+      });
+      return next(
+        new ErrorResponse(
+          `Not authorized to access tasks for this project`,
+          403
+        )
+      );
+    }
+
+    const tasks = await Task.find({ project: req.params.projectId })
+      .sort({ createdAt: -1 })
+      .populate('assignee', 'name email');
+
+    logger.info('Successfully retrieved tasks for project', {
+      userId: req.user.id,
+      projectId: req.params.projectId,
+      tasksCount: tasks.length,
+      req,
+    });
+
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'task_retrieve', 'success', {
+      projectId: req.params.projectId,
       count: tasks.length,
-      req,
     });
 
-    // Return standardized response format with success flag and data
-    res.status(200).json({
-      success: true, // Indicates successful operation
-      count: tasks.length, // Metadata useful for frontend pagination/display
-      data: tasks, // Actual task objects
-    });
+    res.status(200).json({ success: true, count: tasks.length, data: tasks });
   } catch (err) {
-    // Log error
-    logger.error('Failed to fetch tasks', {
+    logger.error('Failed to retrieve tasks for project', {
       error: err,
-      userId: req.user?.id,
+      userId: req.user.id,
+      projectId: req.params.projectId,
       req,
     });
 
-    // Return error with appropriate HTTP status code
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching tasks' });
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'task_retrieve', 'failed', {
+      projectId: req.params.projectId,
+      error: err.message,
+    });
+
+    return next(
+      new ErrorResponse(`Error retrieving tasks: ${err.message}`, 500)
+    );
   }
 };
 
 /**
- * Create a new task
+ * Create a new task (must belong to a project)
  *
  * API SECURITY BEST PRACTICES:
  * - Data validation before processing
@@ -84,26 +113,77 @@ export const getTasks = async (req, res, next) => {
  * - Error handling for all potential failure points
  * - Audit logging for security tracking
  *
- * @desc    Create new task
- * @route   POST /api/v1/tasks
- * @access  Private - requires authentication
+ * @desc    Create new task within a project
+ * @route   POST /api/v1/projects/:projectId/tasks
+ * @access  Private - requires authentication and project membership
  */
 export const createTask = async (req, res, next) => {
+  const projectId = req.params.projectId;
+
   // Log attempted action - don't include the full req object
   logger.verbose('Attempting to create task', {
     userId: req.user.id,
-    projectId: req.body.project,
+    projectId,
     title: req.body.title,
-    // Remove req object to avoid circular reference
   });
 
   try {
+    // Validate that project ID is provided
+    if (!projectId) {
+      logger.error('Task creation failed - no project ID provided', {
+        userId: req.user.id,
+      });
+      return res
+        .status(400)
+        .json({ success: false, message: 'Project ID is required' });
+    }
+
+    // Validate Project ID format
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      logger.error('Task creation failed - invalid project ID format', {
+        userId: req.user.id,
+        projectId,
+      });
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid project ID format' });
+    }
+
+    // Find the project to verify it exists and user has permission
+    const project = await Project.findById(projectId);
+    if (!project) {
+      logger.error('Task creation failed - project not found', {
+        userId: req.user.id,
+        projectId,
+      });
+      return res.status(404).json({
+        success: false,
+        message: `Project not found with id ${projectId}`,
+      });
+    }
+
+    // Authorization check: Ensure user is a member of the project
+    const isMember = project.members.some(
+      (memberId) => memberId.toString() === req.user.id
+    );
+    const isOwner = project.owner.toString() === req.user.id;
+
+    if (!isMember && !isOwner) {
+      logger.error('Task creation failed - user not authorized', {
+        userId: req.user.id,
+        projectId,
+      });
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to add tasks to this project',
+      });
+    }
+
     // Add logged-in user as the assignee - ensures tasks are always assigned
     req.body.assignee = req.user.id;
+    req.body.project = projectId; // Ensure project is set
 
     // Extract fields from req.body for validation and security
-    // This is safer than passing the entire req.body to the database
-    // SECURITY BEST PRACTICE: Never trust client input directly
     const {
       title,
       description,
@@ -111,7 +191,6 @@ export const createTask = async (req, res, next) => {
       priority,
       dueDate,
       estimatedTime,
-      project: projectId,
       assignee,
     } = req.body;
 
@@ -119,57 +198,13 @@ export const createTask = async (req, res, next) => {
     const taskData = {
       title,
       assignee,
+      project: projectId, // Use projectId instead of extracting project from req.body
       ...(description && { description }),
       ...(status && { status }),
       ...(priority && { priority }),
       ...(dueDate && { dueDate }),
       ...(estimatedTime && { estimatedTime }),
     };
-
-    // Only add project if it exists
-    if (projectId) {
-      taskData.project = projectId;
-
-      // Project-related validations only if project ID exists
-      if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        logger.error('Task creation failed - invalid project ID format', {
-          userId: req.user.id,
-          projectId,
-        });
-        return res
-          .status(400)
-          .json({ success: false, message: 'Invalid project ID format' });
-      }
-
-      // Find the project to verify it exists and user has permission
-      const project = await Project.findById(projectId);
-      if (!project) {
-        logger.error('Task creation failed - project not found', {
-          userId: req.user.id,
-          projectId,
-        });
-        return res.status(404).json({
-          success: false,
-          message: `Project not found with id ${projectId}`,
-        });
-      }
-
-      // Authorization check: Ensure user is a member of the project
-      const isMember = project.members.some(
-        (memberId) => memberId.toString() === req.user.id
-      );
-
-      if (!isMember) {
-        logger.error('Task creation failed - user not authorized', {
-          userId: req.user.id,
-          projectId,
-        });
-        return res.status(403).json({
-          success: false,
-          message: 'Not authorized to add tasks to this project',
-        });
-      }
-    }
 
     // Validation: Check required fields
     if (!title || title.trim() === '') {
@@ -262,7 +297,7 @@ export const createTask = async (req, res, next) => {
     await auditLog(req, 'task_create', 'failed', {
       error: err.message,
       taskTitle: req.body.title,
-      projectId: req.body.project,
+      projectId,
     });
 
     // Handle Mongoose validation errors with specific messages
@@ -281,120 +316,76 @@ export const createTask = async (req, res, next) => {
 };
 
 /**
- * Get tasks that belong to a specific project
- *
- * MONGOOSE QUERY PATTERNS:
- * - find() for filtering documents
- * - populate() for joining related collections
- * - sort() for ordering results
- *
- * @desc    Get tasks for a specific project
- * @route   GET /api/v1/projects/:id/tasks
- * @access  Private - requires authentication and project membership
- */
-export const getTasksForProject = async (req, res, next) => {
-  logger.verbose('Attempting to retrieve tasks for project', {
-    userId: req.user.id,
-    projectId: req.params.projectId,
-    req,
-  });
-
-  try {
-    const tasks = await Task.find({ project: req.params.projectId })
-      .sort({ createdAt: -1 })
-      .populate('assignee', 'name email');
-
-    logger.info('Successfully retrieved tasks for project', {
-      userId: req.user.id,
-      projectId: req.params.projectId,
-      tasksCount: tasks.length,
-      req,
-    });
-
-    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-    await auditLog(req, 'task_retrieve', 'success', {
-      projectId: req.params.projectId,
-      count: tasks.length,
-    });
-
-    res.status(200).json({ success: true, count: tasks.length, data: tasks });
-  } catch (err) {
-    logger.error('Failed to retrieve tasks for project', {
-      error: err,
-      userId: req.user.id,
-      projectId: req.params.projectId,
-      req,
-    });
-
-    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-    await auditLog(req, 'task_retrieve', 'failed', {
-      projectId: req.params.projectId,
-      error: err.message,
-    });
-
-    return next(
-      new ErrorResponse(`Error retrieving tasks: ${err.message}`, 500)
-    );
-  }
-};
-
-// --- Implementation of remaining operations ---
-
-/**
  * Get a single task by ID
  *
  * @desc    Get single task
- * @route   GET /api/tasks/:id
+ * @route   GET /api/projects/:projectId/tasks/:id
  * @access  Private
  */
 export const getTask = async (req, res, next) => {
+  const projectId = req.params.projectId;
+  const taskId = req.params.id;
+
   logger.verbose('Attempting to retrieve task', {
     userId: req.user.id,
-    taskId: req.params.id,
-    req,
+    taskId,
+    projectId,
   });
 
   try {
-    const task = await Task.findById(req.params.id)
+    const task = await Task.findOne({ _id: taskId, project: projectId })
       .populate('assignee', 'name email')
       .populate('project', 'name description');
 
     if (!task) {
       logger.warn('Task not found', {
         userId: req.user.id,
-        taskId: req.params.id,
-        req,
-      });
-      return next(
-        new ErrorResponse(`Task not found with id of ${req.params.id}`, 404)
-      );
-    }
-
-    // Make sure user is task assignee or has appropriate permissions
-    if (task.assignee._id.toString() !== req.user.id) {
-      logger.warn('Unauthorized access attempt to task', {
-        userId: req.user.id,
-        taskId: req.params.id,
-        taskAssigneeId: task.assignee._id.toString(),
-        req,
+        taskId,
+        projectId,
       });
       return next(
         new ErrorResponse(
-          `User ${req.user.id} is not authorized to access this task`,
-          401
+          `Task not found with id of ${taskId} in project ${projectId}`,
+          404
         )
+      );
+    }
+
+    // Verify project membership
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return next(
+        new ErrorResponse(`Project not found with id of ${projectId}`, 404)
+      );
+    }
+
+    const isMember = project.members.some(
+      (memberId) => memberId.toString() === req.user.id
+    );
+    const isOwner = project.owner.toString() === req.user.id;
+    const isAssignee = task.assignee._id.toString() === req.user.id;
+
+    if (!isMember && !isOwner && !isAssignee) {
+      logger.warn('Unauthorized access attempt to task', {
+        userId: req.user.id,
+        taskId,
+        projectId,
+      });
+      return next(
+        new ErrorResponse(`User is not authorized to access this task`, 403)
       );
     }
 
     logger.info('Successfully retrieved task', {
       userId: req.user.id,
-      taskId: req.params.id,
-      req,
+      taskId,
+      projectId,
     });
 
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_retrieve', 'success', {
-      taskId: req.params.id,
+      taskId,
+      projectId,
     });
 
     res.status(200).json({ success: true, data: task });
@@ -402,13 +393,14 @@ export const getTask = async (req, res, next) => {
     logger.error('Failed to retrieve task', {
       error: err,
       userId: req.user.id,
-      taskId: req.params.id,
-      req,
+      taskId,
+      projectId,
     });
 
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_retrieve', 'failed', {
-      taskId: req.params.id,
+      taskId,
+      projectId,
       error: err.message,
     });
 
@@ -422,63 +414,97 @@ export const getTask = async (req, res, next) => {
  * Update an existing task
  *
  * @desc    Update task
- * @route   PUT /api/v1/tasks/:id
+ * @route   PUT /api/v1/projects/:projectId/tasks/:id
  * @access  Private - requires being the assignee or project owner
  */
 export const updateTask = async (req, res, next) => {
+  const projectId = req.params.projectId;
+  const taskId = req.params.id;
+
   logger.verbose('Attempting to update task', {
     userId: req.user.id,
-    taskId: req.params.id,
-    req,
+    taskId,
+    projectId,
   });
 
   try {
-    let task = await Task.findById(req.params.id);
+    // Find task within the specified project
+    let task = await Task.findOne({ _id: taskId, project: projectId });
 
     if (!task) {
       logger.warn('Task not found for update', {
         userId: req.user.id,
-        taskId: req.params.id,
-        req,
-      });
-      return next(
-        new ErrorResponse(`Task not found with id of ${req.params.id}`, 404)
-      );
-    }
-
-    // Make sure user is task assignee or has appropriate permissions
-    if (task.assignee.toString() !== req.user.id) {
-      logger.warn('Unauthorized attempt to update task', {
-        userId: req.user.id,
-        taskId: req.params.id,
-        taskAssigneeId: task.assignee.toString(),
-        req,
+        taskId,
+        projectId,
       });
       return next(
         new ErrorResponse(
-          `User ${req.user.id} is not authorized to update this task`,
-          401
+          `Task not found with id of ${taskId} in project ${projectId}`,
+          404
         )
       );
     }
 
+    // Validate project membership
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return next(
+        new ErrorResponse(`Project not found with id of ${projectId}`, 404)
+      );
+    }
+
+    // Check authorization - either project owner, member, or task assignee
+    const isMember = project.members.some(
+      (memberId) => memberId.toString() === req.user.id
+    );
+    const isOwner = project.owner.toString() === req.user.id;
+    const isAssignee = task.assignee.toString() === req.user.id;
+
+    if (!isMember && !isOwner && !isAssignee) {
+      logger.warn('Unauthorized attempt to update task', {
+        userId: req.user.id,
+        taskId,
+        projectId,
+      });
+      return next(
+        new ErrorResponse(`User is not authorized to update this task`, 403)
+      );
+    }
+
+    // Prevent project field from being changed
+    if (req.body.project && req.body.project !== projectId) {
+      logger.warn('Attempt to change task project', {
+        userId: req.user.id,
+        taskId,
+        currentProjectId: projectId,
+        newProjectId: req.body.project,
+      });
+      return next(
+        new ErrorResponse(`Cannot change project assignment for task`, 400)
+      );
+    }
+
+    // Ensure project ID is preserved
+    req.body.project = projectId;
+
     const oldTask = { ...task._doc };
-    task = await Task.findByIdAndUpdate(req.params.id, req.body, {
+    task = await Task.findByIdAndUpdate(taskId, req.body, {
       new: true,
       runValidators: true,
     });
 
     logger.logUpdate('Task updated', {
       userId: req.user.id,
-      taskId: req.params.id,
+      taskId,
+      projectId,
       oldData: oldTask,
       newData: task,
-      req,
     });
 
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_update', 'success', {
-      taskId: req.params.id,
+      taskId,
+      projectId,
       changes: req.body,
       oldData: oldTask,
       newData: task,
@@ -489,13 +515,14 @@ export const updateTask = async (req, res, next) => {
     logger.error('Failed to update task', {
       error: err,
       userId: req.user.id,
-      taskId: req.params.id,
-      req,
+      taskId,
+      projectId,
     });
 
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_update', 'failed', {
-      taskId: req.params.id,
+      taskId,
+      projectId,
       changes: req.body,
       error: err.message,
     });
@@ -508,64 +535,73 @@ export const updateTask = async (req, res, next) => {
  * Delete a task
  *
  * @desc    Delete task
- * @route   DELETE /api/v1/tasks/:id
+ * @route   DELETE /api/v1/projects/:projectId/tasks/:id
  * @access  Private - requires being the assignee or project owner
  */
 export const deleteTask = async (req, res, next) => {
+  const projectId = req.params.projectId;
+  const taskId = req.params.id;
+
   try {
     // Log the delete attempt for traceability
-    logger.info(`Attempting to delete task with ID: ${req.params.id}`, {
+    logger.info(`Attempting to delete task with ID: ${taskId}`, {
       userId: req.user.id,
       action: 'delete_task',
-      taskId: req.params.id,
+      taskId,
+      projectId,
     });
 
-    // Find the task to delete
-    const task = await Task.findById(req.params.id);
+    // Find task within the specified project
+    const task = await Task.findOne({ _id: taskId, project: projectId });
 
     // Log database operation result
     logger.logDbOperation('findById', 'Task', !!task, null, {
-      taskId: req.params.id,
+      taskId,
+      projectId,
       userId: req.user.id,
     });
 
     // Check that task exists
     if (!task) {
-      logger.warn(`Task not found for deletion: ${req.params.id}`, {
+      logger.warn(`Task not found for deletion: ${taskId}`, {
         userId: req.user.id,
+        projectId,
       });
 
       return res.status(404).json({
         success: false,
-        message: `Task not found with id of ${req.params.id}`,
+        message: `Task not found with id of ${taskId} in project ${projectId}`,
         notificationType: 'error', // Used by frontend for toast notifications
       });
     }
 
-    // Authorization check: Verify user is either the assignee or project owner
-    if (task.assignee.toString() !== req.user.id) {
-      // If not assignee, check if user is project owner
-      const project = await Project.findById(task.project);
+    // Validate project membership
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return next(
+        new ErrorResponse(`Project not found with id of ${projectId}`, 404)
+      );
+    }
 
-      logger.logDbOperation('findById', 'Project', !!project, null, {
-        projectId: task.project,
+    // Authorization check: Verify user is either the assignee or project owner/member
+    const isMember = project.members.some(
+      (memberId) => memberId.toString() === req.user.id
+    );
+    const isOwner = project.owner.toString() === req.user.id;
+    const isAssignee = task.assignee.toString() === req.user.id;
+
+    if (!isMember && !isOwner && !isAssignee) {
+      logger.warn(`Unauthorized task deletion attempt`, {
         userId: req.user.id,
+        taskId,
+        projectId,
       });
 
-      if (!project || project.owner.toString() !== req.user.id) {
-        logger.warn(`Unauthorized task deletion attempt`, {
-          userId: req.user.id,
-          taskId: req.params.id,
-          taskAssignee: task.assignee,
-          projectId: task.project,
-        });
-
-        return res.status(403).json({
-          success: false,
-          message: 'Not authorized to delete this task',
-          notificationType: 'error',
-        });
-      }
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this task',
+        notificationType: 'error',
+      });
     }
 
     // Save task info for audit log before deletion
@@ -615,14 +651,16 @@ export const deleteTask = async (req, res, next) => {
     // Log the error for debugging and monitoring
     logger.error('Failed to delete task', {
       error: err,
-      taskId: req.params.id,
+      taskId,
+      projectId,
       userId: req.user.id,
     });
 
     // Add audit log for failed task deletion
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_delete', 'failed', {
-      taskId: req.params.id,
+      taskId,
+      projectId,
       error: err.message,
     });
 
@@ -630,7 +668,7 @@ export const deleteTask = async (req, res, next) => {
     if (err.name === 'CastError') {
       return res.status(404).json({
         success: false,
-        message: `Task not found with id of ${req.params.id}`,
+        message: `Task not found with id of ${taskId}`,
         notificationType: 'error',
       });
     }
@@ -645,52 +683,15 @@ export const deleteTask = async (req, res, next) => {
 };
 
 /**
- * Admin endpoint to get tasks for a specific user
- *
- * @desc    Get all tasks for a specific user (Admin only)
- * @route   GET /api/v1/admin/users/:userId/tasks
- * @access  Private/Admin - requires admin role
- */
-export const getUserTasks = async (req, res, next) => {
-  try {
-    const targetUserId = req.params.userId;
-
-    // Verify the target user exists
-    const targetUserExists = await User.findById(targetUserId);
-    if (!targetUserExists) {
-      return res.status(404).json({
-        success: false,
-        message: `User not found with id ${targetUserId}`,
-      });
-    }
-
-    // Find tasks assigned to the target user
-    const tasks = await Task.find({ assignee: targetUserId })
-      .populate('project', 'name') // Include project name
-      .sort({ createdAt: -1 });
-
-    // Return the tasks
-    res.status(200).json({
-      success: true,
-      count: tasks.length,
-      data: tasks,
-    });
-  } catch (err) {
-    console.error('Get User Tasks Error:', err);
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching user tasks' });
-  }
-};
-
-/**
- * Bulk update multiple tasks at once
+ * Bulk update multiple tasks at once within a project
  *
  * @desc    Bulk update tasks
- * @route   PUT /api/v1/tasks/bulk-update
+ * @route   PUT /api/v1/projects/:projectId/tasks/bulk-update
  * @access  Private - requires authentication
  */
-export const bulkUpdateTasks = async (req, res) => {
+export const bulkUpdateTasks = async (req, res, next) => {
+  const projectId = req.params.projectId;
+
   try {
     // Extract task IDs and update data from request
     const { taskIds, update } = req.body;
@@ -703,18 +704,217 @@ export const bulkUpdateTasks = async (req, res) => {
       });
     }
 
-    // Update multiple tasks in one database operation
-    // More efficient than updating each task individually
-    const result = await Task.updateMany({ _id: { $in: taskIds } }, update, {
-      runValidators: true, // Apply schema validation to all updates
+    // Prevent changing the project ID
+    if (update.project && update.project !== projectId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot change project assignment for tasks',
+      });
+    }
+
+    // Ensure all tasks belong to the specified project
+    const tasksInProject = await Task.countDocuments({
+      _id: { $in: taskIds },
+      project: projectId,
     });
 
+    if (tasksInProject !== taskIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Some tasks do not belong to the specified project',
+      });
+    }
+
+    // Update multiple tasks in one database operation
+    // More efficient than updating each task individually
+    const result = await Task.updateMany(
+      { _id: { $in: taskIds }, project: projectId },
+      update,
+      { runValidators: true }
+    );
+
     // Return count of modified documents
-    res.status(200).json({ success: true, modifiedCount: result.nModified });
+    res.status(200).json({
+      success: true,
+      modifiedCount: result.modifiedCount || result.nModified, // Depending on MongoDB version
+    });
   } catch (err) {
-    console.error('Bulk update error:', err);
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error bulk updating tasks' });
+    logger.error('Bulk update error:', {
+      error: err,
+      projectId,
+      userId: req.user.id,
+    });
+
+    return next(
+      new ErrorResponse(`Error bulk updating tasks: ${err.message}`, 500)
+    );
+  }
+};
+
+/**
+ * Create a middleware to validate project ID and user permissions
+ * This middleware can be used for any task operation requiring project context
+ */
+export const validateProjectAccess = async (req, res, next) => {
+  const projectId = req.params.projectId;
+
+  try {
+    // Check if project ID is provided
+    if (!projectId) {
+      return next(
+        new ErrorResponse('Project ID is required for all task operations', 400)
+      );
+    }
+
+    // Check if project exists
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return next(
+        new ErrorResponse(`Project not found with id of ${projectId}`, 404)
+      );
+    }
+
+    // Check if user has permission to access this project
+    const isMember = project.members.some(
+      (memberId) => memberId.toString() === req.user.id
+    );
+    const isOwner = project.owner.toString() === req.user.id;
+
+    if (!isMember && !isOwner) {
+      return next(
+        new ErrorResponse(
+          'Not authorized to access tasks for this project',
+          403
+        )
+      );
+    }
+
+    // Attach project to request object for use in later middleware/controllers
+    req.project = project;
+    next();
+  } catch (err) {
+    return next(
+      new ErrorResponse(`Error validating project access: ${err.message}`, 500)
+    );
+  }
+};
+
+/**
+ * Data Migration: Create a default project for any orphaned tasks
+ * Use with caution - this will modify data
+ */
+export const migrateOrphanedTasks = async (req, res, next) => {
+  try {
+    // Only allow admins to perform this operation
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only administrators can migrate tasks',
+      });
+    }
+
+    // Find tasks with no project
+    const orphanedTasks = await Task.find({ project: { $exists: false } });
+
+    if (orphanedTasks.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No orphaned tasks found',
+        count: 0,
+      });
+    }
+
+    // Create or find a default project for orphaned tasks
+    let defaultProject = await Project.findOne({ name: 'Default Project' });
+
+    if (!defaultProject) {
+      defaultProject = await Project.create({
+        name: 'Default Project',
+        description: 'Default project for orphaned tasks',
+        owner: req.user.id,
+        members: [req.user.id],
+      });
+    }
+
+    // Update all orphaned tasks to belong to the default project
+    const result = await Task.updateMany(
+      { project: { $exists: false } },
+      { project: defaultProject._id }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Migrated ${
+        result.modifiedCount || result.nModified
+      } orphaned tasks to Default Project`,
+      defaultProject: defaultProject._id,
+      count: result.modifiedCount || result.nModified,
+    });
+  } catch (err) {
+    logger.error('Task migration error:', {
+      error: err,
+      userId: req.user.id,
+    });
+
+    return next(
+      new ErrorResponse(`Error migrating tasks: ${err.message}`, 500)
+    );
+  }
+};
+
+/**
+ * Get all tasks assigned to a specific user (admin route)
+ * This function fetches tasks across all projects for a specific user
+ *
+ * @desc    Get all tasks for a specific user
+ * @route   GET /api/v1/users/:userId/tasks
+ * @access  Private/Admin
+ */
+export const getUserTasks = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+
+    // Find all projects where the user is either owner or member
+    const projects = await Project.find({
+      $or: [{ owner: userId }, { members: userId }],
+    }).select('_id');
+
+    // Get project IDs
+    const projectIds = projects.map((project) => project._id);
+
+    // Find all tasks within those projects where user is the assignee
+    const tasks = await Task.find({
+      project: { $in: projectIds },
+      assignee: userId,
+    }).populate('project', 'name description');
+
+    logger.verbose(`Admin retrieved tasks for user ${userId}`, {
+      adminId: req.user.id,
+      userId,
+      taskCount: tasks.length,
+    });
+
+    // Record this action in audit logs
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'admin_task_retrieve', 'success', {
+      targetUserId: userId,
+      taskCount: tasks.length,
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: tasks.length,
+      data: tasks,
+    });
+  } catch (err) {
+    logger.error(`Failed to retrieve tasks for user`, {
+      error: err,
+      adminId: req.user.id,
+      userId: req.params.userId,
+    });
+
+    return next(
+      new ErrorResponse(`Error retrieving user tasks: ${err.message}`, 500)
+    );
   }
 };

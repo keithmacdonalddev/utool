@@ -123,13 +123,12 @@ const TaskItem = ({
   };
 
   // Define the base classes for the list item using template literals
-  // This demonstrates dynamic class construction using conditional expressions
-  // with Tailwind CSS utility classes
-  const itemClasses = `flex items-center justify-between p-4 rounded-lg shadow-sm transition-all duration-200 mb-3 border cursor-pointer mx-0.5
+  // Enhanced hover effect with box shadow and border color change
+  const itemClasses = `flex items-center justify-between p-4 rounded-lg shadow-sm transition-all duration-200 mb-3 border cursor-pointer mx-0.5 group
     ${
       isActive
         ? 'bg-primary-900/30 border-primary outline outline-1 outline-primary' // Active styling
-        : 'bg-card border-dark-700 hover:shadow-md hover:border-dark-500' // Default styling
+        : 'bg-card border-dark-700 hover:shadow-lg hover:border-primary/60 hover:bg-dark-750' // Enhanced hover styling
     }`;
 
   /**
@@ -170,7 +169,7 @@ const TaskItem = ({
         <div className="flex-1 min-w-0">
           {/* Task title with truncation for overflow */}
           <h3
-            className="text-lg font-semibold text-foreground truncate"
+            className="text-lg font-semibold text-foreground truncate group-hover:text-primary transition-colors"
             title={title} // Shows full title on hover
           >
             {title}
@@ -223,8 +222,8 @@ const TaskItem = ({
         </div>
       </div>
 
-      {/* Delete button with hover effects */}
-      <div className="flex items-center opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity duration-200">
+      {/* Delete button with improved hover effects */}
+      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <button
           onClick={handleDelete}
           title="Delete Task" // Accessibility attribute

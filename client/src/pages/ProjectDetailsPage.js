@@ -7,9 +7,9 @@
 // 4. Conditional Rendering: Displaying different UI based on loading/error states
 // 5. Custom Hooks: Reusing logic across components
 
-import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom'; // Router hooks
-import { useDispatch, useSelector } from 'react-redux'; // Redux hooks
+import React, { useEffect, useState, lazy, Suspense } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   getProject,
   updateProject,
@@ -18,13 +18,17 @@ import {
 import {
   getTasksForProject,
   resetTaskStatus,
+  updateTask,
+  deleteTask
 } from '../features/tasks/taskSlice';
 import TaskList from '../components/tasks/TaskList';
 import TaskCreateModal from '../components/tasks/TaskCreateModal';
 import api from '../utils/api';
-import { PlusCircle, X, Edit } from 'lucide-react'; // Icon components
-import { useNotifications } from '../context/NotificationContext'; // Context hook
-import useFriends from '../hooks/useFriends'; // Custom hook
+import { PlusCircle, X, Edit } from 'lucide-react';
+import { useNotifications } from '../context/NotificationContext';
+import useFriends from '../hooks/useFriends';
+
+const TaskDetailsSidebar = lazy(() => import('../components/tasks/TaskDetailsSidebar'));
 
 /**
  * ProjectDetailsPage Component
@@ -208,6 +212,50 @@ const ProjectDetailsPage = () => {
     }
   };
 
+  // Task management handlers
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const handleTaskClick = (taskId) => {
+    const task = tasks.find(t => t._id === taskId);
+    if (task) {
+      setSelectedTask(task);
+      setIsSidebarOpen(true);
+    }
+  };
+
+  const handleCloseSidebar = () => {
+    setIsSidebarOpen(false);
+    setTimeout(() => {
+      setSelectedTask(null);
+    }, 300);
+  };
+
+  const handleTaskUpdate = async (updatedTask) => {
+    try {
+      await dispatch(updateTask({
+        id: updatedTask._id,
+        taskData: updatedTask
+      })).unwrap();
+      
+      dispatch(getTasksForProject(id));
+      showNotification('Task updated successfully', 'success');
+    } catch (error) {
+      showNotification(`Failed to update task: ${error.message}`, 'error');
+    }
+  };
+
+  const handleTaskDelete = async (taskId) => {
+    try {
+      await dispatch(deleteTask(taskId)).unwrap();
+      setIsSidebarOpen(false);
+      dispatch(getTasksForProject(id));
+      showNotification('Task deleted successfully', 'success');
+    } catch (error) {
+      showNotification(`Failed to delete task: ${error.message}`, 'error');
+    }
+  };
+
   /**
    * DERIVED DATA PATTERN:
    * Compute new values from existing state and props
@@ -271,6 +319,20 @@ const ProjectDetailsPage = () => {
    */
   return (
     <div className="container mx-auto p-4 bg-background text-foreground space-y-6">
+      {/* Add Task Details Sidebar with lazy loading and error boundary */}
+      <Suspense fallback={<div className="fixed top-0 right-0 h-full w-full sm:w-96 bg-dark-800 flex items-center justify-center">Loading sidebar...</div>}>
+        {selectedTask && (
+          <TaskDetailsSidebar
+            projectId={id}
+            taskId={selectedTask._id}
+            isOpen={isSidebarOpen}
+            onClose={handleCloseSidebar}
+            onUpdate={handleTaskUpdate}
+            onDelete={handleTaskDelete}
+          />
+        )}
+      </Suspense>
+
       {/* PROJECT HEADER PATTERN: Title + Action button layout */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-center">
         <div>
@@ -498,7 +560,11 @@ const ProjectDetailsPage = () => {
           <p className="text-red-500">Error loading tasks: {tasksMessage}</p>
         )}
         {!tasksLoading && !tasksError && (
-          <TaskList projectId={id} tasks={tasks} />
+          <TaskList
+            projectId={id}
+            tasks={tasks}
+            onTaskClick={handleTaskClick}
+          />
         )}
       </div>
     </div>

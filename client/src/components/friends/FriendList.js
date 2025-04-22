@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { removeFriend } from '../../features/friends/friendSlice';
-import { Button } from '../common/Button';
+import Button from '../common/Button'; // Fixed: Changed from named import to default import
 import { UserMinus, MessageSquare } from 'lucide-react'; // Added MessageSquare for potential chat feature
 import UserAvatar from '../common/UserAvatar';
 import Spinner from '../common/Spinner';
