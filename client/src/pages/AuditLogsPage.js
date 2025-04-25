@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import {
   format,
   subHours,
@@ -18,53 +19,99 @@ import {
   deleteAuditLogsByDateRange,
 } from '../features/auditLogs/auditLogsSlice';
 import {
-  Search,
-  X,
-  RefreshCw,
   Eye,
   ChevronLeft,
   ChevronRight,
-  Calendar,
+  X,
+  RefreshCw,
   Trash2,
   AlertTriangle,
   CheckCircle,
+  ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import TableFilters from '../components/common/TableFilters';
+import DataTable from '../components/common/DataTable';
+import Pagination from '../components/common/Pagination';
 
 /**
  * AuditLogsPage Component
  *
- * This page provides a comprehensive interface for viewing and filtering system audit logs.
+ * This page provides a comprehensive interface for viewing, filtering, and managing system audit logs.
+ *
+ * Audit logs are critical in any production system as they provide a historical record of all
+ * important user and system activities. They help with security monitoring, troubleshooting,
+ * and compliance requirements.
+ *
  * Features include:
- * - Paginated table of audit logs
- * - Filtering by action type, status, and date range
- * - Preselectable date filters (past hour, today, etc.)
- * - Search functionality
- * - Detailed view of individual log entries
+ * - Searchable and filterable logs with a reusable TableFilters component
+ * - Paginated data display using a reusable DataTable component
+ * - Filtering by action type, status, and date range with presets (past hour, today, etc.)
+ * - Detailed view of individual log entries via a modal dialog
+ * - Ability to delete logs for a selected time period
+ *
+ * @returns {JSX.Element} The rendered AuditLogsPage component
  */
 const AuditLogsPage = () => {
+  // Redux dispatch function for triggering actions
   const dispatch = useDispatch();
 
-  // Select audit logs state from Redux store
+  /**
+   * Select relevant state from the Redux store
+   *
+   * Here we use the useSelector hook from Redux to extract only the pieces of state
+   * that this component needs. This is more efficient than connecting to the entire store.
+   *
+   * The state includes:
+   * - logs: Array of audit log objects
+   * - totalCount: Total number of logs matching the current filters
+   * - pagination: Information about which pages are available
+   * - loading: Boolean indicating if data is being fetched
+   * - error: Any error that occurred during data fetching
+   * - filters: Currently applied filters
+   */
   const { logs, totalCount, pagination, loading, error, filters } = useSelector(
     (state) => state.auditLogs
   );
 
-  // Local state for UI controls
+  /**
+   * Local component state declarations
+   *
+   * React's useState hook allows us to add state to functional components.
+   * Each state variable comes with its own setter function, which we use to update that state.
+   */
+  // Pagination controls - which page we're on and how many items per page
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
+
+  // Search functionality state
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Log details modal state
   const [selectedLog, setSelectedLog] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Filter state variables
   const [startDate, setStartDate] = useState(filters.startDate || '');
   const [endDate, setEndDate] = useState(filters.endDate || '');
   const [actionFilter, setActionFilter] = useState(filters.action || '');
   const [statusFilter, setStatusFilter] = useState(filters.status || '');
   const [datePreset, setDatePreset] = useState('past_hour'); // Default to past hour
   const [showCustomDateInputs, setShowCustomDateInputs] = useState(false);
+
+  // Delete confirmation modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Date preset options
+  /**
+   * Date preset options for quick filtering
+   *
+   * These options allow users to quickly select common time ranges without
+   * having to manually set start and end dates.
+   *
+   * Each preset has:
+   * - value: Identifier used internally
+   * - label: User-facing text shown in the dropdown
+   */
   const datePresets = [
     { value: 'past_hour', label: 'Past Hour' },
     { value: 'today', label: 'Today' },
@@ -75,7 +122,13 @@ const AuditLogsPage = () => {
     { value: 'custom', label: 'Custom Range' },
   ];
 
-  // Action types for filter dropdown
+  /**
+   * Action types for filter dropdown
+   *
+   * This array contains all possible audit log action types in the system.
+   * These are the specific activities that get logged, like user logins,
+   * content changes, etc.
+   */
   const actionTypes = [
     'login',
     'logout',
@@ -104,10 +157,208 @@ const AuditLogsPage = () => {
     'admin_action',
   ];
 
-  // Status options for filter dropdown
+  /**
+   * Status options for filter dropdown
+   *
+   * Audit logs can have different statuses to indicate the result
+   * of the logged action.
+   */
   const statusOptions = ['success', 'failed', 'pending'];
 
-  // Calculate date range based on preset
+  /**
+   * Column definitions for the DataTable component
+   *
+   * This array defines how each column in the audit logs table should be displayed.
+   * Each object in the array represents one column, with properties that determine:
+   * - Which data to show (key)
+   * - What header to use (label)
+   * - How to render the cell content (render function)
+   * - Additional styling (className)
+   *
+   * The render function is particularly powerful as it allows custom formatting
+   * and component rendering for each cell based on the row's data.
+   */
+  const auditLogColumns = [
+    {
+      key: 'userId',
+      label: 'User',
+      render: (row) =>
+        row.userId ? (
+          <>
+            <div className="text-sm font-medium text-gray-900 dark:text-white">
+              {row.userId.name}
+            </div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              {row.userId.email}
+            </div>
+          </>
+        ) : (
+          'Anonymous'
+        ),
+    },
+    {
+      key: 'action',
+      label: 'Action',
+      render: (row) => (
+        <div className="text-sm text-gray-900 dark:text-white">
+          {row.action.replace(/_/g, ' ')}
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => (
+        <span
+          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
+            row.status
+          )}`}
+        >
+          {row.status}
+        </span>
+      ),
+    },
+    {
+      key: 'ipAddress',
+      label: 'IP Address',
+      className: 'text-sm text-gray-500 dark:text-gray-400',
+    },
+    {
+      key: 'timestamp',
+      label: 'Timestamp',
+      className: 'text-sm text-gray-500 dark:text-gray-400',
+      type: 'date', // This tells the DataTable to format this as a date
+    },
+  ];
+
+  /**
+   * Filter configuration for the TableFilters component
+   *
+   * This configuration object defines what filters will be displayed
+   * and how they behave. The TableFilters component uses this to render
+   * the appropriate filter controls.
+   */
+  const auditLogFilterConfig = {
+    filters: [
+      {
+        id: 'action',
+        type: 'select',
+        label: 'Action Type',
+        options: actionTypes.map((action) => ({
+          value: action,
+          label: action.replace(/_/g, ' '),
+        })),
+        defaultValue: '',
+        emptyOptionLabel: 'All Actions',
+      },
+      {
+        id: 'status',
+        type: 'select',
+        label: 'Status',
+        options: statusOptions.map((status) => ({
+          value: status,
+          label: status.charAt(0).toUpperCase() + status.slice(1),
+        })),
+        defaultValue: '',
+        emptyOptionLabel: 'All Statuses',
+      },
+      {
+        id: 'dateRange',
+        type: 'dateRangePreset',
+        label: 'Date Range',
+        presets: datePresets,
+        defaultValue: 'past_hour',
+        showDateSummary: true,
+      },
+    ],
+    layout: {
+      columns: {
+        default: 1,
+        md: 2,
+        lg: 3,
+      },
+    },
+  };
+
+  /**
+   * The current state of all filters, combined into a single object
+   *
+   * This will be passed to the TableFilters component to maintain
+   * the current filter values in the UI.
+   */
+  const filterState = {
+    action: actionFilter,
+    status: statusFilter,
+    datePreset,
+    showCustomDateInputs,
+    startDate,
+    endDate,
+  };
+
+  /**
+   * Handles changes to individual filter fields
+   *
+   * This function is passed to the TableFilters component and will be called
+   * whenever any filter value changes. It updates the appropriate state
+   * variable based on which filter changed.
+   *
+   * @param {string} filterId - The identifier of the filter that changed
+   * @param {any} value - The new value for the filter
+   */
+  const handleFilterChange = (filterId, value) => {
+    switch (filterId) {
+      case 'action':
+        setActionFilter(value);
+        break;
+      case 'status':
+        setStatusFilter(value);
+        break;
+      case 'datePreset':
+        handleDatePresetChange(value);
+        break;
+      case 'showCustomDateInputs':
+        setShowCustomDateInputs(value);
+        break;
+      case 'startDate':
+        setStartDate(value);
+        break;
+      case 'endDate':
+        setEndDate(value);
+        break;
+      default:
+        break;
+    }
+  };
+
+  /**
+   * Render action buttons for each row in the DataTable
+   *
+   * This function is passed to the DataTable component to render
+   * custom action buttons for each row. In this case, we're adding
+   * a button to view the details of a log entry.
+   *
+   * @param {Object} row - The data row being rendered
+   * @returns {JSX.Element} The action button element
+   */
+  const renderRowActions = (row) => (
+    <button
+      onClick={() => handleViewLogDetails(row)}
+      className="text-blue-600 hover:text-blue-900 dark:text-blue-500 dark:hover:text-blue-400"
+      aria-label={`View details for ${row.action}`}
+    >
+      <Eye size={18} />
+    </button>
+  );
+
+  /**
+   * Calculate date range based on preset
+   *
+   * Given a preset identifier like 'past_hour' or 'today', this function
+   * calculates the actual start and end dates to use for filtering.
+   *
+   * @param {string} preset - The preset identifier
+   * @returns {Object} An object containing startDate and endDate as ISO strings
+   */
   const calculateDateRange = (preset) => {
     // Use the real current date
     const now = new Date();
@@ -156,7 +407,14 @@ const AuditLogsPage = () => {
     };
   };
 
-  // Handle date preset change
+  /**
+   * Handle date preset change
+   *
+   * When a user selects a different date preset (like "Today" or "This Week"),
+   * this function updates the state accordingly and calculates the new date range.
+   *
+   * @param {string} preset - The selected preset identifier
+   */
   const handleDatePresetChange = (preset) => {
     setDatePreset(preset);
     setShowCustomDateInputs(preset === 'custom');
@@ -169,7 +427,13 @@ const AuditLogsPage = () => {
     }
   };
 
-  // Set initial date range and trigger initial fetch on component mount
+  /**
+   * Initialize date range and fetch logs on component mount
+   *
+   * This effect runs once when the component is first mounted.
+   * It sets the initial date range to "past hour" and fetches the first
+   * batch of audit logs.
+   */
   useEffect(() => {
     // Initialize with "past hour" filter
     const { startDate: initialStartDate, endDate: initialEndDate } =
@@ -190,7 +454,12 @@ const AuditLogsPage = () => {
     );
   }, [dispatch]); // Only run on component mount
 
-  // Fetch logs when component mounts or filters change
+  /**
+   * Fetch logs when component mounts or filters change
+   *
+   * This effect runs whenever the page, limit, or filter values change.
+   * It fetches a new set of audit logs based on the current filters.
+   */
   useEffect(() => {
     // If a date preset is selected and it's not custom, calculate the date range
     if (datePreset && datePreset !== 'custom') {
@@ -225,7 +494,15 @@ const AuditLogsPage = () => {
     }
   }, [dispatch, page, limit, datePreset, actionFilter, statusFilter]);
 
-  // Handle apply filters button click
+  /**
+   * Handle apply filters button click
+   *
+   * When the user clicks "Apply Filters", this function:
+   * 1. Calculates the exact date range based on the selected preset
+   * 2. Resets to page 1
+   * 3. Updates the Redux store with the new filters
+   * 4. Fetches a new set of logs with the applied filters
+   */
   const handleApplyFilters = () => {
     // Get fresh date calculations to ensure we're using the most current time
     let dateRange;
@@ -270,7 +547,12 @@ const AuditLogsPage = () => {
     );
   };
 
-  // Clear all filters
+  /**
+   * Clear all filters
+   *
+   * This resets all filter values to their defaults and fetches
+   * a new set of logs with no filters applied.
+   */
   const handleClearFilters = () => {
     setActionFilter('');
     setStatusFilter('');
@@ -284,26 +566,48 @@ const AuditLogsPage = () => {
     setPage(1);
   };
 
-  // Handle search
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      dispatch(searchAuditLogs(searchQuery));
+  /**
+   * Handle search functionality
+   *
+   * When a search term is entered, this dispatches a search action
+   * to find logs matching the term.
+   *
+   * @param {string} searchTerm - The search query entered by the user
+   */
+  const handleSearch = (searchTerm) => {
+    if (searchTerm.trim()) {
+      dispatch(searchAuditLogs(searchTerm));
     }
   };
 
-  // View log details
+  /**
+   * View log details
+   *
+   * When a user clicks to view details of a log entry, this function
+   * stores the selected log in state and opens the detail dialog.
+   *
+   * @param {Object} log - The log entry to display details for
+   */
   const handleViewLogDetails = (log) => {
     setSelectedLog(log);
     setDialogOpen(true);
   };
 
-  // Close log details dialog
+  /**
+   * Close log details dialog
+   *
+   * This simply closes the log details modal.
+   */
   const handleCloseDialog = () => {
     setDialogOpen(false);
   };
 
-  // Refresh logs
+  /**
+   * Refresh logs
+   *
+   * Re-fetches the current page of logs with the current filters.
+   * This is useful when you want to see if any new logs have been added.
+   */
   const handleRefresh = () => {
     const dateRange = calculateDateRange(datePreset);
 
@@ -319,7 +623,15 @@ const AuditLogsPage = () => {
     );
   };
 
-  // Get status color for badges
+  /**
+   * Get status color for badges
+   *
+   * Determines the appropriate CSS class for status badges based on
+   * the status value (success, failed, pending).
+   *
+   * @param {string} status - The status value
+   * @returns {string} CSS class string for the badge
+   */
   const getStatusColor = (status) => {
     switch (status) {
       case 'success':
@@ -333,44 +645,53 @@ const AuditLogsPage = () => {
     }
   };
 
-  // Change page
-  const handlePrevPage = () => {
-    if (page > 1) {
-      setPage(page - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (pagination.next) {
-      setPage(page + 1);
-    }
-  };
-
-  // Render metadata as a readable format
+  /**
+   * Render metadata for log details
+   *
+   * Converts the metadata object into a readable format for display.
+   * Handles different types of metadata including nested objects and arrays.
+   *
+   * @param {Object|null} metadata - The metadata object from the audit log
+   * @returns {JSX.Element|string} Formatted representation of the metadata
+   */
   const renderMetadata = (metadata) => {
-    if (!metadata) return 'None';
+    // Handle null or undefined metadata
+    if (!metadata) {
+      return 'No additional information available';
+    }
 
-    return (
-      <div className="space-y-1">
-        {Object.entries(metadata).map(([key, value]) => (
-          <div key={key}>
-            <span className="font-medium">{key}:</span>{' '}
-            {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-          </div>
-        ))}
-      </div>
-    );
+    try {
+      // If metadata is a string, try to parse it as JSON
+      const metadataObj =
+        typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+
+      // Format the metadata as pre-formatted JSON for readability
+      return (
+        <pre className="whitespace-pre-wrap break-words">
+          {JSON.stringify(metadataObj, null, 2)}
+        </pre>
+      );
+    } catch (err) {
+      // If parsing fails, just display as string
+      return String(metadata);
+    }
   };
 
-  // Handle delete logs
+  /**
+   * Handle delete logs
+   *
+   * Deletes all audit logs within the selected date range.
+   * Shows success or error toast notifications based on the result.
+   */
   const handleDeleteLogs = () => {
     const dateRange = calculateDateRange(datePreset);
 
     // Log the date range being used for deletion
     console.log('Deleting logs with date range:', dateRange);
 
+    // Dispatch the delete action and handle the result
     dispatch(deleteAuditLogsByDateRange(dateRange))
-      .unwrap()
+      .unwrap() // This converts the promise to
       .then((result) => {
         // Show success message
         toast.success(`Success! ${result.count} audit logs were deleted.`);
@@ -383,197 +704,50 @@ const AuditLogsPage = () => {
         toast.error(`Error deleting logs: ${error.message || 'Unknown error'}`);
       })
       .finally(() => {
+        // Close the delete confirmation dialog
         setDeleteModalOpen(false);
       });
   };
 
+  /**
+   * The component's render method
+   *
+   * This renders the entire AuditLogsPage, including:
+   * - Header
+   * - TableFilters for filtering and searching
+   * - Error message (if any)
+   * - Results count
+   * - DataTable for displaying the logs
+   * - Pagination controls
+   * - Log details modal
+   * - Delete confirmation modal
+   */
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Audit Logs
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          View and search system activity logs
-        </p>
+      {/* Page Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-4">
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center text-sm text-accent-purple font-bold hover:text-accent-blue hover:underline"
+            title="Back to Dashboard"
+          >
+            <ArrowLeft size={18} />
+          </Link>
+          <h1 className="text-2xl font-bold text-[#F8FAFC]">Audit Logs</h1>
+        </div>
       </div>
 
-      {/* Filters Section */}
-      <div className="bg-app-sidebar rounded-lg border border-sidebar-border shadow-xl p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          {/* Action Type Filter */}
-          <div>
-            <label
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              htmlFor="action-type"
-            >
-              Action Type
-            </label>
-            <select
-              id="action-type"
-              className="w-full p-2 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              value={actionFilter}
-              onChange={(e) => setActionFilter(e.target.value)}
-            >
-              <option value="">All Actions</option>
-              {actionTypes.map((action) => (
-                <option key={action} value={action}>
-                  {action.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <label
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              htmlFor="status"
-            >
-              Status
-            </label>
-            <select
-              id="status"
-              className="w-full p-2 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">All Statuses</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Date Range Preset Filter */}
-          <div>
-            <label
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-              htmlFor="date-preset"
-            >
-              Date Range
-            </label>
-            <select
-              id="date-preset"
-              className="w-full p-2 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              value={datePreset}
-              onChange={(e) => handleDatePresetChange(e.target.value)}
-            >
-              {datePresets.map((preset) => (
-                <option key={preset.value} value={preset.value}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Info about current date range */}
-          <div className="flex items-center">
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              <Calendar size={16} className="inline mr-1" />
-              <span>
-                {datePreset !== 'custom' ? (
-                  <span className="font-medium">
-                    {datePresets.find((p) => p.value === datePreset)?.label}
-                  </span>
-                ) : (
-                  <span className="font-medium">
-                    Custom Range: {new Date(startDate).toLocaleDateString()} to{' '}
-                    {new Date(endDate).toLocaleDateString()}
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Custom Date Range Inputs - Only shown when "Custom Range" is selected */}
-        {showCustomDateInputs && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
-            <div>
-              <label
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                htmlFor="start-date"
-              >
-                Start Date
-              </label>
-              <input
-                id="start-date"
-                type="date"
-                className="w-full p-2 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label
-                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-                htmlFor="end-date"
-              >
-                End Date
-              </label>
-              <input
-                id="end-date"
-                type="date"
-                className="w-full p-2 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row justify-between gap-4 mt-4">
-          {/* Search Box */}
-          <form onSubmit={handleSearch} className="flex">
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Search logs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full p-2 pr-8 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-2.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-            <button
-              type="submit"
-              disabled={!searchQuery.trim()}
-              className={`ml-2 px-4 py-2 rounded-md ${
-                !searchQuery.trim()
-                  ? 'bg-blue-300 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              } text-white`}
-            >
-              <Search size={18} />
-            </button>
-          </form>
-
-          {/* Action Buttons */}
-          <div className="flex space-x-2">
-            <button
-              onClick={handleApplyFilters}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md"
-            >
-              Apply Filters
-            </button>
-            <button
-              onClick={handleClearFilters}
-              className="px-4 py-2 border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 rounded-md"
-            >
-              Clear
-            </button>
+      {/* Filters Section - Using the reusable TableFilters component */}
+      <TableFilters
+        filterConfig={auditLogFilterConfig}
+        filterState={filterState}
+        onFilterChange={handleFilterChange}
+        onApplyFilters={handleApplyFilters}
+        onClearFilters={handleClearFilters}
+        onSearch={handleSearch}
+        actionButtons={
+          <>
             <button
               onClick={handleRefresh}
               className="p-2 border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 rounded-md"
@@ -588,11 +762,11 @@ const AuditLogsPage = () => {
             >
               <Trash2 size={18} className="text-red-600 dark:text-red-400" />
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      {/* Error Message */}
+      {/* Error Message - Shown if there was an error fetching logs */}
       {error && (
         <div
           className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded"
@@ -602,271 +776,51 @@ const AuditLogsPage = () => {
         </div>
       )}
 
-      {/* Results Count */}
+      {/* Results Count - Shows how many logs are being displayed */}
       <div className="mb-4">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           {`Showing ${logs.length} of ${totalCount} total logs`}
         </p>
       </div>
 
-      {/* Logs Table */}
-      <div className="bg-app-sidebar rounded-lg border border-sidebar-border shadow-xl overflow-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
-          <thead className="bg-primary bg-opacity-20">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                User
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                Action
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                IP Address
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                Timestamp
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-card divide-y divide-gray-700">
-            {loading ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-6 py-4 text-center border-b border-gray-700"
-                >
-                  <div className="flex justify-center">
-                    <svg
-                      className="animate-spin h-5 w-5 text-blue-600"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                  </div>
-                </td>
-              </tr>
-            ) : logs.length > 0 ? (
-              logs.map((log) => (
-                <tr
-                  key={log._id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-left border-b border-gray-200 dark:border-gray-700">
-                    {log.userId ? (
-                      <>
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {log.userId.name}
-                        </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {log.userId.email}
-                        </div>
-                      </>
-                    ) : (
-                      'Anonymous'
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-left border-b border-gray-200 dark:border-gray-700">
-                    <div className="text-sm text-gray-900 dark:text-white">
-                      {log.action.replace(/_/g, ' ')}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-left border-b border-gray-200 dark:border-gray-700">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
-                        log.status
-                      )}`}
-                    >
-                      {log.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                    {log.ipAddress}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-left text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                    {new Date(log.timestamp).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium border-b border-gray-200 dark:border-gray-700">
-                    <button
-                      onClick={() => handleViewLogDetails(log)}
-                      className="text-blue-600 hover:text-blue-900 dark:text-blue-500 dark:hover:text-blue-400"
-                    >
-                      <Eye size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700"
-                >
-                  No audit logs found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Logs Table - Using our reusable DataTable component */}
+      <DataTable
+        columns={auditLogColumns}
+        data={logs}
+        isLoading={loading}
+        keyField="_id"
+        emptyMessage="No audit logs found"
+        renderRowActions={renderRowActions}
+        ariaLabel="Audit logs table"
+      />
 
-      {/* Pagination */}
+      {/* Pagination Controls */}
       {totalCount > 0 && (
-        <div className="flex items-center justify-between mt-6">
-          <div className="text-sm text-gray-700 dark:text-gray-400">
-            Page {page} of {Math.ceil(totalCount / limit)}
-          </div>
-          <div className="flex space-x-2">
-            {/* First Page Button */}
-            <button
-              onClick={() => setPage(1)}
-              disabled={page <= 1}
-              title="First Page"
-              className={`px-3 py-1 rounded ${
-                page <= 1
-                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="11 17 6 12 11 7"></polyline>
-                <polyline points="18 17 13 12 18 7"></polyline>
-              </svg>
-            </button>
-
-            {/* Jump Back 10 Pages Button */}
-            <button
-              onClick={() => setPage(Math.max(1, page - 10))}
-              disabled={page <= 1}
-              title="Back 10 Pages"
-              className={`px-3 py-1 rounded ${
-                page <= 1
-                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              -10
-            </button>
-
-            {/* Previous Page Button */}
-            <button
-              onClick={handlePrevPage}
-              disabled={page <= 1}
-              title="Previous Page"
-              className={`px-3 py-1 rounded ${
-                page <= 1
-                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              <ChevronLeft size={16} />
-            </button>
-
-            {/* Current Page Indicator */}
-            <span className="px-4 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-800 dark:text-gray-200 font-medium">
-              {page}
-            </span>
-
-            {/* Next Page Button */}
-            <button
-              onClick={handleNextPage}
-              disabled={!pagination.next}
-              title="Next Page"
-              className={`px-3 py-1 rounded ${
-                !pagination.next
-                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              <ChevronRight size={16} />
-            </button>
-
-            {/* Jump Forward 10 Pages Button */}
-            <button
-              onClick={() => {
-                const maxPage = Math.ceil(totalCount / limit);
-                setPage(Math.min(maxPage, page + 10));
-              }}
-              disabled={page >= Math.ceil(totalCount / limit)}
-              title="Forward 10 Pages"
-              className={`px-3 py-1 rounded ${
-                page >= Math.ceil(totalCount / limit)
-                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              +10
-            </button>
-
-            {/* Last Page Button */}
-            <button
-              onClick={() => {
-                const maxPage = Math.ceil(totalCount / limit);
-                setPage(maxPage);
-              }}
-              disabled={page >= Math.ceil(totalCount / limit)}
-              title="Last Page"
-              className={`px-3 py-1 rounded ${
-                page >= Math.ceil(totalCount / limit)
-                  ? 'bg-gray-200 cursor-not-allowed dark:bg-gray-700'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="13 17 18 12 13 7"></polyline>
-                <polyline points="6 17 11 12 6 7"></polyline>
-              </svg>
-            </button>
-          </div>
-        </div>
+        <Pagination
+          currentPage={page}
+          totalPages={Math.ceil(totalCount / limit)}
+          onPageChange={setPage}
+          showJumpControls={true}
+          jumpSize={10}
+          ariaLabel="Audit logs pagination"
+        />
       )}
 
-      {/* Log Detail Dialog */}
+      {/* Log Detail Modal - Shown when viewing details of a log */}
       {dialogOpen && selectedLog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-labelledby="log-details-title"
+          aria-modal="true"
+        >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-auto">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                <h2
+                  id="log-details-title"
+                  className="text-xl font-semibold text-gray-900 dark:text-white"
+                >
                   Audit Log Details
                 </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -876,6 +830,7 @@ const AuditLogsPage = () => {
               <button
                 onClick={handleCloseDialog}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                aria-label="Close dialog"
               >
                 <X size={24} />
               </button>
@@ -957,11 +912,19 @@ const AuditLogsPage = () => {
 
       {/* Delete Confirmation Modal */}
       {deleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-labelledby="delete-confirmation-title"
+          aria-modal="true"
+        >
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                <h2
+                  id="delete-confirmation-title"
+                  className="text-xl font-semibold text-gray-900 dark:text-white"
+                >
                   Confirm Delete
                 </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -972,6 +935,7 @@ const AuditLogsPage = () => {
               <button
                 onClick={() => setDeleteModalOpen(false)}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                aria-label="Close dialog"
               >
                 <X size={24} />
               </button>

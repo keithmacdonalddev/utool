@@ -53,7 +53,7 @@ function FriendList() {
                 <MessageSquare size={16} />
               </Button> */}
               <Button
-                variant="destructive"
+                variant="danger"
                 size="sm"
                 onClick={() => handleRemoveFriend(friend._id)}
                 disabled={isLoading}
