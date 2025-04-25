@@ -427,6 +427,7 @@ export const taskSlice = createSlice({
       // Update Task Cases
       .addCase(updateTask.pending, (state) => {
         state.isLoading = true;
+        // Don't clear tasks while loading, preserve them
       })
       .addCase(updateTask.fulfilled, (state, action) => {
         // ARRAY UPDATE PATTERN: Map to replace an item in an array
@@ -441,7 +442,9 @@ export const taskSlice = createSlice({
       .addCase(updateTask.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload;
+        state.message = action.payload || 'Failed to update task';
+        // Important: Do NOT clear tasks array on error - tasks should remain visible
+        // state.tasks remains unchanged
       })
 
       // Delete Task Cases

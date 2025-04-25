@@ -73,8 +73,12 @@ import taskReducer from '../features/tasks/taskSlice';
 import noteReducer from '../features/notes/noteSlice';
 import kbReducer from '../features/kb/kbSlice';
 import projectReducer from '../features/projects/projectSlice';
+import projectNoteReducer from '../features/projectNotes/projectNoteSlice';
 import friendReducer from '../features/friends/friendSlice';
 import auditLogsReducer from '../features/auditLogs/auditLogsSlice';
+import bookmarkReducer from '../features/bookmarks/bookmarkSlice';
+import bookmarkFolderReducer from '../features/bookmarks/bookmarkFolderSlice';
+import snippetReducer from '../features/snippets/snippetSlice';
 
 /**
  * STORE CONFIGURATION
@@ -101,8 +105,12 @@ export const store = configureStore({
     notes: noteReducer, // Notes state (notes list, active note, etc)
     kb: kbReducer, // Knowledge base articles state
     projects: projectReducer, // Project management state
+    projectNotes: projectNoteReducer, // Project notes state
     friends: friendReducer, // Friends and social features state
     auditLogs: auditLogsReducer, // Audit logs for system activities
+    bookmarks: bookmarkReducer, // Bookmarks state
+    bookmarkFolders: bookmarkFolderReducer, // Bookmark folders state
+    snippets: snippetReducer, // Code/text snippets state
   },
 
   /**

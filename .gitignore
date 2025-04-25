@@ -35,3 +35,6 @@ logs
 *.sln
 *.sw?
 
+# Ignore any file named chat.json anywhere in the repository
+chat.json
+

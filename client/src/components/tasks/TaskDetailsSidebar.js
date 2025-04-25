@@ -8,11 +8,21 @@ import {
   CheckCircle,
   Clock,
   AlertTriangle,
+  Loader,
 } from 'lucide-react';
-import { updateTask, deleteTask } from '../../features/tasks/taskSlice';
+import {
+  updateTask,
+  deleteTask,
+  getTasksForProject,
+} from '../../features/tasks/taskSlice';
 import { getProjects } from '../../features/projects/projectSlice';
 import Button from '../common/Button';
 import TextareaAutosize from 'react-textarea-autosize';
+import {
+  formatDateForDisplay,
+  formatDateForInput,
+  normalizeDate,
+} from '../../utils/dateUtils';
 
 const TaskDetailsSidebar = ({
   projectId,
@@ -35,27 +45,39 @@ const TaskDetailsSidebar = ({
     dueDate: '',
     project: '',
   });
+  const [originalData, setOriginalData] = useState(null); // Store initial data to compare for changes
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // Track if save operation is in progress
+  const [hasChanges, setHasChanges] = useState(false); // Track if form data has changed
+
+  // Fetch projects only once when the sidebar opens (not on every render)
+  useEffect(() => {
+    if (isOpen && projects.length === 0) {
+      dispatch(getProjects());
+    }
+  }, [isOpen, dispatch, projects.length]);
 
   // Optimized form data update with debouncing
   useEffect(() => {
     if (!task) return;
 
     const updateForm = () => {
-      setFormData({
+      const formattedData = {
         title: task.title || '',
         description: task.description || '',
         status: task.status || 'Not Started',
         priority: task.priority || 'Medium',
-        dueDate: task.dueDate
-          ? new Date(task.dueDate).toISOString().split('T')[0]
-          : '',
+        dueDate: task.dueDate ? formatDateForInput(task.dueDate) : '',
         project: task.project
           ? typeof task.project === 'object'
             ? task.project._id
             : task.project
           : '',
-      });
+      };
+
+      setFormData(formattedData);
+      setOriginalData(formattedData); // Save the original data for comparison
+      setHasChanges(false); // Reset changes flag when task data is loaded
     };
 
     const debounceTimer = setTimeout(updateForm, 200);
@@ -85,42 +107,91 @@ const TaskDetailsSidebar = ({
       ...prevState,
       [name]: value,
     }));
+    setHasChanges(true); // Mark form as having changes
   };
 
   // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
+    setIsSaving(true); // Set saving state
 
-    // Convert empty string dates to null
+    // Properly format the date for the API
+    // If there's a date, make sure it's a valid ISO string that will be recognized by MongoDB
+    // If the date is empty, send null (which will be properly stored in MongoDB)
     const updatedTask = {
       ...formData,
-      dueDate: formData.dueDate || null,
+      dueDate: formData.dueDate
+        ? normalizeDate(formData.dueDate) // Convert to ISO string for consistent API handling
+        : null,
     };
 
-    dispatch(updateTask({ id: taskId, taskData: updatedTask })).then(() => {
-      setIsEditing(false);
-      if (onUpdate) onUpdate();
-    });
+    // Use the current projectId or the form's project value
+    const taskProjectId = projectId || formData.project;
+
+    // Make sure we have a valid project ID
+    if (!taskProjectId) {
+      alert('Error: A project is required to update this task.');
+      setIsSaving(false); // Reset saving state
+      return;
+    }
+
+    dispatch(
+      updateTask({
+        projectId: taskProjectId,
+        taskId,
+        updates: updatedTask,
+      })
+    )
+      .unwrap()
+      .then((updatedTaskData) => {
+        setIsEditing(false);
+        setIsSaving(false); // Reset saving state
+        setHasChanges(false); // Reset changes flag
+        if (onUpdate) onUpdate(updatedTaskData);
+        // Auto-close the sidebar after successful update
+        onClose();
+      })
+      .catch((error) => {
+        // Show error message with more details if available
+        const errorMsg = error ? error.toString() : 'Unknown error';
+        alert(`Failed to update task: ${errorMsg}`);
+        console.error('Task update error:', error);
+        setIsSaving(false); // Reset saving state
+      });
   };
 
   // Handle task deletion
   const handleDelete = () => {
     if (window.confirm('Are you sure you want to delete this task?')) {
-      dispatch(deleteTask(taskId)).then(() => {
-        if (onDelete) onDelete();
-      });
+      // Use the current projectId or the form's project value
+      const taskProjectId = projectId || formData.project;
+
+      // Make sure we have a valid project ID
+      if (!taskProjectId) {
+        alert('Error: A project ID is required to delete this task.');
+        return;
+      }
+
+      dispatch(
+        deleteTask({
+          projectId: taskProjectId,
+          taskId,
+        })
+      )
+        .unwrap()
+        .then(() => {
+          if (onDelete) onDelete();
+        })
+        .catch((error) => {
+          alert(`Failed to delete task: ${error}`);
+        });
     }
   };
 
   // Format date for display
   const formatDate = (dateString) => {
     if (!dateString) return 'No due date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    return formatDateForDisplay(dateString);
   };
 
   // Get priority color class
@@ -336,8 +407,13 @@ const TaskDetailsSidebar = ({
                     variant="primary"
                     type="submit"
                     className="flex items-center gap-2"
+                    disabled={isSaving || !hasChanges} // Disable button if saving or no changes
                   >
-                    <Save size={16} />
+                    {isSaving ? (
+                      <Loader size={16} className="animate-spin" />
+                    ) : (
+                      <Save size={16} />
+                    )}
                     Save Changes
                   </Button>
                 </div>
@@ -365,7 +441,7 @@ const TaskDetailsSidebar = ({
                     {formData.dueDate && (
                       <div className="flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm">
                         <Calendar size={16} className="mr-1" />
-                        {formatDate(formData.dueDate)}
+                        {formatDateForDisplay(formData.dueDate)}
                       </div>
                     )}
                   </div>

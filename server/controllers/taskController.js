@@ -493,17 +493,16 @@ export const updateTask = async (req, res, next) => {
       runValidators: true,
     });
 
-    logger.logUpdate('Task updated', {
-      userId: req.user.id,
-      taskId,
+    // Fixed logging to ensure we're using the string ID, not an object
+    logger.logUpdate('task', task._id.toString(), req.user.id, {
+      taskId: task._id.toString(),
       projectId,
-      oldData: oldTask,
-      newData: task,
+      title: task.title,
     });
 
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'task_update', 'success', {
-      taskId,
+      taskId: task._id.toString(),
       projectId,
       changes: req.body,
       oldData: oldTask,

@@ -23,10 +23,12 @@ import {
 } from '../features/tasks/taskSlice';
 import TaskList from '../components/tasks/TaskList';
 import TaskCreateModal from '../components/tasks/TaskCreateModal';
+import ProjectNotes from '../components/projects/ProjectNotes';
 import api from '../utils/api';
 import { PlusCircle, X, Edit } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 import useFriends from '../hooks/useFriends';
+import { formatDateForDisplay } from '../utils/dateUtils';
 
 const TaskDetailsSidebar = lazy(() =>
   import('../components/tasks/TaskDetailsSidebar')
@@ -165,7 +167,28 @@ const ProjectDetailsPage = () => {
    */
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
+
+    // Handle date strings consistently - ensures proper date recognition
+    try {
+      // Convert any valid date string format to a Date object
+      const date = new Date(dateString);
+
+      // Check if date is valid before attempting to format
+      if (isNaN(date.getTime())) {
+        console.warn(`Invalid date format: ${dateString}`);
+        return 'N/A';
+      }
+
+      // Format the date consistently
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch (err) {
+      console.error(`Error formatting date ${dateString}:`, err);
+      return 'N/A';
+    }
   };
 
   /**
@@ -237,15 +260,23 @@ const ProjectDetailsPage = () => {
     try {
       await dispatch(
         updateTask({
-          id: updatedTask._id,
-          taskData: updatedTask,
+          projectId: id,
+          taskId: updatedTask._id,
+          updates: updatedTask,
         })
       ).unwrap();
 
-      dispatch(getTasksForProject(id));
+      // Force a complete refresh of task data from the server
+      // This ensures we get the latest data with correct date formats
+      setTimeout(() => {
+        dispatch(getTasksForProject(id));
+      }, 100);
+
       showNotification('Task updated successfully', 'success');
     } catch (error) {
       showNotification(`Failed to update task: ${error.message}`, 'error');
+      // Even on error, make sure we reload tasks to prevent them from disappearing
+      dispatch(getTasksForProject(id));
     }
   };
 
@@ -580,64 +611,71 @@ const ProjectDetailsPage = () => {
 
         {/* TASK LIST WITH CONDITIONAL STATES */}
         {!tasksLoading && !tasksError && tasks.length > 0 && (
-          <div className="overflow-visible bg-dark-800 rounded-lg border border-dark-700">
-            <table className="min-w-full divide-y divide-dark-700">
-              <thead>
-                <tr className="bg-primary bg-opacity-20">
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Title
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Priority
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Due Date
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-card divide-y divide-dark-700">
-                {tasks.map((task) => (
-                  <tr
-                    key={task._id}
-                    className="hover:bg-dark-700 transition-colors cursor-pointer"
-                    onClick={() => handleTaskClick(task._id)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
-                      {task.title}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs">
-                      <div className="relative group max-w-xs">
-                        <span className="block truncate">
-                          {task.description}
-                        </span>
-                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
-                          {task.description}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                      {task.status}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                      {task.priority}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                      {formatDate(task.dueDate)}
-                    </td>
+          <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-dark-700">
+                <thead>
+                  <tr className="bg-primary bg-opacity-20">
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Title
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Description
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Priority
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Due Date
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="bg-card divide-y divide-dark-700">
+                  {tasks.map((task) => (
+                    <tr
+                      key={task._id}
+                      className="hover:bg-dark-700 transition-colors cursor-pointer"
+                      onClick={() => handleTaskClick(task._id)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
+                        {task.title}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs">
+                        <div className="relative group max-w-xs">
+                          <span className="block truncate">
+                            {task.description}
+                          </span>
+                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                            {task.description}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                        {task.status}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                        {task.priority}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                        {formatDateForDisplay(task.dueDate)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {/* End of tasks section */}
+      </div>
+
+      {/* Project Notes Section */}
+      <div className="bg-card rounded-lg p-4 shadow">
+        <ProjectNotes projectId={id} />
       </div>
     </div>
   );

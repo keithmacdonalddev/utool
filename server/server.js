@@ -249,6 +249,12 @@ import friendRoutes from './routes/friends.js';
 
 import notificationRoutes from './routes/notifications.js';
 
+import bookmarkRoutes from './routes/bookmarks.js';
+
+import bookmarkFolderRoutes from './routes/bookmarkFolders.js';
+
+import snippetRoutes from './routes/snippets.js';
+
 // Middleware Section
 
 // Middleware functions process requests before they reach route handlers
@@ -478,6 +484,12 @@ app.use('/api/v1/stocks', stockRoutes);
 app.use('/api/v1/friends', friendRoutes);
 
 app.use('/api/v1/notifications', notificationRoutes);
+
+app.use('/api/v1/bookmarks', bookmarkRoutes);
+
+app.use('/api/v1/bookmark-folders', bookmarkFolderRoutes);
+
+app.use('/api/v1/snippets', snippetRoutes);
 
 // Basic Route with logging
 

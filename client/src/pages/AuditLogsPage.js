@@ -399,7 +399,7 @@ const AuditLogsPage = () => {
       </div>
 
       {/* Filters Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+      <div className="bg-app-sidebar rounded-lg border border-sidebar-border shadow-xl p-6 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {/* Action Type Filter */}
           <div>
@@ -610,9 +610,9 @@ const AuditLogsPage = () => {
       </div>
 
       {/* Logs Table */}
-      <div className="bg-white dark:bg-gray-800 overflow-auto rounded-lg shadow">
+      <div className="bg-app-sidebar rounded-lg border border-sidebar-border shadow-xl overflow-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
-          <thead className="bg-primary bg-opacity-20 dark:bg-gray-700">
+          <thead className="bg-primary bg-opacity-20">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
                 User
@@ -634,12 +634,12 @@ const AuditLogsPage = () => {
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+          <tbody className="bg-card divide-y divide-gray-700">
             {loading ? (
               <tr>
                 <td
                   colSpan={6}
-                  className="px-6 py-4 text-center border-b border-gray-200 dark:border-gray-700"
+                  className="px-6 py-4 text-center border-b border-gray-700"
                 >
                   <div className="flex justify-center">
                     <svg

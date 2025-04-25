@@ -16,6 +16,7 @@ import {
   Trash2, // Added for Trash
   History, // Added for Audit Logs
   CheckSquare, // Added for Tasks icon
+  Bookmark, // Add Bookmark for Resources
 } from 'lucide-react'; // Removed UserGroup import which isn't available
 
 const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
@@ -148,6 +149,19 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
           >
             <Library size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Knowledge Base</span>
+          </NavLink>
+          <NavLink
+            to="/resources"
+            className={({ isActive }) =>
+              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
+                isActive ? activeLinkClasses : inactiveLinkClasses
+              }`
+            }
+            onClick={toggleSidebar}
+            title="Resources"
+          >
+            <Bookmark size={20} className="flex-shrink-0" />
+            <span className={linkTextClasses}>Resources</span>
           </NavLink>
           <NavLink
             to="/notes"

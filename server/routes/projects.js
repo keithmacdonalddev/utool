@@ -12,6 +12,8 @@ import {
 
 // Import task router to re-route all task operations
 import taskRouter from './tasks.js';
+// Import project notes router
+import projectNotesRouter from './projectNotes.js';
 
 // Protect all routes
 router.use(protect);
@@ -19,6 +21,9 @@ router.use(protect);
 // Re-route task operations within project context
 // This ensures all task operations are performed in the context of a project
 router.use('/:projectId/tasks', taskRouter);
+
+// Re-route project notes operations
+router.use('/:projectId/notes', projectNotesRouter);
 
 // Define routes with authorization
 router

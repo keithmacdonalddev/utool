@@ -43,6 +43,7 @@ const FriendsPage = lazy(() => import('./pages/FriendsPage'));
 // Notes Feature
 const NotesPage = lazy(() => import('./pages/NotesPage'));
 const TrashPage = lazy(() => import('./pages/TrashPage'));
+const ResourcesPage = lazy(() => import('./pages/ResourcesPage')); // <-- Add resources page
 // Admin Pages
 const AdminUserListPage = lazy(() => import('./pages/admin/UserListPage'));
 const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
@@ -141,8 +142,7 @@ function App() {
                     path="/kb/:id/versions"
                     element={<KbVersionHistoryPage />}
                   />
-
-                  {/* User profile and productivity tools */}
+                  <Route path="/resources" element={<ResourcesPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/notes/trash" element={<TrashPage />} />

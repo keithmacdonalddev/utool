@@ -213,10 +213,28 @@ export const markAsRead = async (req, res, next) => {
       });
     }
 
+    // Filter out invalid ObjectIds to prevent casting errors
+    const mongoose = await import('mongoose');
+    const validIds = ids.filter((id) => {
+      try {
+        return mongoose.Types.ObjectId.isValid(id);
+      } catch (err) {
+        logger.warn(`Invalid notification ID format: ${id}`);
+        return false;
+      }
+    });
+
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid notification IDs provided',
+      });
+    }
+
     // Update all provided notification IDs that belong to the user
     const result = await Notification.updateMany(
       {
-        _id: { $in: ids },
+        _id: { $in: validIds },
         user: req.user.id,
       },
       { isRead: true }
@@ -224,8 +242,10 @@ export const markAsRead = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      count: result.nModified,
-      message: `${result.nModified} notifications marked as read`,
+      count: result.nModified || result.modifiedCount,
+      message: `${
+        result.nModified || result.modifiedCount
+      } notifications marked as read`,
     });
   } catch (err) {
     logger.error('Mark notifications as read error:', err);
