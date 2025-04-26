@@ -7,7 +7,7 @@
 // 4. Conditional Rendering: Displaying different UI based on loading/error states
 // 5. Custom Hooks: Reusing logic across components
 
-import React, { useEffect, useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -30,9 +30,22 @@ import { useNotifications } from '../context/NotificationContext';
 import useFriends from '../hooks/useFriends';
 import { formatDateForDisplay } from '../utils/dateUtils';
 
-const TaskDetailsSidebar = lazy(() =>
-  import('../components/tasks/TaskDetailsSidebar')
-);
+// Pre-load the TaskDetailsSidebar component to prevent loading delays on first click
+// This ensures the component is already loaded before it's needed
+const TaskDetailsSidebar = lazy(() => {
+  // Start loading the component immediately but don't block rendering
+  const componentPromise = import('../components/tasks/TaskDetailsSidebar');
+
+  // Trigger the load in the background as soon as this module is imported
+  componentPromise.catch((err) =>
+    console.error('Failed to preload TaskDetailsSidebar:', err)
+  );
+
+  return componentPromise;
+});
+
+// Immediately trigger the preload when this module is imported
+import('../components/tasks/TaskDetailsSidebar').catch(() => {});
 
 /**
  * ProjectDetailsPage Component
@@ -75,11 +88,6 @@ const ProjectDetailsPage = () => {
     isError: tasksError,
     message: tasksMessage,
   } = useSelector((state) => state.tasks);
-
-  /**
-   * Context API:
-   * Using custom hook to access context values
-   */
   const { showNotification } = useNotifications();
 
   /**
@@ -89,6 +97,13 @@ const ProjectDetailsPage = () => {
   const [showTaskModal, setShowTaskModal] = useState(false); // Modal visibility
   const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false); // Dropdown state
   const [selectedUserToAdd, setSelectedUserToAdd] = useState(''); // Selected user ID
+
+  // Reference to track component mounts and detect page refreshes
+  const mountCountRef = useRef(0);
+  // Track if this is the first task click
+  const isFirstTaskClickRef = useRef(true);
+  // Timestamp of component mount to help detect full refreshes
+  const mountTimestampRef = useRef(Date.now());
 
   /**
    * Custom Hook:
@@ -101,6 +116,35 @@ const ProjectDetailsPage = () => {
   } = useFriends();
 
   /**
+   * Diagnostic logging effect - runs only once on mount
+   * This helps track component lifecycle and detect refreshes
+   */
+  useEffect(() => {
+    mountCountRef.current += 1;
+    const isFullPageRefresh = !sessionStorage.getItem('appInitialLoad');
+
+    if (isFullPageRefresh) {
+      // First load after a full page refresh
+      sessionStorage.setItem('appInitialLoad', 'true');
+      console.log(
+        '🔄 FULL PAGE REFRESH DETECTED - ProjectDetailsPage mounted for the first time after page load'
+      );
+    } else {
+      console.log(
+        `🔄 ProjectDetailsPage re-rendered (Mount count: ${mountCountRef.current})`
+      );
+    }
+
+    console.log(
+      `⏱️ Time since initial mount: ${Date.now() - mountTimestampRef.current}ms`
+    );
+
+    return () => {
+      console.log('🧹 ProjectDetailsPage cleanup (component unmounting)');
+    };
+  }, []); // Empty dependency array ensures this effect runs only once on mount
+
+  /**
    * DATA FETCHING PATTERN:
    * Using useEffect for side effects like data fetching when component mounts
    * Dependencies array [dispatch, id] ensures this only runs when those values change
@@ -110,6 +154,7 @@ const ProjectDetailsPage = () => {
    */
   useEffect(() => {
     if (id) {
+      console.log(`📡 Fetching project data for ID: ${id}`);
       dispatch(getProject(id)); // Fetch project details
       dispatch(getTasksForProject(id)); // Fetch related tasks
     }
@@ -241,22 +286,62 @@ const ProjectDetailsPage = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  /**
+   * Handle task click - Open the slide panel with task details
+   * Enhanced with logging to track potential page refresh issues
+   *
+   * @param {string} taskId - ID of the task that was clicked
+   */
   const handleTaskClick = (taskId) => {
+    console.log(
+      `🖱️ Task clicked: ${taskId} (isFirstClick: ${isFirstTaskClickRef.current})`
+    );
+    console.log(
+      `⏱️ Time since component mount: ${
+        Date.now() - mountTimestampRef.current
+      }ms`
+    );
+
+    // Log navigation state to help debug refresh issues
+    console.log(`📍 Current URL: ${window.location.href}`);
+    console.log(
+      `🗂️ Navigation type: ${
+        window.performance?.navigation?.type === 1 ? 'PAGE_RELOAD' : 'NAVIGATE'
+      }`
+    );
+
     const task = tasks.find((t) => t._id === taskId);
     if (task) {
+      console.log(`✅ Found task: ${task.title}`);
       setSelectedTask(task);
       setIsSidebarOpen(true);
+
+      // After the first click, set the ref to false
+      if (isFirstTaskClickRef.current) {
+        console.log('📝 Marked first task click as complete');
+        isFirstTaskClickRef.current = false;
+      }
+    } else {
+      console.error(`❌ Task not found with ID: ${taskId}`);
     }
   };
 
+  /**
+   * Handle closing the sidebar panel
+   * Added logging to track panel close events
+   */
   const handleCloseSidebar = () => {
+    console.log('🚪 Closing task sidebar');
     setIsSidebarOpen(false);
+    // Use a timeout to prevent UI flashing when changing task
     setTimeout(() => {
       setSelectedTask(null);
+      console.log('🧹 Task selection cleared after panel close');
     }, 300);
   };
 
   const handleTaskUpdate = async (updatedTask) => {
+    console.log(`✏️ Task update requested: ${updatedTask._id}`);
     try {
       await dispatch(
         updateTask({
@@ -269,6 +354,7 @@ const ProjectDetailsPage = () => {
       // Force a complete refresh of task data from the server
       // This ensures we get the latest data with correct date formats
       setTimeout(() => {
+        console.log('🔄 Refreshing all tasks after update');
         dispatch(getTasksForProject(id));
       }, 100);
 
@@ -281,6 +367,7 @@ const ProjectDetailsPage = () => {
   };
 
   const handleTaskDelete = async (taskId) => {
+    console.log(`🗑️ Task delete requested: ${taskId}`);
     try {
       await dispatch(deleteTask(taskId)).unwrap();
       setIsSidebarOpen(false);
@@ -638,7 +725,11 @@ const ProjectDetailsPage = () => {
                     <tr
                       key={task._id}
                       className="hover:bg-dark-700 transition-colors cursor-pointer"
-                      onClick={() => handleTaskClick(task._id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleTaskClick(task._id);
+                      }}
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
                         {task.title}

@@ -132,6 +132,7 @@ const RegisterPage = () => {
                 : null
             }
             helpText="Minimum 8 characters."
+            autocomplete="new-password"
           />
 
           <FormInput
@@ -146,6 +147,7 @@ const RegisterPage = () => {
             disabled={isLoading}
             error={localError ? localError : null}
             className="mb-6"
+            autocomplete="new-password"
           />
 
           <div className="flex items-center justify-center">

@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-  X,
   Calendar,
   Trash2,
   Save,
@@ -23,7 +22,23 @@ import {
   formatDateForInput,
   normalizeDate,
 } from '../../utils/dateUtils';
+import SlidePanel from '../common/SlidePanel';
 
+/**
+ * TaskDetailsSidebar Component
+ *
+ * This component displays and allows editing of task details in a sliding panel.
+ * It now uses the reusable SlidePanel component for the sliding behavior and overlay.
+ *
+ * @param {Object} props - Component properties
+ * @param {string} props.projectId - ID of the project the task belongs to
+ * @param {string} props.taskId - ID of the task to display/edit
+ * @param {boolean} props.isOpen - Controls whether the panel is visible
+ * @param {Function} props.onClose - Callback function to close the panel
+ * @param {Function} props.onUpdate - Callback function called after a task is updated
+ * @param {Function} props.onDelete - Callback function called after a task is deleted
+ * @returns {JSX.Element} The TaskDetailsSidebar component
+ */
 const TaskDetailsSidebar = ({
   projectId,
   taskId,
@@ -239,268 +254,258 @@ const TaskDetailsSidebar = ({
     return found ? found.name : 'Unknown Project';
   };
 
-  return (
-    <div
-      className={`fixed top-0 right-0 h-full w-full sm:w-96 bg-dark-800 border-l border-dark-700 shadow-xl transition-transform duration-300 ease-in-out z-50 overflow-y-auto ${
-        isOpen ? 'transform translate-x-0' : 'transform translate-x-full'
-      }`}
-    >
-      {/* Header */}
-      <div className="sticky top-0 bg-dark-800 border-b border-dark-700 p-4 flex justify-between items-center z-10">
-        <h2 className="text-lg font-semibold text-white">
-          {isEditing ? 'Edit Task' : 'Task Details'}
-        </h2>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-full hover:bg-dark-700"
-          aria-label="Close"
-        >
-          <X size={20} className="text-gray-400" />
-        </button>
-      </div>
+  /**
+   * Render the content inside the SlidePanel
+   * This is the task-specific content that was previously directly in the sidebar
+   */
+  const renderContent = () => {
+    if (!task) {
+      return (
+        <div className="flex justify-center items-center h-64">
+          <p className="text-gray-400">Task not found</p>
+        </div>
+      );
+    }
 
-      {/* Content */}
-      <div className="p-4">
-        {!task ? (
-          <div className="flex justify-center items-center h-64">
-            <p className="text-gray-400">Task not found</p>
-          </div>
+    return (
+      <>
+        {isEditing ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Title */}
+            <div>
+              <label
+                htmlFor="title"
+                className="block text-sm font-medium text-gray-300"
+              >
+                Title
+              </label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                required
+                className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
+              />
+            </div>
+
+            {/* Description */}
+            <div>
+              <label
+                htmlFor="description"
+                className="block text-sm font-medium text-gray-300"
+              >
+                Description
+              </label>
+              <TextareaAutosize
+                id="description"
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2 min-h-[100px]"
+                minRows={3}
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label
+                htmlFor="status"
+                className="block text-sm font-medium text-gray-300"
+              >
+                Status
+              </label>
+              <select
+                id="status"
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
+              >
+                <option value="Not Started">Not Started</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label
+                htmlFor="priority"
+                className="block text-sm font-medium text-gray-300"
+              >
+                Priority
+              </label>
+              <select
+                id="priority"
+                name="priority"
+                value={formData.priority}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            </div>
+
+            {/* Due Date */}
+            <div>
+              <label
+                htmlFor="dueDate"
+                className="block text-sm font-medium text-gray-300"
+              >
+                Due Date
+              </label>
+              <input
+                type="date"
+                id="dueDate"
+                name="dueDate"
+                value={formData.dueDate}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
+              />
+            </div>
+
+            {/* Project */}
+            <div>
+              <label
+                htmlFor="project"
+                className="block text-sm font-medium text-gray-300"
+              >
+                Project
+              </label>
+              <select
+                id="project"
+                name="project"
+                value={formData.project}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
+              >
+                <option value="">No Project</option>
+                {projects &&
+                  projects.map((project) => (
+                    <option key={project._id} value={project._id}>
+                      {project.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                variant="secondary"
+                onClick={() => setIsEditing(false)}
+                type="button"
+              >
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={handleDelete} type="button">
+                Delete
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                className="flex items-center gap-2"
+                disabled={isSaving || !hasChanges} // Disable button if saving or no changes
+              >
+                {isSaving ? (
+                  <Loader size={16} className="animate-spin" />
+                ) : (
+                  <Save size={16} />
+                )}
+                Save Changes
+              </Button>
+            </div>
+          </form>
         ) : (
           <>
-            {isEditing ? (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Title */}
-                <div>
-                  <label
-                    htmlFor="title"
-                    className="block text-sm font-medium text-gray-300"
-                  >
-                    Title
-                  </label>
-                  <input
-                    type="text"
-                    id="title"
-                    name="title"
-                    value={formData.title}
-                    onChange={handleChange}
-                    required
-                    className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
-                  />
-                </div>
+            {/* View Mode */}
+            <div className="space-y-6">
+              {/* Title and Edit Button Row */}
+              <div className="flex justify-between items-center">
+                <h1 className="text-xl font-bold text-white">{task.title}</h1>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="bg-primary hover:bg-primary-dark text-white px-3 py-1 rounded-md transition-colors"
+                >
+                  Edit
+                </button>
+              </div>
 
-                {/* Description */}
-                <div>
-                  <label
-                    htmlFor="description"
-                    className="block text-sm font-medium text-gray-300"
-                  >
-                    Description
-                  </label>
-                  <TextareaAutosize
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2 min-h-[100px]"
-                    minRows={3}
-                  />
+              {/* Status and Priority Badges */}
+              <div className="flex flex-wrap gap-2">
+                <div className="flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm">
+                  {getStatusIcon(task.status)}
+                  <span className="ml-1">{task.status}</span>
                 </div>
-
-                {/* Status */}
-                <div>
-                  <label
-                    htmlFor="status"
-                    className="block text-sm font-medium text-gray-300"
-                  >
-                    Status
-                  </label>
-                  <select
-                    id="status"
-                    name="status"
-                    value={formData.status}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
-                  >
-                    <option value="Not Started">Not Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                  </select>
+                <div
+                  className={`flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm ${getPriorityColorClass(
+                    task.priority
+                  )}`}
+                >
+                  {task.priority} Priority
                 </div>
-
-                {/* Priority */}
-                <div>
-                  <label
-                    htmlFor="priority"
-                    className="block text-sm font-medium text-gray-300"
-                  >
-                    Priority
-                  </label>
-                  <select
-                    id="priority"
-                    name="priority"
-                    value={formData.priority}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
-                  >
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                  </select>
-                </div>
-
-                {/* Due Date */}
-                <div>
-                  <label
-                    htmlFor="dueDate"
-                    className="block text-sm font-medium text-gray-300"
-                  >
-                    Due Date
-                  </label>
-                  <input
-                    type="date"
-                    id="dueDate"
-                    name="dueDate"
-                    value={formData.dueDate}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
-                  />
-                </div>
-
-                {/* Project */}
-                <div>
-                  <label
-                    htmlFor="project"
-                    className="block text-sm font-medium text-gray-300"
-                  >
-                    Project
-                  </label>
-                  <select
-                    id="project"
-                    name="project"
-                    value={formData.project}
-                    onChange={handleChange}
-                    className="mt-1 block w-full rounded-md bg-dark-700 border border-dark-600 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-white p-2"
-                  >
-                    <option value="">No Project</option>
-                    {projects &&
-                      projects.map((project) => (
-                        <option key={project._id} value={project._id}>
-                          {project.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex justify-end space-x-2 pt-4">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setIsEditing(false)}
-                    type="button"
-                  >
-                    Cancel
-                  </Button>
-                  <Button variant="danger" onClick={handleDelete} type="button">
-                    Delete
-                  </Button>
-                  <Button
-                    variant="primary"
-                    type="submit"
-                    className="flex items-center gap-2"
-                    disabled={isSaving || !hasChanges} // Disable button if saving or no changes
-                  >
-                    {isSaving ? (
-                      <Loader size={16} className="animate-spin" />
-                    ) : (
-                      <Save size={16} />
-                    )}
-                    Save Changes
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <>
-                {/* View Mode */}
-                <div className="space-y-6">
-                  {/* Title */}
-                  <h1 className="text-xl font-bold text-white">{task.title}</h1>
-
-                  {/* Status and Priority Badges */}
-                  <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm">
-                      {getStatusIcon(task.status)}
-                      <span className="ml-1">{task.status}</span>
-                    </div>
-                    <div
-                      className={`flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm ${getPriorityColorClass(
-                        task.priority
-                      )}`}
-                    >
-                      {task.priority} Priority
-                    </div>
-                    {formData.dueDate && (
-                      <div className="flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm">
-                        <Calendar size={16} className="mr-1" />
-                        {formatDateForDisplay(formData.dueDate)}
-                      </div>
-                    )}
+                {formData.dueDate && (
+                  <div className="flex items-center px-3 py-1 bg-dark-700 rounded-full text-sm">
+                    <Calendar size={16} className="mr-1" />
+                    {formatDateForDisplay(formData.dueDate)}
                   </div>
+                )}
+              </div>
 
-                  {/* Project */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400">
-                      Project
-                    </h3>
-                    <p className="mt-1 text-white">
-                      {formData.project
-                        ? getProjectName(formData.project)
-                        : 'No Project'}
+              {/* Project */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-400">Project</h3>
+                <p className="mt-1 text-white">
+                  {formData.project
+                    ? getProjectName(formData.project)
+                    : 'No Project'}
+                </p>
+              </div>
+
+              {/* Description */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-400">
+                  Description
+                </h3>
+                <div className="mt-2 prose prose-sm max-w-none text-gray-200">
+                  {task.description ? (
+                    <p className="whitespace-pre-wrap">{task.description}</p>
+                  ) : (
+                    <p className="text-gray-500 italic">
+                      No description provided
                     </p>
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-400">
-                      Description
-                    </h3>
-                    <div className="mt-2 prose prose-sm max-w-none text-gray-200">
-                      {task.description ? (
-                        <p className="whitespace-pre-wrap">
-                          {task.description}
-                        </p>
-                      ) : (
-                        <p className="text-gray-500 italic">
-                          No description provided
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Creation and Update Info */}
-                  <div className="border-t border-dark-700 pt-4 text-xs text-gray-500">
-                    <p>Created: {new Date(task.createdAt).toLocaleString()}</p>
-                    <p>
-                      Last updated: {new Date(task.updatedAt).toLocaleString()}
-                    </p>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex justify-end pt-6">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditing(true)}
-                      className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md transition-colors"
-                    >
-                      Edit
-                    </button>
-                  </div>
+                  )}
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* Creation and Update Info */}
+              <div className="border-t border-dark-700 pt-4 text-xs text-gray-500">
+                <p>Created: {new Date(task.createdAt).toLocaleString()}</p>
+                <p>Last updated: {new Date(task.updatedAt).toLocaleString()}</p>
+              </div>
+            </div>
           </>
         )}
-      </div>
-    </div>
+      </>
+    );
+  };
+
+  // Use the SlidePanel component to handle the sliding behavior and overlay
+  return (
+    <SlidePanel
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isEditing ? 'Edit Task' : 'Task Details'}
+      width="30rem"
+      maxWidth="100%"
+    >
+      {renderContent()}
+    </SlidePanel>
   );
 };
 

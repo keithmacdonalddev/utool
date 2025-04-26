@@ -84,6 +84,7 @@ const LoginPage = () => {
             required
             disabled={isLoading}
             className="mb-6"
+            autocomplete="current-password"
           />
 
           <div className="flex items-center justify-center">

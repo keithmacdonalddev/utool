@@ -7,13 +7,31 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-  <React.StrictMode>
-    <Provider store={store}> {/* Wrap App with Provider */}
+
+/**
+ * Renders the React application with appropriate wrappers
+ *
+ * In development environment, we use StrictMode which intentionally
+ * double-mounts components to help catch side effect bugs.
+ * In production, we disable StrictMode for better performance.
+ */
+if (process.env.NODE_ENV === 'development') {
+  // In development: Use StrictMode to catch potential issues (causes double mounting)
+  root.render(
+    <React.StrictMode>
+      <Provider store={store}>
+        <App />
+      </Provider>
+    </React.StrictMode>
+  );
+} else {
+  // In production: Don't use StrictMode for better performance
+  root.render(
+    <Provider store={store}>
       <App />
     </Provider>
-  </React.StrictMode>
-);
+  );
+}
 
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))
