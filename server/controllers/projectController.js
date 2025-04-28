@@ -14,11 +14,14 @@ export const getProjects = async (req, res, next) => {
       action: 'get_projects',
     });
 
+    // Convert user ID to ObjectId safely using modern constructor syntax
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+
     // Use MongoDB aggregation pipeline for better performance in a single query
     // This avoids multiple separate database calls that were causing slowness
     const projectsWithProgress = await Project.aggregate([
       // Match projects where the user is a member
-      { $match: { members: mongoose.Types.ObjectId(req.user.id) } },
+      { $match: { members: userId } },
 
       // Look up project owner details
       {
