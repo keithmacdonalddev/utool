@@ -1,13 +1,17 @@
 import axios from 'axios';
 import errorResponse from '../utils/errorResponse.js';
 
-// Mock data for fallback when API fails
+/**
+ * Mock data for fallback when all API calls fail
+ * These values are updated to April 2025 prices for better accuracy when APIs are unavailable
+ * This is the last resort data source and should rarely be used in production
+ */
 const mockStockData = {
   TSLA: {
     symbol: 'TSLA',
-    price: 912.75,
-    change: 22.5,
-    changePercent: '2.53%',
+    price: 278.32, // Updated from 912.75 to current market price
+    change: 3.45,
+    changePercent: '1.25%',
   },
   AAPL: {
     symbol: 'AAPL',
@@ -41,7 +45,11 @@ const lastGeneratedPrices = {};
 // In-memory store for tracking API request times by user
 const userLastRequestTimes = new Map();
 
-// Enhanced logging function
+/**
+ * Enhanced logging function for stock-related operations
+ * @param {string} message - The message to log
+ * @param {any} data - Optional data to include in the log
+ */
 const logStock = (message, data = null) => {
   const timestamp = new Date().toISOString();
   console.log(`[STOCK][${timestamp}] ${message}`);
@@ -167,7 +175,63 @@ const logAllPrices = () => {
   );
 };
 
-// Get real-time stock quote from Alpha Vantage
+/**
+ * Alternative API providers for stock data
+ * Used as fallbacks when the primary API fails
+ * @param {string} symbol - The stock symbol to fetch
+ * @returns {Promise<Object|null>} - Stock data or null if failed
+ */
+const tryAlternativeAPIs = async (symbol) => {
+  try {
+    logStock(
+      `Attempting alternative API for ${symbol} (Yahoo Finance API via RapidAPI)`
+    );
+
+    // Using Yahoo Finance API through RapidAPI
+    const rapidApiKey = process.env.YAHOO_FINANCE_API_KEY;
+
+    // Skip this attempt if no API key is configured
+    if (!rapidApiKey || rapidApiKey === 'your_rapidapi_key_here') {
+      logStock(`Yahoo Finance API skipped: No API key configured`);
+      return null;
+    }
+
+    const response = await axios.get(
+      `https://yahoo-finance15.p.rapidapi.com/api/v1/markets/stock/quote?symbol=${symbol}`,
+      {
+        headers: {
+          'X-RapidAPI-Key': rapidApiKey,
+          'X-RapidAPI-Host': 'yahoo-finance15.p.rapidapi.com',
+        },
+        timeout: 5000,
+      }
+    );
+
+    if (response.data && response.data.data && response.data.data.length > 0) {
+      const quote = response.data.data[0];
+
+      // Extract the needed stock data from Yahoo Finance response
+      return {
+        symbol: symbol,
+        price: quote.regularMarketPrice,
+        change: quote.regularMarketChange,
+        changePercent: `${quote.regularMarketChangePercent.toFixed(2)}%`,
+        source: 'yahoo-finance',
+      };
+    }
+
+    logStock(`Yahoo Finance API returned invalid or empty data`);
+    return null;
+  } catch (error) {
+    logStock(`Alternative API failed: ${error.message}`);
+    return null;
+  }
+};
+
+/**
+ * Get real-time stock quote from primary API, with fallback options
+ * Implements multiple layers of fallbacks to ensure data availability
+ */
 export const getStockQuote = async (req, res, next) => {
   try {
     const { symbol } = req.params;
@@ -182,7 +246,9 @@ export const getStockQuote = async (req, res, next) => {
       return next(new errorResponse('Stock symbol is required', 400));
     }
 
-    // Check if market is open
+    // Market check is optional - skipping this would allow getting data even when market is closed
+    // Uncomment the following if you want to enforce market hours
+    /*
     if (!isMarketOpen()) {
       logStock(`Request rejected: Market is closed`);
       return next(
@@ -192,6 +258,7 @@ export const getStockQuote = async (req, res, next) => {
         )
       );
     }
+    */
 
     // Check if user is in cooldown period
     if (isInCooldownPeriod(userId)) {
@@ -216,19 +283,19 @@ export const getStockQuote = async (req, res, next) => {
 
     // Normalized symbol (uppercase)
     const normalizedSymbol = symbol.toUpperCase();
-
-    // Debug output to track what's happening
     logStock(`Processing request for ${normalizedSymbol}`);
 
     try {
-      // Try to get real data from API
+      // PRIMARY DATA SOURCE: Alpha Vantage API
       logStock(
         `Attempting API request to Alpha Vantage for ${normalizedSymbol}`
       );
 
+      // Use environment variable for API key when possible
+      const apiKey = process.env.ALPHA_VANTAGE_API_KEY || 'KQ7XNXVXZCNJBP9X';
       const response = await axios.get(
-        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${normalizedSymbol}&apikey=KQ7XNXVXZCNJBP9X`,
-        { timeout: 5000 } // Set a timeout to prevent long-hanging requests
+        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${normalizedSymbol}&apikey=${apiKey}`,
+        { timeout: 5000 }
       );
 
       logStock(`Alpha Vantage API response received:`, response.data);
@@ -250,12 +317,12 @@ export const getStockQuote = async (req, res, next) => {
           price: parseFloat(quote['05. price']),
           change: parseFloat(quote['09. change']),
           changePercent: quote['10. change percent'],
-          source: 'live',
+          source: 'alpha-vantage',
         };
 
         logStock(`Live data returned for ${normalizedSymbol}`, priceData);
 
-        logStock(`Sending successful response with live data`);
+        // SUCCESS: Return live data from primary source
         return res.status(200).json({
           success: true,
           data: priceData,
@@ -266,19 +333,30 @@ export const getStockQuote = async (req, res, next) => {
           `Alpha Vantage API returned invalid data format:`,
           response.data
         );
-        throw new Error('Invalid API response format');
+        throw new Error('Invalid Alpha Vantage API response format');
       }
-    } catch (apiError) {
-      // Log the API error
-      logStock(`Alpha Vantage API Error: ${apiError.message}`);
+    } catch (primaryApiError) {
+      // Log the primary API error
+      logStock(`Primary API Error: ${primaryApiError.message}`);
 
       // Update last request time for this user even on error
       userLastRequestTimes.set(userId, new Date());
-      logStock(
-        `Updated last request time for user ${userId} despite error: ${new Date().toISOString()}`
-      );
 
-      // If we have mock data for this symbol, use it
+      // SECONDARY DATA SOURCE: Try alternative APIs
+      const alternativeData = await tryAlternativeAPIs(normalizedSymbol);
+      if (alternativeData) {
+        logStock(
+          `Alternative API succeeded for ${normalizedSymbol}`,
+          alternativeData
+        );
+        return res.status(200).json({
+          success: true,
+          data: alternativeData,
+          message: 'Using alternative data source',
+        });
+      }
+
+      // LAST RESORT: If we have mock data for this symbol, use it
       if (mockStockData[normalizedSymbol]) {
         // Get base price from mock data
         const basePrice = mockStockData[normalizedSymbol].price;
@@ -303,24 +381,27 @@ export const getStockQuote = async (req, res, next) => {
           change: priceChange,
           changePercent: `${percentChange}%`,
           source: 'fallback',
+          isMockData: true, // Explicitly flag this as mock data
         };
 
         logStock(`Mock data generated for ${normalizedSymbol}`, mockData);
         logAllPrices();
 
-        logStock(`Sending successful response with mock data`);
         return res.status(200).json({
           success: true,
           data: mockData,
-          message: 'Using fallback data due to API limitations',
+          message:
+            'Using fallback data due to API limitations. This is not real-time market data.',
         });
       }
 
-      // If we don't have mock data for this symbol, inform client
-      logStock(`No mock data available for symbol ${normalizedSymbol}`);
+      // No data available from any source
+      logStock(
+        `No data available for symbol ${normalizedSymbol} from any source`
+      );
       return next(
         new errorResponse(
-          `Stock data for ${normalizedSymbol} is currently unavailable`,
+          `Stock data for ${normalizedSymbol} is currently unavailable from any source`,
           503
         )
       );
