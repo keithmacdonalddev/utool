@@ -2,6 +2,7 @@ import Project from '../models/Project.js';
 import Task from '../models/Task.js';
 import User from '../models/User.js';
 import { logger } from '../utils/logger.js';
+import mongoose from 'mongoose';
 
 // @desc    Get projects for logged-in user (member or owner)
 // @route   GET /api/v1/projects
@@ -13,27 +14,116 @@ export const getProjects = async (req, res, next) => {
       action: 'get_projects',
     });
 
-    // Find projects where the logged-in user is in the 'members' array
-    const projects = await Project.find({ members: req.user.id })
-      .populate('owner', 'name email')
-      // .populate('members', 'name email') // Optional: populate all members
-      .sort({ createdAt: -1 });
+    // Use MongoDB aggregation pipeline for better performance in a single query
+    // This avoids multiple separate database calls that were causing slowness
+    const projectsWithProgress = await Project.aggregate([
+      // Match projects where the user is a member
+      { $match: { members: mongoose.Types.ObjectId(req.user.id) } },
 
-    // Calculate progress for each project
-    const projectsWithProgress = await Promise.all(
-      projects.map(async (proj) => {
-        const total = await Task.countDocuments({ project: proj._id });
-        const completed = await Task.countDocuments({
-          project: proj._id,
-          status: 'Completed',
-        });
-        const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-        return { ...proj._doc, progress };
-      })
-    );
+      // Look up project owner details
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'owner',
+          foreignField: '_id',
+          as: 'ownerDetails',
+        },
+      },
+      { $unwind: '$ownerDetails' },
+
+      // Look up tasks for this project
+      {
+        $lookup: {
+          from: 'tasks',
+          let: { projectId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$project', '$$projectId'] } } },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                completed: {
+                  $sum: { $cond: [{ $eq: ['$status', 'Completed'] }, 1, 0] },
+                },
+              },
+            },
+          ],
+          as: 'taskStats',
+        },
+      },
+
+      // Calculate progress
+      {
+        $addFields: {
+          taskStats: {
+            $ifNull: [
+              { $arrayElemAt: ['$taskStats', 0] },
+              { total: 0, completed: 0 },
+            ],
+          },
+          progress: {
+            $cond: {
+              if: {
+                $gt: [
+                  { $ifNull: [{ $arrayElemAt: ['$taskStats.total', 0] }, 0] },
+                  0,
+                ],
+              },
+              then: {
+                $multiply: [
+                  {
+                    $divide: [
+                      {
+                        $ifNull: [
+                          { $arrayElemAt: ['$taskStats.completed', 0] },
+                          0,
+                        ],
+                      },
+                      {
+                        $ifNull: [{ $arrayElemAt: ['$taskStats.total', 0] }, 1],
+                      },
+                    ],
+                  },
+                  100,
+                ],
+              },
+              else: 0,
+            },
+          },
+
+          // Format the owner object to match the previous structure
+          owner: {
+            _id: '$ownerDetails._id',
+            name: '$ownerDetails.name',
+            email: '$ownerDetails.email',
+          },
+        },
+      },
+
+      // Project final fields and shape the response
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          description: 1,
+          status: 1,
+          priority: 1,
+          startDate: 1,
+          endDate: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          owner: 1,
+          members: 1,
+          progress: { $round: ['$progress', 0] }, // Round to integer
+        },
+      },
+
+      // Sort by most recent first
+      { $sort: { createdAt: -1 } },
+    ]);
 
     logger.info(
-      `Successfully fetched ${projectsWithProgress.length} projects`,
+      `Successfully fetched ${projectsWithProgress.length} projects using optimized query`,
       {
         userId: req.user.id,
         action: 'get_projects_success',

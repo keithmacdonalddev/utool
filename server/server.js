@@ -503,13 +503,32 @@ process.on('SIGINT', async () => {
 // Log unhandled rejections and exceptions
 // These are errors that weren't caught in try/catch blocks
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection:', { reason, promise });
+  logger.error('Unhandled Rejection:', {
+    reason:
+      reason instanceof Error
+        ? { message: reason.message, stack: reason.stack }
+        : reason,
+    promise,
+  });
 });
 
 process.on('uncaughtException', (err) => {
-  logger.error('Uncaught Exception:', { error: err }); // Exit with error in production to restart the process
+  // Ensure we fully capture the error properties
+  const errorObj = {
+    message: err.message,
+    name: err.name,
+    stack: err.stack,
+    code: err.code,
+  };
+
+  logger.error('Uncaught Exception:', { error: errorObj });
+
+  // Exit with error in production to restart the process
   if (process.env.NODE_ENV === 'production') {
-    process.exit(1);
+    // Allow time for the error to be logged before exiting
+    setTimeout(() => {
+      process.exit(1);
+    }, 1000);
   }
 });
 
