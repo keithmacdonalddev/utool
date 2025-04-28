@@ -302,6 +302,10 @@ export const updateProject = async (req, res, next) => {
       memberCount: project.members ? project.members.length : 0,
     };
 
+    // Check if the status is being changed to 'Completed'
+    const isMarkingAsCompleted =
+      req.body.status === 'Completed' && project.status !== 'Completed';
+
     // Extract only allowed fields for update
     const { name, description, status, startDate, endDate, priority, members } =
       req.body;
@@ -344,6 +348,47 @@ export const updateProject = async (req, res, next) => {
       originalValues: originalProject,
       newMemberCount: project.members ? project.members.length : 0,
     });
+
+    // Archive project if it's now marked as completed
+    if (isMarkingAsCompleted) {
+      try {
+        // Import the archive controller functions
+        const archiveController = await import('./archiveController.js');
+
+        // Create archive entry for the project
+        await archiveController.default.archiveItem(
+          {
+            body: {
+              itemType: 'project',
+              itemId: project._id,
+            },
+            user: req.user,
+          },
+          {
+            status: () => ({
+              json: () => {
+                logger.info(
+                  'Project archived after being marked as completed',
+                  {
+                    projectId: project._id,
+                    userId: req.user.id,
+                  }
+                );
+              },
+            }),
+          },
+          () => {}
+        );
+      } catch (archiveErr) {
+        logger.error('Failed to archive completed project', {
+          error: archiveErr,
+          projectId: project._id,
+          userId: req.user.id,
+        });
+        // We don't want to fail the project update if archiving fails,
+        // so we just log the error and continue
+      }
+    }
 
     res.status(200).json({
       success: true,

@@ -64,6 +64,7 @@ const TaskDetailsSidebar = ({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false); // Track if save operation is in progress
   const [hasChanges, setHasChanges] = useState(false); // Track if form data has changed
+  const [isCompletingTask, setIsCompletingTask] = useState(false); // Track if "Mark as Complete" operation is in progress
 
   // Fetch projects only once when the sidebar opens (not on every render)
   useEffect(() => {
@@ -123,6 +124,55 @@ const TaskDetailsSidebar = ({
       [name]: value,
     }));
     setHasChanges(true); // Mark form as having changes
+  };
+
+  /**
+   * Handle marking a task as complete without going into edit mode
+   * This provides a quick way to complete tasks directly from the task details view
+   */
+  const handleMarkAsComplete = () => {
+    setIsCompletingTask(true); // Set completing state
+
+    // Use the current projectId or the form's project value
+    const taskProjectId = projectId || formData.project;
+
+    // Make sure we have a valid project ID
+    if (!taskProjectId) {
+      alert('Error: A project is required to update this task.');
+      setIsCompletingTask(false); // Reset completing state
+      return;
+    }
+
+    // Create updates object with just the status change
+    const updates = {
+      ...formData, // Keep all existing data
+      status: 'Completed', // Only change the status
+      dueDate: formData.dueDate
+        ? normalizeDate(formData.dueDate) // Convert to ISO string for consistent API handling
+        : null,
+    };
+
+    dispatch(
+      updateTask({
+        projectId: taskProjectId,
+        taskId,
+        updates: updates,
+      })
+    )
+      .unwrap()
+      .then((updatedTaskData) => {
+        setIsCompletingTask(false); // Reset completing state
+        if (onUpdate) onUpdate(updatedTaskData);
+        // Auto-close the sidebar after successful completion
+        onClose();
+      })
+      .catch((error) => {
+        // Show error message with more details if available
+        const errorMsg = error ? error.toString() : 'Unknown error';
+        alert(`Failed to complete task: ${errorMsg}`);
+        console.error('Task completion error:', error);
+        setIsCompletingTask(false); // Reset completing state
+      });
   };
 
   // Handle form submission
@@ -424,16 +474,36 @@ const TaskDetailsSidebar = ({
           <>
             {/* View Mode */}
             <div className="space-y-6">
-              {/* Title and Edit Button Row */}
+              {/* Title and Action Buttons Row */}
               <div className="flex justify-between items-center">
                 <h1 className="text-xl font-bold text-white">{task.title}</h1>
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(true)}
-                  className="bg-primary hover:bg-primary-dark text-white px-3 py-1 rounded-md transition-colors"
-                >
-                  Edit
-                </button>
+                <div className="flex gap-2">
+                  {/* Only show "Mark as Complete" if task is not already completed */}
+                  {task.status !== 'Completed' && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAsComplete}
+                      disabled={isCompletingTask}
+                      className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md transition-colors flex items-center gap-1"
+                      aria-label="Mark task as complete"
+                    >
+                      {isCompletingTask ? (
+                        <Loader size={16} className="animate-spin" />
+                      ) : (
+                        <CheckCircle size={16} />
+                      )}
+                      <span>Complete</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="bg-primary hover:bg-primary-dark text-white px-3 py-1 rounded-md transition-colors"
+                    aria-label="Edit task details"
+                  >
+                    Edit
+                  </button>
+                </div>
               </div>
 
               {/* Status and Priority Badges */}

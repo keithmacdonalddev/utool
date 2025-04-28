@@ -17,6 +17,7 @@ import {
   History, // Added for Audit Logs
   CheckSquare, // Added for Tasks icon
   Bookmark, // Add Bookmark for Resources
+  Archive, // Added for Archive page
 } from 'lucide-react'; // Removed UserGroup import which isn't available
 
 const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
@@ -175,6 +176,19 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
           >
             <StickyNote size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Notes</span>
+          </NavLink>
+          <NavLink
+            to="/archive"
+            className={({ isActive }) =>
+              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
+                isActive ? activeLinkClasses : inactiveLinkClasses
+              }`
+            }
+            onClick={toggleSidebar}
+            title="Archive"
+          >
+            <Archive size={20} className="flex-shrink-0" />
+            <span className={linkTextClasses}>Archive</span>
           </NavLink>
           <NavLink
             to="/favorite-quotes"

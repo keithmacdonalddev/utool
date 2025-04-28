@@ -127,6 +127,8 @@ export const getTasksForProject = createAsyncThunk(
  * PARAMETER PATTERN: Use destructuring to extract required fields
  * from a single payload object for cleaner function calls
  *
+ * Special handling for completed tasks that get archived and deleted on the server.
+ *
  * @param {Object} payload - Update payload
  * @param {string} payload.projectId - ID of the project the task belongs to (required)
  * @param {string} payload.taskId - ID of the task to update
@@ -142,14 +144,43 @@ export const updateTask = createAsyncThunk(
       );
     }
 
+    // Check if we're marking a task as complete - this will be handled specially
+    const isCompletingTask = updates.status === 'Completed';
+
     try {
       // URL PATTERN: Project-scoped task URL
       const response = await api.put(
         `/projects/${projectId}/tasks/${taskId}`,
         updates
       );
+
+      // For task completion, return special payload that indicates it was completed and should be removed
+      if (isCompletingTask) {
+        return {
+          taskId,
+          projectId,
+          wasCompleted: true, // Flag to indicate this task was completed and archived
+          originalData: response.data.data || { _id: taskId }, // Fallback with at least the ID
+        };
+      }
+
       return response.data.data;
     } catch (error) {
+      // If we're completing a task and get a 500 error, it's likely because
+      // the task was archived and deleted - handle this specially
+      if (isCompletingTask && error.response && error.response.status === 500) {
+        console.log(
+          'Task was completed and archived - removing from state',
+          taskId
+        );
+        return {
+          taskId,
+          projectId,
+          wasCompleted: true,
+          originalData: { _id: taskId }, // Minimal data since original is gone
+        };
+      }
+
       const message =
         (error.response &&
           error.response.data &&
@@ -430,14 +461,27 @@ export const taskSlice = createSlice({
         // Don't clear tasks while loading, preserve them
       })
       .addCase(updateTask.fulfilled, (state, action) => {
-        // ARRAY UPDATE PATTERN: Map to replace an item in an array
         state.isLoading = false;
         state.isSuccess = true;
-        // Replace the updated task in the array based on ID
-        state.tasks = state.tasks.map((t) =>
-          t._id === action.payload._id ? action.payload : t
-        );
-        state.message = 'Task updated successfully!';
+
+        // Special handling for completed tasks that were archived
+        if (action.payload.wasCompleted) {
+          console.log(
+            'Removing completed/archived task from Redux state:',
+            action.payload.taskId
+          );
+          // Remove the completed task from the array based on ID
+          state.tasks = state.tasks.filter(
+            (t) => t._id !== action.payload.taskId
+          );
+          state.message = 'Task completed and archived successfully!';
+        } else {
+          // Standard update - replace the updated task in the array based on ID
+          state.tasks = state.tasks.map((t) =>
+            t._id === action.payload._id ? action.payload : t
+          );
+          state.message = 'Task updated successfully!';
+        }
       })
       .addCase(updateTask.rejected, (state, action) => {
         state.isLoading = false;

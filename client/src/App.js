@@ -44,6 +44,7 @@ const FriendsPage = lazy(() => import('./pages/FriendsPage'));
 const NotesPage = lazy(() => import('./pages/NotesPage'));
 const TrashPage = lazy(() => import('./pages/TrashPage'));
 const ResourcesPage = lazy(() => import('./pages/ResourcesPage')); // <-- Add resources page
+const ArchivePage = lazy(() => import('./pages/ArchivePage')); // <-- Add Archive page
 // Admin Pages
 const AdminUserListPage = lazy(() => import('./pages/admin/UserListPage'));
 const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
@@ -146,6 +147,7 @@ function App() {
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/notes" element={<NotesPage />} />
                   <Route path="/notes/trash" element={<TrashPage />} />
+                  <Route path="/archive" element={<ArchivePage />} />
 
                   {/* Standalone task routes removed - tasks are only accessible through projects */}
                   {/* <Route path="/tasks" element={<TasksPage />} /> */}

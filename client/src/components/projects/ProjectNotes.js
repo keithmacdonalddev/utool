@@ -184,7 +184,7 @@ const ProjectNotes = ({ projectId }) => {
   };
 
   return (
-    <div className="mt-8">
+    <div>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-semibold text-primary">Project Notes</h2>
         <button

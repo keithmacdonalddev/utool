@@ -18,11 +18,6 @@ const BookmarkSchema = new mongoose.Schema(
       required: [true, 'Please add a URL'],
       trim: true,
     },
-    description: {
-      type: String,
-      trim: true,
-      maxlength: [500, 'Description cannot be more than 500 characters'],
-    },
     folderId: {
       type: String,
       default: null,

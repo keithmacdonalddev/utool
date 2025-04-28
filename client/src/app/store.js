@@ -79,6 +79,7 @@ import auditLogsReducer from '../features/auditLogs/auditLogsSlice';
 import bookmarkReducer from '../features/bookmarks/bookmarkSlice';
 import bookmarkFolderReducer from '../features/bookmarks/bookmarkFolderSlice';
 import snippetReducer from '../features/snippets/snippetSlice';
+import snippetCategoryReducer from '../features/snippets/snippetCategorySlice';
 
 /**
  * STORE CONFIGURATION
@@ -111,6 +112,7 @@ export const store = configureStore({
     bookmarks: bookmarkReducer, // Bookmarks state
     bookmarkFolders: bookmarkFolderReducer, // Bookmark folders state
     snippets: snippetReducer, // Code/text snippets state
+    snippetCategories: snippetCategoryReducer, // Snippet categories state
   },
 
   /**

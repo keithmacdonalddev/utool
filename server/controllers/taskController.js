@@ -65,7 +65,15 @@ export const getTasksForProject = async (req, res, next) => {
       );
     }
 
-    const tasks = await Task.find({ project: req.params.projectId })
+    // Build query object - by default exclude completed tasks
+    const query = { project: req.params.projectId };
+
+    // Allow showing completed tasks if explicitly requested
+    if (req.query.includeCompleted !== 'true') {
+      query.status = { $ne: 'Completed' };
+    }
+
+    const tasks = await Task.find(query)
       .sort({ createdAt: -1 })
       .populate('assignee', 'name email');
 
@@ -73,6 +81,7 @@ export const getTasksForProject = async (req, res, next) => {
       userId: req.user.id,
       projectId: req.params.projectId,
       tasksCount: tasks.length,
+      includeCompleted: req.query.includeCompleted === 'true',
       req,
     });
 
@@ -488,6 +497,11 @@ export const updateTask = async (req, res, next) => {
     req.body.project = projectId;
 
     const oldTask = { ...task._doc };
+
+    // Check if we're changing status to Completed
+    const isMarkingAsCompleted =
+      req.body.status === 'Completed' && task.status !== 'Completed';
+
     task = await Task.findByIdAndUpdate(taskId, req.body, {
       new: true,
       runValidators: true,
@@ -508,6 +522,26 @@ export const updateTask = async (req, res, next) => {
       oldData: oldTask,
       newData: task,
     });
+
+    // Archive task if it's now marked as completed
+    if (isMarkingAsCompleted) {
+      try {
+        const { archiveCompletedTask } = await import('./archiveController.js');
+        await archiveCompletedTask(task, req);
+        logger.info('Task archived after being marked as completed', {
+          taskId: task._id,
+          userId: req.user.id,
+        });
+      } catch (archiveErr) {
+        logger.error('Failed to archive completed task', {
+          error: archiveErr,
+          taskId: task._id,
+          userId: req.user.id,
+        });
+        // We don't want to fail the task update if archiving fails,
+        // so we just log the error and continue
+      }
+    }
 
     res.status(200).json({ success: true, data: task });
   } catch (err) {

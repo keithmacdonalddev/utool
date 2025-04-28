@@ -59,18 +59,64 @@ export const createKbArticle = async (req, res, next) => {
 // @access  Private
 export const getKbArticle = async (req, res, next) => {
   try {
-    // Find the article first
-    const kbArticle = await KnowledgeBaseArticle.findById(req.params.id);
+    console.log(`[DEBUG] getKbArticle called for article ID: ${req.params.id}`);
 
-    if (!kbArticle) {
+    const articleId = req.params.id;
+    const userId = req.user._id.toString();
+
+    // Create a unique session identifier for this user and article combination
+    // Use either a session ID or combination of user ID + article ID
+    const viewKey = `${userId}:${articleId}`;
+
+    // Check if there's an existing view timestamp in the request object
+    // req.session is used if your app uses express-session middleware
+    // We'll use it to track recent views by this user
+    if (!req.session) {
+      req.session = {};
+    }
+
+    if (!req.session.recentViews) {
+      req.session.recentViews = {};
+    }
+
+    const now = Date.now();
+    const lastViewTime = req.session.recentViews[viewKey] || 0;
+    const viewThreshold = 30 * 1000; // 30 seconds threshold
+
+    // Find the article using findById first to get the current view count for logging
+    const articleBefore = await KnowledgeBaseArticle.findById(articleId);
+
+    if (!articleBefore) {
       return res
         .status(404)
         .json({ success: false, message: 'Article not found' });
     }
 
-    // Increment the view counter
-    kbArticle.views += 1;
-    await kbArticle.save();
+    const viewsBefore = articleBefore.views;
+    let kbArticle;
+
+    // Only increment the view count if enough time has passed since the last view
+    if (now - lastViewTime > viewThreshold) {
+      // Update the last view time for this user and article
+      req.session.recentViews[viewKey] = now;
+
+      // Use findOneAndUpdate to atomically increment the view counter
+      kbArticle = await KnowledgeBaseArticle.findByIdAndUpdate(
+        articleId,
+        { $inc: { views: 1 } }, // Increment views by 1
+        { new: true } // Return the updated document
+      );
+
+      console.log(
+        `[DEBUG] Article views updated: ${viewsBefore} -> ${kbArticle.views}`
+      );
+    } else {
+      // If the threshold hasn't passed, don't increment the counter
+      kbArticle = articleBefore;
+      console.log(
+        `[DEBUG] Article view increment skipped (duplicate view): ${viewsBefore}`
+      );
+    }
 
     res.status(200).json({ success: true, data: kbArticle });
   } catch (err) {

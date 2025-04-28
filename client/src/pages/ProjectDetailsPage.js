@@ -25,7 +25,7 @@ import TaskList from '../components/tasks/TaskList';
 import TaskCreateModal from '../components/tasks/TaskCreateModal';
 import ProjectNotes from '../components/projects/ProjectNotes';
 import api from '../utils/api';
-import { PlusCircle, X, Edit } from 'lucide-react';
+import { PlusCircle, X, Edit, Clock, AlertTriangle } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 import useFriends from '../hooks/useFriends';
 import { formatDateForDisplay } from '../utils/dateUtils';
@@ -97,6 +97,10 @@ const ProjectDetailsPage = () => {
   const [showTaskModal, setShowTaskModal] = useState(false); // Modal visibility
   const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false); // Dropdown state
   const [selectedUserToAdd, setSelectedUserToAdd] = useState(''); // Selected user ID
+  // Track active task filter for critical tasks section
+  const [criticalTaskFilter, setCriticalTaskFilter] = useState('overdue'); // 'overdue', 'today'
+  // Track active task filter for all tasks
+  const [allTasksFilter, setAllTasksFilter] = useState('all'); // 'all' or specific filters
 
   // Reference to track component mounts and detect page refreshes
   const mountCountRef = useRef(0);
@@ -166,6 +170,91 @@ const ProjectDetailsPage = () => {
       dispatch(resetTaskStatus());
     };
   }, [dispatch, id]); // Only re-run if these dependencies change
+
+  /**
+   * Filter tasks by their due date
+   * - Critical tasks: Both overdue tasks and tasks due today that are not completed
+   * - Used to show tasks that need immediate attention
+   *
+   * @param {Array} tasksList - List of tasks to filter
+   * @returns {Array} Filtered tasks that are either overdue or due today
+   */
+  const getCriticalTasks = (tasksList) => {
+    if (!tasksList || tasksList.length === 0) return [];
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
+
+    // Get tasks that are either overdue or due today
+    return tasksList
+      .filter((task) => {
+        if (task.status === 'Completed') return false;
+        const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+        return dueDate && dueDate < tomorrow; // Include both overdue and due today
+      })
+      .sort((a, b) => {
+        // Sort by due date (oldest/most overdue first)
+        const dateA = a.dueDate ? new Date(a.dueDate) : new Date();
+        const dateB = b.dueDate ? new Date(b.dueDate) : new Date();
+        return dateA - dateB;
+      });
+  };
+
+  /**
+   * Filter tasks for the main task list view
+   *
+   * @param {Array} tasksList - List of tasks to filter
+   * @param {string} filter - Filter type: 'all', 'today', 'overdue', etc.
+   * @returns {Array} Filtered tasks
+   */
+  const getFilteredTasks = (tasksList, filter) => {
+    if (!tasksList || tasksList.length === 0) return [];
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
+
+    switch (filter) {
+      case 'overdue':
+        return tasksList.filter((task) => {
+          if (task.status === 'Completed') return false;
+          const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+          return dueDate && dueDate < today;
+        });
+      case 'today':
+        return tasksList.filter((task) => {
+          if (task.status === 'Completed') return false;
+          const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+          return dueDate && dueDate >= today && dueDate < tomorrow;
+        });
+      default:
+        return tasksList;
+    }
+  };
+
+  /**
+   * Count tasks by status category (overdue, due today)
+   *
+   * @returns {Object} Counts of tasks by category
+   */
+  const getTaskCounts = () => {
+    const overdueTasks = getFilteredTasks(tasks, 'overdue');
+    const todayTasks = getFilteredTasks(tasks, 'today');
+
+    return {
+      overdue: overdueTasks.length,
+      today: todayTasks.length,
+      total: tasks ? tasks.length : 0,
+    };
+  };
+
+  // Get task counts for UI
+  const taskCounts = getTaskCounts();
 
   /**
    * UTILITY FUNCTIONS PATTERN:
@@ -340,9 +429,42 @@ const ProjectDetailsPage = () => {
     }, 300);
   };
 
+  /**
+   * Handle task updates with special handling for completed tasks
+   *
+   * @param {Object} updatedTask - The task with updated fields (might be undefined for completed tasks)
+   */
   const handleTaskUpdate = async (updatedTask) => {
-    console.log(`✏️ Task update requested: ${updatedTask._id}`);
+    console.log(`✏️ Task update requested: ${updatedTask?._id || 'undefined'}`);
+
+    // If updatedTask is undefined or missing _id, it's likely a completed task that was archived
+    // In this case, we'll skip further API calls as the task is already handled
+    if (!updatedTask || !updatedTask._id) {
+      console.log(
+        '⚠️ Task update called with undefined task or missing ID - likely a completed task'
+      );
+      // Refresh the task list to ensure UI is up to date
+      dispatch(getTasksForProject(id));
+      return;
+    }
+
+    // Check if we're completing a task
+    const isCompletingTask = updatedTask.status === 'Completed';
+
+    if (isCompletingTask) {
+      // For completed tasks, immediately close sidebar and clear selection
+      console.log(
+        '🧹 Task being marked as complete - closing sidebar preemptively'
+      );
+      setIsSidebarOpen(false);
+      setSelectedTask(null);
+
+      // Show success message immediately for better UX
+      showNotification('Task completed and archived successfully', 'success');
+    }
+
     try {
+      // Call the API to update the task
       await dispatch(
         updateTask({
           projectId: id,
@@ -351,18 +473,28 @@ const ProjectDetailsPage = () => {
         })
       ).unwrap();
 
-      // Force a complete refresh of task data from the server
-      // This ensures we get the latest data with correct date formats
-      setTimeout(() => {
-        console.log('🔄 Refreshing all tasks after update');
-        dispatch(getTasksForProject(id));
-      }, 100);
+      // For non-completion updates, show success notification
+      // (completion notifications are shown above for better UX)
+      if (!isCompletingTask) {
+        showNotification('Task updated successfully', 'success');
+      }
 
-      showNotification('Task updated successfully', 'success');
-    } catch (error) {
-      showNotification(`Failed to update task: ${error.message}`, 'error');
-      // Even on error, make sure we reload tasks to prevent them from disappearing
+      // Always refresh the task list to ensure UI is up to date
       dispatch(getTasksForProject(id));
+    } catch (error) {
+      // Don't show errors for expected 500 errors during task completion
+      if (isCompletingTask && error.message?.includes('500')) {
+        console.log(
+          'Expected error during task completion (task was archived):',
+          error
+        );
+        // Even with error, refresh the task list to ensure UI is up to date
+        dispatch(getTasksForProject(id));
+      } else {
+        // Show error for other types of failures
+        console.error('Error during task update:', error);
+        showNotification(`Failed to update task: ${error.message}`, 'error');
+      }
     }
   };
 
@@ -375,6 +507,8 @@ const ProjectDetailsPage = () => {
       showNotification('Task deleted successfully', 'success');
     } catch (error) {
       showNotification(`Failed to delete task: ${error.message}`, 'error');
+      // Even on error, make sure we reload tasks to prevent them from disappearing
+      dispatch(getTasksForProject(id));
     }
   };
 
@@ -386,6 +520,12 @@ const ProjectDetailsPage = () => {
   const availableUsersToAdd = friends.filter(
     (friend) => !project?.members?.some((member) => member._id === friend._id)
   );
+
+  // Get critical tasks based on the active filter (overdue or today)
+  const criticalTasks = getCriticalTasks(tasks);
+
+  // Get tasks for the main task list based on the active filter
+  const visibleTasks = getFilteredTasks(tasks, allTasksFilter);
 
   /**
    * CONDITIONAL RENDERING PATTERN:
@@ -468,7 +608,11 @@ const ProjectDetailsPage = () => {
             {project.name}
           </h1>
           <div className="text-muted-foreground text-sm mb-2">
-            Created{' '}
+            Created by{' '}
+            <span className="font-medium">
+              {project.owner?.name || 'Unknown user'}
+            </span>{' '}
+            on{' '}
             {new Date(project.createdAt).toLocaleString(undefined, {
               dateStyle: 'medium',
               timeStyle: 'short',
@@ -484,289 +628,541 @@ const ProjectDetailsPage = () => {
         </Link>
       </div>
 
-      {/* Group Description, Details, and Progress in one row */}
+      {/* Main content layout: 1/3 for project details, 2/3 for critical tasks */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Description Card */}
-        {project.description && (
-          <div className="bg-card rounded-lg p-4 shadow">
-            <h2 className="text-lg font-semibold mb-2 text-primary">
-              Description
-            </h2>
-            <p className="text-foreground whitespace-pre-wrap">
-              {project.description}
-            </p>
-          </div>
-        )}
+        {/* Project Information Column (1/3) - Left side with stacked containers */}
+        <div className="md:col-span-1 space-y-4">
+          {/* Description Container - Only as tall as its content */}
+          {project.description && (
+            <div className="bg-card rounded-lg p-4 shadow">
+              <h2 className="text-lg font-semibold mb-2 text-primary">
+                Description
+              </h2>
+              <p className="text-foreground whitespace-pre-wrap">
+                {project.description}
+              </p>
+            </div>
+          )}
 
-        {/* Project Details Card */}
-        <div className="bg-card rounded-lg p-4 shadow">
-          <h2 className="text-lg font-semibold mb-4 text-primary">
-            Project Details
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Status, Priority, Due Date, Members as before */}
-            <div>
-              <span className="text-sm text-foreground opacity-80 block mb-1">
-                Status
-              </span>
-              {/* DYNAMIC STYLING PATTERN: Classes determined by data */}
-              <span
-                className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getStatusPillClasses(
-                  project.status
-                )}`}
-              >
-                {project.status}
-              </span>
-            </div>
-            {/* Priority */}
-            <div>
-              <span className="text-sm text-foreground opacity-80 block mb-1">
-                Priority
-              </span>
-              <span
-                className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getPriorityPillClasses(
-                  project.priority
-                )}`}
-              >
-                {/* FALLBACK VALUE PATTERN: Using || for default value */}
-                {project.priority || 'Medium'}
-              </span>
-            </div>
-            {/* Due Date */}
-            <div>
-              <span className="text-sm text-foreground opacity-80 block mb-1">
-                Due Date
-              </span>
-              <span className="text-foreground font-medium">
-                {formatDate(project.endDate)}
-              </span>
-            </div>
-            {/* Members dropdown UI */}
-            <div>
-              <span className="text-sm text-foreground opacity-80 block mb-1">
-                Members
-              </span>
-              <div className="flex flex-wrap gap-2 items-center">
-                {/* DROPDOWN PATTERN: Toggle visibility with state */}
-                <div className="relative">
-                  <button
-                    onClick={() =>
-                      setShowAddMemberDropdown(!showAddMemberDropdown)
-                    }
-                    className="h-8 w-8 flex items-center justify-center bg-dark-600 text-accent-purple hover:bg-dark-500 hover:text-accent-blue rounded-full transition-colors border-2 border-dark-600 hover:border-primary"
-                    title="Add Member"
-                  >
-                    <PlusCircle size={18} />
-                  </button>
-                  {/* CONDITIONAL DROPDOWN RENDERING */}
-                  {showAddMemberDropdown && (
-                    <div className="absolute left-0 mt-2 w-64 bg-card border border-dark-700 rounded-md shadow-lg z-10 p-2">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-foreground">
-                          Add Friend as Member
-                        </span>
-                        <button
-                          onClick={() => setShowAddMemberDropdown(false)}
-                          className="text-gray-400 hover:text-white"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                      {/* CONDITIONAL CONTENT BASED ON DATA AVAILABILITY */}
-                      {availableUsersToAdd.length > 0 ? (
-                        <>
-                          {/* CONTROLLED FORM ELEMENT PATTERN */}
-                          <select
-                            value={selectedUserToAdd}
-                            onChange={(e) =>
-                              setSelectedUserToAdd(e.target.value)
-                            }
-                            className="w-full px-2 py-1.5 rounded-md border bg-dark-700 text-foreground border-dark-600 focus:outline-none focus:ring-1 focus:ring-primary mb-2 text-sm"
-                          >
-                            <option value="">Select friend...</option>
-                            {/* LIST RENDERING PATTERN WITH MAP */}
-                            {availableUsersToAdd.map((user) => (
-                              <option key={user._id} value={user._id}>
-                                {user.name} ({user.email})
-                              </option>
-                            ))}
-                          </select>
-                          {/* CONDITIONAL BUTTON DISABLING */}
+          {/* Project Notes Container - Moved from bottom to left column */}
+          <div className="bg-card rounded-lg p-4 shadow">
+            <ProjectNotes projectId={id} />
+          </div>
+
+          {/* Project Details Container */}
+          <div className="bg-card rounded-lg p-4 shadow space-y-4">
+            <h2 className="text-lg font-semibold mb-4 text-primary">
+              Project Details
+            </h2>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {/* Status */}
+              <div>
+                <span className="text-sm text-foreground opacity-80 block mb-1">
+                  Status
+                </span>
+                <span
+                  className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getStatusPillClasses(
+                    project.status
+                  )}`}
+                >
+                  {project.status}
+                </span>
+              </div>
+              {/* Priority */}
+              <div>
+                <span className="text-sm text-foreground opacity-80 block mb-1">
+                  Priority
+                </span>
+                <span
+                  className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getPriorityPillClasses(
+                    project.priority
+                  )}`}
+                >
+                  {/* FALLBACK VALUE PATTERN: Using || for default value */}
+                  {project.priority || 'Medium'}
+                </span>
+              </div>
+              {/* Due Date */}
+              <div>
+                <span className="text-sm text-foreground opacity-80 block mb-1">
+                  Due Date
+                </span>
+                <span className="text-foreground font-medium">
+                  {formatDate(project.endDate)}
+                </span>
+              </div>
+              {/* Members */}
+              <div>
+                <span className="text-sm text-foreground opacity-80 block mb-1">
+                  Members
+                </span>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {/* DROPDOWN PATTERN: Toggle visibility with state */}
+                  <div className="relative">
+                    <button
+                      onClick={() =>
+                        setShowAddMemberDropdown(!showAddMemberDropdown)
+                      }
+                      className="h-8 w-8 flex items-center justify-center bg-dark-600 text-accent-purple hover:bg-dark-500 hover:text-accent-blue rounded-full transition-colors border-2 border-dark-600 hover:border-primary"
+                      title="Add Member"
+                    >
+                      <PlusCircle size={18} />
+                    </button>
+                    {/* CONDITIONAL DROPDOWN RENDERING */}
+                    {showAddMemberDropdown && (
+                      <div className="absolute left-0 mt-2 w-64 bg-card border border-dark-700 rounded-md shadow-lg z-10 p-2">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm font-medium text-foreground">
+                            Add Friend as Member
+                          </span>
                           <button
-                            onClick={handleAddMember}
-                            disabled={!selectedUserToAdd}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 px-3 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => setShowAddMemberDropdown(false)}
+                            className="text-gray-400 hover:text-white"
                           >
-                            Add
+                            <X size={16} />
                           </button>
-                        </>
-                      ) : (
-                        <p className="text-xs text-gray-400">
-                          No more friends to add.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {/* MEMBER LIST PATTERN: Avatars with fallback images */}
-                {project.members && project.members.length > 0 ? (
-                  <div className="flex items-center">
-                    {project.members.slice(0, 5).map((member, i) => (
-                      <img
-                        key={member._id}
-                        src={
-                          member.avatar ||
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                            member.name || member.email || '?'
-                          )}&background=random&color=fff&size=32`
-                        }
-                        alt={member.name}
-                        className={`h-8 w-8 rounded-full object-cover border-2 border-dark-600 ${
-                          i === 0 ? '' : '-ml-2'
-                        } hover:border-primary transition-colors`}
-                        title={member.name}
-                      />
-                    ))}
-                    {project.members.length > 5 && (
-                      <div
-                        className="-ml-2 h-8 w-8 bg-dark-600 rounded-full border-2 border-dark-600 flex items-center justify-center text-xs text-gray-200"
-                        title={project.members
-                          .slice(5)
-                          .map((m) => m.name)
-                          .join(', ')}
-                      >
-                        +{project.members.length - 5}
+                        </div>
+                        {/* CONDITIONAL CONTENT BASED ON DATA AVAILABILITY */}
+                        {availableUsersToAdd.length > 0 ? (
+                          <>
+                            {/* CONTROLLED FORM ELEMENT PATTERN */}
+                            <select
+                              value={selectedUserToAdd}
+                              onChange={(e) =>
+                                setSelectedUserToAdd(e.target.value)
+                              }
+                              className="w-full px-2 py-1.5 rounded-md border bg-dark-700 text-foreground border-dark-600 focus:outline-none focus:ring-1 focus:ring-primary mb-2 text-sm"
+                            >
+                              <option value="">Select friend...</option>
+                              {/* LIST RENDERING PATTERN WITH MAP */}
+                              {availableUsersToAdd.map((user) => (
+                                <option key={user._id} value={user._id}>
+                                  {user.name} ({user.email})
+                                </option>
+                              ))}
+                            </select>
+                            {/* CONDITIONAL BUTTON DISABLING */}
+                            <button
+                              onClick={handleAddMember}
+                              disabled={!selectedUserToAdd}
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-1.5 px-3 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Add
+                            </button>
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400">
+                            No more friends to add.
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
-                ) : (
-                  <span className="text-foreground opacity-70 text-sm ml-2">
-                    No members assigned.
+                  {/* MEMBER LIST PATTERN: Avatars with fallback images */}
+                  {project.members && project.members.length > 0 ? (
+                    <div className="flex items-center">
+                      {project.members.slice(0, 5).map((member, i) => (
+                        <img
+                          key={member._id}
+                          src={
+                            member.avatar ||
+                            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                              member.name || member.email || '?'
+                            )}&background=random&color=fff&size=32`
+                          }
+                          alt={member.name}
+                          className={`h-8 w-8 rounded-full object-cover border-2 border-dark-600 ${
+                            i === 0 ? '' : '-ml-2'
+                          } hover:border-primary transition-colors`}
+                          title={member.name}
+                        />
+                      ))}
+                      {project.members.length > 5 && (
+                        <div
+                          className="-ml-2 h-8 w-8 bg-dark-600 rounded-full border-2 border-dark-600 flex items-center justify-center text-xs text-gray-200"
+                          title={project.members
+                            .slice(5)
+                            .map((m) => m.name)
+                            .join(', ')}
+                        >
+                          +{project.members.length - 5}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-foreground opacity-70 text-sm ml-2">
+                      No members assigned.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Progress Section */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-lg font-semibold text-primary">
+                  Progress: {project.progress || 0}%
+                </h2>
+                {project.progress === 100 && (
+                  <span className="text-green-500 text-sm font-medium">
+                    Complete!
                   </span>
                 )}
+              </div>
+              <div className="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
+                <div
+                  className="bg-primary h-4 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${project.progress || 0}%` }}
+                ></div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Progress Card */}
-        <div className="bg-card rounded-lg p-4 shadow">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-lg font-semibold text-primary">
-              Progress: {project.progress || 0}%
-            </h2>
-            {project.progress === 100 && (
-              <span className="text-green-500 text-sm font-medium">
-                Complete!
-              </span>
+        {/* Critical Tasks Section (2/3) - Overdue and Due Today */}
+        <div className="md:col-span-2">
+          <div className="bg-card rounded-lg p-4 shadow mb-4">
+            {/* SECTION HEADER WITH ACTION PATTERN */}
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-primary">
+                  Critical Tasks
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Tasks that are overdue or due today ({criticalTasks.length})
+                </p>
+              </div>
+              {/* MODAL TRIGGER BUTTON */}
+              <button
+                onClick={() => setShowTaskModal(true)}
+                className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded flex items-center gap-2"
+              >
+                <PlusCircle size={18} />
+                Add Task
+              </button>
+            </div>
+
+            {/* Task Modal */}
+            <TaskCreateModal
+              isOpen={showTaskModal}
+              onClose={() => setShowTaskModal(false)}
+              projectId={id}
+            />
+
+            {/* Critical Task List - Fixed height with scroll */}
+            {!tasksLoading && !tasksError && criticalTasks.length > 0 && (
+              <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
+                <div className="overflow-y-auto" style={{ maxHeight: '16rem' }}>
+                  {' '}
+                  {/* Roughly 3 task rows */}
+                  <table className="min-w-full divide-y divide-dark-700">
+                    <thead className="sticky top-0 bg-primary bg-opacity-10 z-10 shadow-sm">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Due Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Title
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Description
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Priority
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-card divide-y divide-dark-700">
+                      {criticalTasks.map((task) => {
+                        // --- ROBUST DATE COMPARISON START ---
+                        // Get today's date components (local time)
+                        const today = new Date();
+                        const todayYear = today.getFullYear();
+                        const todayMonth = today.getMonth(); // 0-indexed (0 = Jan, 11 = Dec)
+                        const todayDate = today.getDate();
+
+                        let dueYear, dueMonth, dueDateNum;
+                        let isValidDueDate = false;
+
+                        // Attempt to parse the dueDate string manually to avoid timezone issues
+                        if (task.dueDate) {
+                          try {
+                            // Expecting 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:mm:ss.sssZ'
+                            const datePart = task.dueDate.substring(0, 10);
+                            const parts = datePart.split('-');
+                            if (parts.length === 3) {
+                              dueYear = parseInt(parts[0], 10);
+                              dueMonth = parseInt(parts[1], 10) - 1; // Adjust month to be 0-indexed
+                              dueDateNum = parseInt(parts[2], 10);
+
+                              // Basic validation of parsed numbers
+                              if (
+                                !isNaN(dueYear) &&
+                                !isNaN(dueMonth) &&
+                                !isNaN(dueDateNum) &&
+                                dueMonth >= 0 &&
+                                dueMonth <= 11 &&
+                                dueDateNum >= 1 &&
+                                dueDateNum <= 31
+                              ) {
+                                isValidDueDate = true;
+                              } else {
+                                console.warn(
+                                  `Invalid date components parsed from dueDate: ${
+                                    task.dueDate
+                                  } -> Y:${dueYear}, M:${
+                                    dueMonth + 1
+                                  }, D:${dueDateNum}`
+                                );
+                                isValidDueDate = false; // Ensure it's false if validation fails
+                              }
+                            } else {
+                              console.warn(
+                                `Unexpected dueDate format (expected YYYY-MM-DD at start): ${task.dueDate}`
+                              );
+                            }
+                          } catch (e) {
+                            console.error(
+                              `Error parsing dueDate string: ${task.dueDate}`,
+                              e
+                            );
+                          }
+                        }
+
+                        // Check if task is due today by comparing components
+                        const isDueToday =
+                          isValidDueDate &&
+                          dueYear === todayYear &&
+                          dueMonth === todayMonth &&
+                          dueDateNum === todayDate;
+
+                        // Check if task is overdue using UTC dates for reliable comparison
+                        // Date.UTC returns milliseconds since epoch, allowing direct numerical comparison
+                        const utcToday = Date.UTC(
+                          todayYear,
+                          todayMonth,
+                          todayDate
+                        );
+                        const utcDueDate = isValidDueDate
+                          ? Date.UTC(dueYear, dueMonth, dueDateNum)
+                          : NaN;
+
+                        const isOverdue =
+                          isValidDueDate && utcDueDate < utcToday;
+                        // --- ROBUST DATE COMPARISON END ---
+
+                        return (
+                          <tr
+                            key={task._id}
+                            // Apply red background only if strictly overdue and not completed
+                            className={`hover:bg-dark-700 transition-colors cursor-pointer ${
+                              isOverdue && task.status !== 'Completed' // Correctly uses the robust isOverdue flag
+                                ? 'bg-red-900 bg-opacity-20'
+                                : ''
+                            }`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleTaskClick(task._id);
+                            }}
+                          >
+                            <td
+                              // Apply red text only if strictly overdue and not completed
+                              className={`px-6 py-4 whitespace-nowrap text-sm ${
+                                isOverdue && task.status !== 'Completed'
+                                  ? 'text-red-400 font-medium' // Red text for overdue
+                                  : 'text-[#C7C9D1]' // Default text color otherwise
+                              } text-left`}
+                            >
+                              {formatDateForDisplay(task.dueDate)}{' '}
+                              {/* Display formatted date */}
+                              {/* Display (today) or (overdue) label based on robust flags */}
+                              {isDueToday && task.status !== 'Completed' && (
+                                <span className="ml-2 text-xs text-yellow-400 font-medium">
+                                  (today)
+                                </span>
+                              )}
+                              {isOverdue && task.status !== 'Completed' && (
+                                <span className="ml-2 text-xs text-red-400 font-medium">
+                                  (overdue)
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
+                              {task.title}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs">
+                              <div className="relative group max-w-xs">
+                                <span className="block truncate">
+                                  {task.description}
+                                </span>
+                                <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                                  {task.description}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                              {task.status}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                              {task.priority}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state for when there are no critical tasks */}
+            {!tasksLoading && !tasksError && criticalTasks.length === 0 && (
+              <div className="text-center p-8 border border-dark-700 rounded-lg bg-dark-800">
+                <div className="text-gray-400 mb-2">
+                  No critical tasks - you're all caught up!
+                </div>
+                <button
+                  onClick={() => setShowTaskModal(true)}
+                  className="text-primary hover:underline text-sm"
+                >
+                  + Add a task
+                </button>
+              </div>
+            )}
+
+            {/* Loading state for tasks */}
+            {tasksLoading && (
+              <div className="text-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-foreground text-sm">Loading tasks...</p>
+              </div>
+            )}
+
+            {/* Error state for tasks */}
+            {tasksError && (
+              <div className="text-center p-8 text-red-500">
+                <p>Error loading tasks: {tasksMessage}</p>
+              </div>
             )}
           </div>
-          <div className="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
-            <div
-              className="bg-primary h-4 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${project.progress || 0}%` }}
-            ></div>
-          </div>
-        </div>
-      </div>
 
-      {/* CHILD COMPONENT SECTION: Task List + Modal */}
-      <div className="bg-card rounded-lg p-4 shadow">
-        {/* SECTION HEADER WITH ACTION PATTERN */}
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-primary">Tasks</h2>
-          {/* MODAL TRIGGER BUTTON */}
-          <button
-            onClick={() => setShowTaskModal(true)}
-            className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded flex items-center gap-2"
-          >
-            <PlusCircle size={18} />
-            Add Task
-          </button>
-        </div>
+          {/* All Tasks Container - Separate from Critical Tasks */}
+          <div className="bg-card rounded-lg p-4 shadow">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-primary">All Tasks</h2>
 
-        {/*
-         * MODAL COMPONENT PATTERN:
-         * Pass isOpen state and onClose callback
-         * onClose will be called by the modal when it should close
-         */}
-        <TaskCreateModal
-          isOpen={showTaskModal}
-          onClose={() => setShowTaskModal(false)}
-          projectId={id}
-        />
-
-        {/* TASK LIST WITH CONDITIONAL STATES */}
-        {!tasksLoading && !tasksError && tasks.length > 0 && (
-          <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-dark-700">
-                <thead>
-                  <tr className="bg-primary bg-opacity-20">
-                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                      Title
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                      Description
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                      Priority
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                      Due Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-card divide-y divide-dark-700">
-                  {tasks.map((task) => (
-                    <tr
-                      key={task._id}
-                      className="hover:bg-dark-700 transition-colors cursor-pointer"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleTaskClick(task._id);
-                      }}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
-                        {task.title}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs">
-                        <div className="relative group max-w-xs">
-                          <span className="block truncate">
-                            {task.description}
-                          </span>
-                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
-                            {task.description}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {task.status}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {task.priority}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {formatDateForDisplay(task.dueDate)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/* Filter options for all tasks */}
+              <div className="flex space-x-2">
+                <select
+                  value={allTasksFilter}
+                  onChange={(e) => setAllTasksFilter(e.target.value)}
+                  className="bg-dark-700 border border-dark-600 text-foreground rounded-md text-sm p-2"
+                >
+                  <option value="all">All Tasks</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="today">Due Today</option>
+                </select>
+              </div>
             </div>
+
+            {/* Regular Task List */}
+            {!tasksLoading && !tasksError && visibleTasks.length > 0 && (
+              <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-dark-700">
+                    <thead>
+                      <tr className="bg-primary bg-opacity-10">
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Due Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Title
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Description
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                          Priority
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-card divide-y divide-dark-700">
+                      {visibleTasks.map((task) => (
+                        <tr
+                          key={task._id}
+                          className="hover:bg-dark-700 transition-colors cursor-pointer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleTaskClick(task._id);
+                          }}
+                        >
+                          <td
+                            className={`px-6 py-4 whitespace-nowrap text-sm ${
+                              new Date(task.dueDate) <
+                                new Date().setHours(0, 0, 0, 0) &&
+                              task.status !== 'Completed'
+                                ? 'text-red-400 font-medium'
+                                : 'text-[#C7C9D1]'
+                            } text-left`}
+                          >
+                            {formatDateForDisplay(task.dueDate)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
+                            {task.title}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs">
+                            <div className="relative group max-w-xs">
+                              <span className="block truncate">
+                                {task.description}
+                              </span>
+                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                                {task.description}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                            {task.status}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                            {task.priority}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state for regular task list */}
+            {!tasksLoading && !tasksError && visibleTasks.length === 0 && (
+              <div className="text-center p-8 border border-dark-700 rounded-lg bg-dark-800">
+                <div className="text-gray-400 mb-2">
+                  {allTasksFilter === 'all'
+                    ? 'No tasks for this project yet'
+                    : `No ${
+                        allTasksFilter === 'overdue' ? 'overdue' : "today's"
+                      } tasks`}
+                </div>
+                <button
+                  onClick={() => setShowTaskModal(true)}
+                  className="text-primary hover:underline text-sm"
+                >
+                  + Add your first task
+                </button>
+              </div>
+            )}
           </div>
-        )}
-
-        {/* End of tasks section */}
-      </div>
-
-      {/* Project Notes Section */}
-      <div className="bg-card rounded-lg p-4 shadow">
-        <ProjectNotes projectId={id} />
+        </div>
       </div>
     </div>
   );

@@ -76,6 +76,9 @@ const KbDetailsPage = () => {
   const [isDeleting, setIsDeleting] = useState(false); // State for delete operation loading
   const [deleteError, setDeleteError] = useState(''); // State for delete errors
 
+  // Create useRef at component level to track API calls
+  const apiCalledRef = React.useRef(false);
+
   // Get user from Redux store
   const { user } = useSelector((state) => state.auth);
   // Helper function to check if user is an admin
@@ -86,6 +89,10 @@ const KbDetailsPage = () => {
   // --- Fetch Article Data ---
   useEffect(() => {
     const fetchArticle = async () => {
+      // Skip if this effect has already run in this render cycle (prevents StrictMode double calls)
+      if (apiCalledRef.current) return;
+      apiCalledRef.current = true;
+
       // Reset states
       setIsLoading(true);
       setIsFetchError(false);
@@ -100,8 +107,11 @@ const KbDetailsPage = () => {
         return;
       }
 
+      console.log(`[DEBUG Client] Fetching article with ID: ${id}`);
+
       try {
         const response = await api.get(`/kb/${id}`);
+        console.log(`[DEBUG Client] API call completed for article ID: ${id}`);
 
         // Validate response data
         if (
@@ -110,6 +120,9 @@ const KbDetailsPage = () => {
           response.data.data !== null &&
           response.data.data.content // Checking content exists, adjust if needed
         ) {
+          console.log(
+            `[DEBUG Client] Setting article with views: ${response.data.data.views}`
+          );
           setArticle(response.data.data);
         } else {
           throw new Error('Invalid article data received.');
@@ -126,7 +139,16 @@ const KbDetailsPage = () => {
         setIsLoading(false);
       }
     };
+
+    console.log(`[DEBUG Client] useEffect triggered with id: ${id}`);
     fetchArticle();
+
+    // Add cleanup function to track component unmounting
+    return () => {
+      console.log(`[DEBUG Client] Component unmounting for article ID: ${id}`);
+      // Reset flag when component unmounts
+      apiCalledRef.current = false;
+    };
   }, [id]); // Re-fetch only if ID changes
 
   // --- Delete Handler ---
