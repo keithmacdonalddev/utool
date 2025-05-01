@@ -35,6 +35,7 @@
     "nodemailer": "^6.10.1",
     "puppeteer": "^24.7.2",
     "socket.io": "^4.8.1",
+    "ua-parser-js": "^2.0.3",
     "winston": "^3.11.0"
   },
   "devDependencies": {

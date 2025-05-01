@@ -2,6 +2,122 @@ import { format, createLogger, transports } from 'winston';
 import AuditLog from '../models/AuditLog.js';
 import mongoose from 'mongoose';
 
+/**
+ * Helper function to safely stringify objects with circular references
+ * This is crucial for preventing "Converting circular structure to JSON" errors
+ *
+ * @param {any} obj - The object to stringify
+ * @returns {string} JSON string representation of the object with circular references replaced
+ */
+function safeStringify(obj) {
+  if (obj === null || obj === undefined) {
+    return String(obj);
+  }
+
+  if (typeof obj !== 'object') {
+    return String(obj);
+  }
+
+  try {
+    // Use a replacer function to handle circular references
+    const seen = new WeakSet();
+    return JSON.stringify(
+      obj,
+      (key, value) => {
+        // Skip these problematic objects that often cause circular references
+        if (
+          key === 'socket' ||
+          key === 'parser' ||
+          key === '_events' ||
+          key === '_eventsCount' ||
+          key === '_httpMessage' ||
+          key === 'connection' ||
+          (key === 'req' && value?.connection) ||
+          key === 'client'
+        ) {
+          return '[circular]';
+        }
+
+        // Socket.io specific objects
+        if (
+          value &&
+          typeof value === 'object' &&
+          (value.constructor?.name === 'Socket' ||
+            value.constructor?.name === 'IncomingMessage' ||
+            value.constructor?.name === 'ServerResponse' ||
+            value.constructor?.name === 'HTTPParser')
+        ) {
+          return `[${value.constructor.name}]`;
+        }
+
+        if (typeof value === 'object' && value !== null) {
+          if (seen.has(value)) {
+            return '[circular]';
+          }
+          seen.add(value);
+        }
+        return value;
+      },
+      2
+    );
+  } catch (err) {
+    // Return a safe fallback if we still have issues stringifying
+    return `[Error stringifying object: ${err.message}]`;
+  }
+}
+
+// Function to deeply sanitize objects before logging
+function sanitizeForLogging(obj) {
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
+  }
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map((item) => sanitizeForLogging(item));
+  }
+
+  // Special handling for common circular reference objects
+  if (
+    obj.constructor?.name === 'Socket' ||
+    obj.constructor?.name === 'IncomingMessage' ||
+    obj.constructor?.name === 'ServerResponse' ||
+    obj.constructor?.name === 'HTTPParser'
+  ) {
+    return `[${obj.constructor.name}]`;
+  }
+
+  // Regular objects
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // Skip known problematic properties
+    if (
+      [
+        'socket',
+        'connection',
+        'parser',
+        '_events',
+        '_eventsCount',
+        '_httpMessage',
+        'client',
+        'req',
+        'res',
+      ].includes(key)
+    ) {
+      result[key] = `[${key}]`;
+      continue;
+    }
+
+    // Recursively sanitize nested objects
+    if (value && typeof value === 'object') {
+      result[key] = sanitizeForLogging(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 // Format for console logging with more human-readable output
 const consoleFormat = format.combine(
   format.colorize({
@@ -16,48 +132,76 @@ const consoleFormat = format.combine(
   }),
   format.timestamp({ format: 'HH:mm:ss' }), // Shorter timestamp format
   format.printf(({ timestamp, level, message, ...meta }) => {
-    // Only show detailed metadata for verbose and debug logs, or on errors
-    const isDetailedLog =
-      level.includes('verbose') ||
-      level.includes('debug') ||
-      level.includes('error') ||
-      meta.showDetails === true;
+    try {
+      // Only show detailed metadata for verbose and debug logs, or on errors
+      const isDetailedLog =
+        level.includes('verbose') ||
+        level.includes('debug') ||
+        level.includes('error') ||
+        meta.showDetails === true;
 
-    // Format the file info in a cleaner way
-    const fileInfo = meta.fileInfo
-      ? ` [${meta.fileInfo.split(' in ')[0]}]`
-      : '';
+      // Format the file info in a cleaner way
+      const fileInfo = meta.fileInfo
+        ? ` [${meta.fileInfo.split(' in ')[0]}]`
+        : '';
 
-    // Clean up the message - remove redundant file info if it's in the message
-    let cleanMessage = message;
-    if (fileInfo && message.includes(fileInfo.trim())) {
-      cleanMessage = message.replace(fileInfo.trim(), '');
-    }
-
-    // Format metadata cleanly for human readability
-    let metaString = '';
-    if (isDetailedLog && Object.keys(meta).length > 0) {
-      // Filter out metadata we don't want to display
-      const displayMeta = { ...meta };
-      delete displayMeta.fileInfo;
-      delete displayMeta.showDetails;
-
-      if (Object.keys(displayMeta).length > 0) {
-        metaString = `\n  └─ ${JSON.stringify(displayMeta, null, 2)
-          .replace(/{\n/g, '{ ')
-          .replace(/\n}/g, ' }')
-          .replace(/\n/g, '\n     ')}`;
+      // Clean up the message - remove redundant file info if it's in the message
+      let cleanMessage = message;
+      if (fileInfo && message.includes(fileInfo.trim())) {
+        cleanMessage = message.replace(fileInfo.trim(), '');
       }
-    }
 
-    return `${timestamp} ${level}${fileInfo}: ${cleanMessage}${metaString}`;
+      // Format metadata cleanly for human readability using safe stringify
+      let metaString = '';
+      if (isDetailedLog && Object.keys(meta).length > 0) {
+        // Filter out metadata we don't want to display
+        const displayMeta = { ...meta };
+        delete displayMeta.fileInfo;
+        delete displayMeta.showDetails;
+
+        if (Object.keys(displayMeta).length > 0) {
+          try {
+            // First sanitize meta objects to remove circular references
+            const sanitizedMeta = sanitizeForLogging(displayMeta);
+
+            // Then use safeStringify as a final safety measure
+            metaString = `\n  └─ ${safeStringify(sanitizedMeta)
+              .replace(/{\n/g, '{ ')
+              .replace(/\n}/g, ' }')
+              .replace(/\n/g, '\n     ')}`;
+          } catch (err) {
+            metaString = `\n  └─ [Error formatting metadata: ${err.message}]`;
+          }
+        }
+      }
+
+      return `${timestamp} ${level}${fileInfo}: ${cleanMessage}${metaString}`;
+    } catch (err) {
+      // Fallback in case of any stringification errors
+      return `${timestamp} ${level}: ${message} [Error formatting log: ${err.message}]`;
+    }
   })
 );
 
 // Create Winston logger instance with verbose level
 const winstonLogger = createLogger({
   level: process.env.NODE_ENV === 'development' ? 'verbose' : 'info', // Change to verbose in development
-  format: format.combine(format.timestamp(), format.json()),
+  format: format.combine(
+    format.timestamp(),
+    // Use custom format to handle circular references
+    format.printf((info) => {
+      try {
+        // First sanitize objects to remove circular references
+        const sanitizedInfo = sanitizeForLogging({ ...info });
+
+        // Then use safeStringify as a final safety measure
+        return safeStringify(sanitizedInfo);
+      } catch (err) {
+        // Fallback in case of any errors during formatting
+        return `{"level":"error","message":"Error formatting log: ${err.message}"}`;
+      }
+    })
+  ),
   transports: [
     new transports.Console({ format: consoleFormat }),
     // Add file transport for persistent logs in development
@@ -65,7 +209,20 @@ const winstonLogger = createLogger({
       ? [
           new transports.File({
             filename: 'logs/server.log',
-            format: format.combine(format.timestamp(), format.json()),
+            format: format.combine(
+              format.timestamp(),
+              // Use custom format to handle circular references
+              format.printf((info) => {
+                try {
+                  // Use sanitizing + safe stringify for file logs too
+                  const sanitizedInfo = sanitizeForLogging({ ...info });
+
+                  return safeStringify(sanitizedInfo);
+                } catch (err) {
+                  return `{"level":"error","message":"Error formatting log file entry: ${err.message}"}`;
+                }
+              })
+            ),
             maxsize: 5242880, // 5MB
             maxFiles: 5,
           }),
@@ -155,10 +312,16 @@ async function logToDb(type, message, data = {}) {
 
       // Add response body for verbose logging (with size limit)
       if (body && LOG_LEVELS[type] >= LOG_LEVELS.verbose) {
-        const truncatedBody =
-          typeof body === 'string'
-            ? body.substring(0, 1000)
-            : JSON.stringify(body).substring(0, 1000);
+        // Use safeStringify for response body
+        let truncatedBody;
+        try {
+          truncatedBody =
+            typeof body === 'string'
+              ? body.substring(0, 1000)
+              : safeStringify(body).substring(0, 1000);
+        } catch (err) {
+          truncatedBody = `[Error stringifying response body: ${err.message}]`;
+        }
 
         logEntry.data.resBody =
           truncatedBody +
@@ -261,96 +424,172 @@ function getCallerInfo() {
 // Main logger object with methods for each log level
 const logger = {
   error: (message, data = {}) => {
-    data.fileInfo = getCallerInfo();
-    data.showDetails = true; // Always show details for errors
-    winstonLogger.error(message, data);
-    return logToDb('error', message, data);
+    try {
+      // Create a sanitized copy of data before logging
+      const sanitizedData = { ...data };
+
+      // Add caller info
+      sanitizedData.fileInfo = getCallerInfo();
+      sanitizedData.showDetails = true; // Always show details for errors
+
+      // Log with proper sanitization
+      winstonLogger.error(message, sanitizeForLogging(sanitizedData));
+      return logToDb('error', message, sanitizedData);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
+
   warn: (message, data = {}) => {
-    data.fileInfo = getCallerInfo();
-    winstonLogger.warn(message, data);
-    return logToDb('warn', message, data);
+    try {
+      const sanitizedData = { ...data };
+      sanitizedData.fileInfo = getCallerInfo();
+      winstonLogger.warn(message, sanitizeForLogging(sanitizedData));
+      return logToDb('warn', message, sanitizedData);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
+
   info: (message, data = {}) => {
-    data.fileInfo = getCallerInfo();
-    winstonLogger.info(message, data);
-    return logToDb('info', message, data);
+    try {
+      const sanitizedData = { ...data };
+      sanitizedData.fileInfo = getCallerInfo();
+      winstonLogger.info(message, sanitizeForLogging(sanitizedData));
+      return logToDb('info', message, sanitizedData);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
+
   http: (message, data = {}) => {
-    data.fileInfo = getCallerInfo();
-    winstonLogger.http(message, data);
-    return logToDb('http', message, data);
+    try {
+      const sanitizedData = { ...data };
+      sanitizedData.fileInfo = getCallerInfo();
+      winstonLogger.http(message, sanitizeForLogging(sanitizedData));
+      return logToDb('http', message, sanitizedData);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
+
   verbose: (message, data = {}) => {
-    data.fileInfo = getCallerInfo();
-    data.showDetails = true; // Always show details for verbose logs
-    winstonLogger.verbose(message, data);
-    // Don't store verbose logs in the database
-    return { type: 'verbose', message, data, timestamp: new Date() };
+    try {
+      const sanitizedData = { ...data };
+      sanitizedData.fileInfo = getCallerInfo();
+      sanitizedData.showDetails = true; // Always show details for verbose logs
+      winstonLogger.verbose(message, sanitizeForLogging(sanitizedData));
+      // Don't store verbose logs in the database
+      return {
+        type: 'verbose',
+        message,
+        data: sanitizedData,
+        timestamp: new Date(),
+      };
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
+
   debug: (message, data = {}) => {
-    data.fileInfo = getCallerInfo();
-    data.showDetails = true; // Always show details for debug logs
-    winstonLogger.debug(message, data);
-    // Don't store debug logs in the database
-    return { type: 'debug', message, data, timestamp: new Date() };
+    try {
+      const sanitizedData = { ...data };
+      sanitizedData.fileInfo = getCallerInfo();
+      sanitizedData.showDetails = true; // Always show details for debug logs
+      winstonLogger.debug(message, sanitizeForLogging(sanitizedData));
+      // Don't store debug logs in the database
+      return {
+        type: 'debug',
+        message,
+        data: sanitizedData,
+        timestamp: new Date(),
+      };
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
 
   // Specialized logging for CRUD operations
   logCreate: (resourceType, resourceId, userId, data = {}) => {
-    const message = `Created ${resourceType}${
-      resourceId ? ` (ID: ${resourceId})` : ''
-    }`;
-    data.fileInfo = getCallerInfo();
-    data.resourceType = resourceType;
-    data.resourceId = resourceId;
-    data.userId =
-      userId || (data.req && data.req.user ? data.req.user.id : null);
-    data.action = 'create';
-    winstonLogger.info(message, data);
-    return logToDb('info', message, data);
+    try {
+      const message = `Created ${resourceType}${
+        resourceId ? ` (ID: ${resourceId})` : ''
+      }`;
+      data.fileInfo = getCallerInfo();
+      data.resourceType = resourceType;
+      data.resourceId = resourceId;
+      data.userId =
+        userId || (data.req && data.req.user ? data.req.user.id : null);
+      data.action = 'create';
+      winstonLogger.info(message, data);
+      return logToDb('info', message, data);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
 
   logUpdate: (resourceType, resourceId, userId, data = {}) => {
-    const message = `Updated ${resourceType}${
-      resourceId ? ` (ID: ${resourceId})` : ''
-    }`;
-    data.fileInfo = getCallerInfo();
-    data.resourceType = resourceType;
-    data.resourceId = resourceId;
-    data.userId =
-      userId || (data.req && data.req.user ? data.req.user.id : null);
-    data.action = 'update';
-    winstonLogger.info(message, data);
-    return logToDb('info', message, data);
+    try {
+      const message = `Updated ${resourceType}${
+        resourceId ? ` (ID: ${resourceId})` : ''
+      }`;
+      data.fileInfo = getCallerInfo();
+      data.resourceType = resourceType;
+      data.resourceId = resourceId;
+      data.userId =
+        userId || (data.req && data.req.user ? data.req.user.id : null);
+      data.action = 'update';
+      winstonLogger.info(message, data);
+      return logToDb('info', message, data);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
 
   logDelete: (resourceType, resourceId, userId, data = {}) => {
-    const message = `Deleted ${resourceType}${
-      resourceId ? ` (ID: ${resourceId})` : ''
-    }`;
-    data.fileInfo = getCallerInfo();
-    data.resourceType = resourceType;
-    data.resourceId = resourceId;
-    data.userId =
-      userId || (data.req && data.req.user ? data.req.user.id : null);
-    data.action = 'delete';
-    winstonLogger.info(message, data);
-    return logToDb('info', message, data);
+    try {
+      const message = `Deleted ${resourceType}${
+        resourceId ? ` (ID: ${resourceId})` : ''
+      }`;
+      data.fileInfo = getCallerInfo();
+      data.resourceType = resourceType;
+      data.resourceId = resourceId;
+      data.userId =
+        userId || (data.req && data.req.user ? data.req.user.id : null);
+      data.action = 'delete';
+      winstonLogger.info(message, data);
+      return logToDb('info', message, data);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
 
   logAccess: (resourceType, resourceId, userId, data = {}) => {
-    const message = `Accessed ${resourceType}${
-      resourceId ? ` (ID: ${resourceId})` : ''
-    }`;
-    data.fileInfo = getCallerInfo();
-    data.resourceType = resourceType;
-    data.resourceId = resourceId;
-    data.userId =
-      userId || (data.req && data.req.user ? data.req.user.id : null);
-    data.action = 'access';
-    winstonLogger.verbose(message, data);
-    return { type: 'verbose', message, data, timestamp: new Date() };
+    try {
+      const message = `Accessed ${resourceType}${
+        resourceId ? ` (ID: ${resourceId})` : ''
+      }`;
+      data.fileInfo = getCallerInfo();
+      data.resourceType = resourceType;
+      data.resourceId = resourceId;
+      data.userId =
+        userId || (data.req && data.req.user ? data.req.user.id : null);
+      data.action = 'access';
+      winstonLogger.verbose(message, data);
+      return { type: 'verbose', message, data, timestamp: new Date() };
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
+    }
   },
 
   // Log database operations
@@ -361,49 +600,69 @@ const logger = {
     errorDetails = null,
     data = {}
   ) => {
-    const status = success ? 'successful' : 'failed';
-    const message = `Database ${operation} on ${collection} ${status}`;
-    data.fileInfo = getCallerInfo();
-    data.dbOperation = { operation, collection, success };
+    try {
+      const status = success ? 'successful' : 'failed';
+      const message = `Database ${operation} on ${collection} ${status}`;
+      data.fileInfo = getCallerInfo();
+      data.dbOperation = { operation, collection, success };
 
-    if (errorDetails) {
-      data.dbOperation.error = errorDetails;
-      data.showDetails = true;
-      winstonLogger.error(message, data);
-    } else {
-      winstonLogger.info(message, data);
+      if (errorDetails) {
+        data.dbOperation.error = errorDetails;
+        data.showDetails = true;
+        winstonLogger.error(message, data);
+      } else {
+        winstonLogger.info(message, data);
+      }
+
+      return logToDb(success ? 'info' : 'error', message, data);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
     }
-
-    return logToDb(success ? 'info' : 'error', message, data);
   },
 
   // Log HTTP requests with response time
   logRequest: (req, res, responseTime) => {
-    const message = `${req.method} ${req.originalUrl} ${res.statusCode} - ${responseTime}ms`;
-    const data = { req, res, responseTime };
+    try {
+      const message = `${req.method} ${req.originalUrl} ${res.statusCode} - ${responseTime}ms`;
+      const data = { req, res, responseTime };
 
-    // Add more verbose information for slow requests
-    if (responseTime > 1000) {
-      // Requests taking more than 1 second
-      data.slowRequest = true;
-      data.showDetails = true; // Show details for slow requests
-      winstonLogger.warn(`SLOW REQUEST: ${message}`, data);
-    } else {
-      winstonLogger.http(message, data);
+      // Add more verbose information for slow requests
+      if (responseTime > 1000) {
+        // Requests taking more than 1 second
+        data.slowRequest = true;
+        data.showDetails = true; // Show details for slow requests
+        winstonLogger.warn(`SLOW REQUEST: ${message}`, data);
+      } else {
+        winstonLogger.http(message, data);
+      }
+
+      return logToDb('http', message, data);
+    } catch (err) {
+      console.error('Logger error:', err);
+      return null;
     }
-
-    return logToDb('http', message, data);
   },
 
   // Stream for Morgan to use (for request logging)
   stream: {
     write: (message) => {
-      // Don't add the message to the regular logs if it's just Morgan output
-      if (process.env.NODE_ENV !== 'development') {
-        winstonLogger.http(message.trim());
+      try {
+        // Don't add the message to the regular logs if it's just Morgan output
+        if (process.env.NODE_ENV !== 'development') {
+          winstonLogger.http(message.trim());
+        }
+      } catch (err) {
+        console.error('Logger stream error:', err);
       }
     },
   },
+
+  // Export the safeStringify function for use in other modules
+  safeStringify,
+
+  // Export sanitizeForLogging for external use
+  sanitizeForLogging,
 };
 
 export { logger };

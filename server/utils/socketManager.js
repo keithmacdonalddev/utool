@@ -1,7 +1,13 @@
 import jwt from 'jsonwebtoken';
 import { logger } from './logger.js';
 
-// Socket.io middleware for authentication
+/**
+ * Socket.io middleware for authentication
+ * Validates the JWT token before allowing socket connections
+ *
+ * @param {object} socket - Socket.io socket instance
+ * @param {function} next - Middleware callback function
+ */
 const authenticateSocket = (socket, next) => {
   // Get token from handshake query
   const token = socket.handshake.auth.token || socket.handshake.query.token;
@@ -37,90 +43,139 @@ const authenticateSocket = (socket, next) => {
   }
 };
 
-// Socket.io handler for connection
+/**
+ * Socket.io handler for connection
+ * Sets up event handlers for the socket
+ *
+ * @param {object} io - Socket.io server instance
+ * @param {object} socket - Socket.io socket instance
+ */
 const handleConnection = (io, socket) => {
-  logger.info(`Socket connected: ${socket.id}`, {
-    socketId: socket.id,
-    userId: socket.user?.id,
-    userName: socket.user?.name,
-    timeConnected: new Date().toISOString(),
-  });
-
-  // Add user to their personal notification room
-  if (socket.user && socket.user.id) {
-    const userRoom = `user:${socket.user.id}`;
-    socket.join(userRoom);
-    logger.info(
-      `User ${socket.user.id} joined their private notification room`,
-      {
-        room: userRoom,
-        socketId: socket.id,
-      }
-    );
-  }
-
-  // Handle document collaboration
-  socket.on('join_document', (documentId) => {
-    socket.join(documentId);
-    logger.verbose(`User joined document: ${documentId}`, {
+  try {
+    // Safe logger call without passing the socket object directly
+    logger.info(`Socket connected: ${socket.id}`, {
       socketId: socket.id,
       userId: socket.user?.id,
-      documentId,
+      userName: socket.user?.name,
+      timeConnected: new Date().toISOString(),
     });
-  });
 
-  socket.on('send_changes', (data) => {
-    if (data && data.documentId) {
-      logger.verbose(`Received document changes`, {
-        socketId: socket.id,
-        userId: socket.user?.id,
-        documentId: data.documentId,
-        editorStateSize: JSON.stringify(data.editorState).length,
-      });
-
-      socket.to(data.documentId).emit('receive_changes', data.editorState);
-    } else {
-      logger.warn(`Invalid send_changes event received`, {
-        socketId: socket.id,
-        userId: socket.user?.id,
-        data,
-      });
+    // Add user to their personal notification room
+    if (socket.user && socket.user.id) {
+      const userRoom = `user:${socket.user.id}`;
+      socket.join(userRoom);
+      logger.info(
+        `User ${socket.user.id} joined their private notification room`,
+        {
+          room: userRoom,
+          socketId: socket.id,
+        }
+      );
     }
-  });
 
-  // Log event emissions
-  const originalEmit = socket.emit;
-  socket.emit = function (event, ...args) {
-    logger.verbose(`Socket emitting event: ${event}`, {
-      socketId: socket.id,
-      userId: socket.user?.id,
-      event,
-      argsLength: args.length,
+    // Handle document collaboration
+    socket.on('join_document', (documentId) => {
+      try {
+        socket.join(documentId);
+        logger.verbose(`User joined document: ${documentId}`, {
+          socketId: socket.id,
+          userId: socket.user?.id,
+          documentId,
+        });
+      } catch (error) {
+        logger.error(`Error joining document ${documentId}`, {
+          error: error.message,
+          stack: error.stack,
+        });
+      }
     });
-    return originalEmit.apply(this, [event, ...args]);
-  };
 
-  // Clean up on disconnect
-  socket.on('disconnect', () => {
-    logger.info(`Socket disconnected: ${socket.id}`, {
-      socketId: socket.id,
-      userId: socket.user?.id,
-      timeDisconnected: new Date().toISOString(),
+    socket.on('send_changes', (data) => {
+      try {
+        if (data && data.documentId) {
+          logger.verbose(`Received document changes`, {
+            socketId: socket.id,
+            userId: socket.user?.id,
+            documentId: data.documentId,
+            editorStateSize: data.editorState
+              ? JSON.stringify(data.editorState).length
+              : 'N/A',
+          });
+
+          socket.to(data.documentId).emit('receive_changes', data.editorState);
+        } else {
+          logger.warn(`Invalid send_changes event received`, {
+            socketId: socket.id,
+            userId: socket.user?.id,
+            dataValid: !!data,
+            hasDocumentId: data ? !!data.documentId : false,
+          });
+        }
+      } catch (error) {
+        logger.error(`Error processing document changes`, {
+          error: error.message,
+          stack: error.stack,
+          socketId: socket.id,
+        });
+      }
     });
-  });
+
+    // Clean up on disconnect
+    socket.on('disconnect', () => {
+      try {
+        logger.info(`Socket disconnected: ${socket.id}`, {
+          socketId: socket.id,
+          userId: socket.user?.id,
+          timeDisconnected: new Date().toISOString(),
+        });
+      } catch (error) {
+        // Use console.error as a last resort if logger itself is failing
+        console.error(`Error logging socket disconnect: ${error.message}`);
+      }
+    });
+  } catch (error) {
+    // If we have an error in the main handler, log it directly
+    console.error(`Error in socket connection handler: ${error.message}`);
+    logger.error(`Error in socket connection handler`, {
+      error: error.message,
+      stack: error.stack,
+      socketId: socket?.id || 'unknown',
+    });
+  }
 };
 
-// Function to send notifications through socket.io
+/**
+ * Function to send notifications through socket.io
+ *
+ * @param {object} io - Socket.io server instance
+ * @param {string} userId - User ID to send the notification to
+ * @param {object} notification - Notification data
+ * @returns {boolean} Success or failure of the send operation
+ */
 const sendNotification = (io, userId, notification) => {
   try {
+    if (!io || !userId || !notification) {
+      logger.warn('Missing parameters for sendNotification', {
+        hasIo: !!io,
+        hasUserId: !!userId,
+        hasNotification: !!notification,
+      });
+      return false;
+    }
+
+    // Extract only what we need to log
+    const notificationSummary = notification
+      ? {
+          id: notification._id,
+          title: notification.title,
+          message: notification.message?.substring(0, 100), // Limit message length for logging
+          type: notification.type,
+        }
+      : 'Invalid notification';
+
     logger.verbose(`Attempting to send notification to user: ${userId}`, {
       userId,
-      notification: {
-        id: notification._id,
-        title: notification.title,
-        message: notification.message,
-        type: notification.type,
-      },
+      notification: notificationSummary,
     });
 
     const userRoom = `user:${userId}`;
@@ -143,23 +198,90 @@ const sendNotification = (io, userId, notification) => {
   }
 };
 
-// Function to broadcast system messages
+/**
+ * Function to broadcast system messages to all connected clients
+ *
+ * @param {object} io - Socket.io server instance
+ * @param {string} message - Message to broadcast
+ * @param {object} metadata - Additional data to include with the message
+ * @returns {boolean} Success or failure of the broadcast operation
+ */
 const broadcastSystemMessage = (io, message, metadata = {}) => {
   try {
-    logger.verbose(`Broadcasting system message: ${message}`, { metadata });
+    if (!io) {
+      logger.warn('Socket.IO instance not available for broadcasting');
+      return false;
+    }
+
+    // Create a clean copy of metadata to avoid direct reference
+    const metadataCopy = { ...metadata };
+
+    // Ensure we don't have any circular references in the metadata
+    const safeMetadata = {};
+    Object.keys(metadataCopy).forEach((key) => {
+      // Skip problematic keys and complex objects that might have circular refs
+      if (
+        ![
+          'socket',
+          'req',
+          'res',
+          '_events',
+          '_eventsCount',
+          'connection',
+          'client',
+          'parser',
+          '_httpMessage',
+        ].includes(key)
+      ) {
+        // For simple scalar values, include directly
+        if (
+          metadataCopy[key] === null ||
+          metadataCopy[key] === undefined ||
+          typeof metadataCopy[key] !== 'object' ||
+          metadataCopy[key] instanceof Date
+        ) {
+          safeMetadata[key] = metadataCopy[key];
+        } else {
+          // For objects, process them with sanitizeForLogging first, then stringify
+          try {
+            // First sanitize to handle any nested circular references
+            const sanitized = logger.sanitizeForLogging(metadataCopy[key]);
+            // Then use safeStringify for additional safety
+            safeMetadata[key] =
+              typeof sanitized === 'string'
+                ? sanitized
+                : logger.safeStringify(sanitized);
+          } catch (err) {
+            // Provide a safer fallback message
+            safeMetadata[key] = `[Complex object removed for safety]`;
+            logger.debug(
+              `Failed to stringify metadata[${key}]: ${err.message}`
+            );
+          }
+        }
+      }
+    });
+
+    // Safe logging that won't cause circular reference errors
+    logger.verbose(`Broadcasting system message: ${message}`, {
+      messageType: typeof message,
+      metadataKeys: Object.keys(safeMetadata),
+      timestamp: new Date().toISOString(),
+    });
 
     // Send to all authenticated clients
     io.emit('system_message', {
       message,
       timestamp: new Date(),
-      ...metadata,
+      ...safeMetadata,
     });
 
     return true;
   } catch (error) {
+    // Enhanced error logging with sanitized error object
     logger.error(`Error broadcasting system message`, {
-      message,
-      error: error.message,
+      message: typeof message === 'string' ? message : '[Non-string message]',
+      error: logger.sanitizeForLogging(error),
     });
     return false;
   }

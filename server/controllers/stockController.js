@@ -9,9 +9,10 @@ import errorResponse from '../utils/errorResponse.js';
 const mockStockData = {
   TSLA: {
     symbol: 'TSLA',
-    price: 278.32, // Updated from 912.75 to current market price
-    change: 3.45,
-    changePercent: '1.25%',
+    price: 279.15, // Updated to current market price (April 2025)
+    change: -12.88,
+    changePercent: '-4.41%',
+    previousClose: 292.03, // Updated with real previous close
   },
   AAPL: {
     symbol: 'AAPL',
@@ -97,7 +98,13 @@ const isMarketOpen = () => {
 };
 
 // Check if a user is within cooldown period
-const isInCooldownPeriod = (userId) => {
+const isInCooldownPeriod = (userId, adminOverride = false) => {
+  // Admin override bypasses cooldown check completely
+  if (adminOverride) {
+    logStock(`Cooldown bypassed: Admin override used by ${userId}`);
+    return false;
+  }
+
   if (!userLastRequestTimes.has(userId)) {
     logStock(`Cooldown: No previous requests for user ${userId}`);
     return false; // No previous request, not in cooldown
@@ -121,13 +128,38 @@ const isInCooldownPeriod = (userId) => {
 };
 
 // Generate a distinctly different price for mock data
-const generateNewMockPrice = (symbol, basePrice) => {
+const generateNewMockPrice = (symbol, basePrice, previousClose) => {
   // Get the last price or use the base price if this is the first time
   const lastPrice = lastGeneratedPrices[symbol] || basePrice;
   logStock(
     `Generating mock price for ${symbol}. Base: ${basePrice}, Last: ${lastPrice}`
   );
 
+  // For TSLA, use more realistic values based on actual market data
+  if (symbol === 'TSLA') {
+    // Return our updated mock data that matches real market data
+    const realChange = basePrice - previousClose;
+    const realChangePercent = ((realChange / previousClose) * 100).toFixed(2);
+
+    // Update stored price
+    lastGeneratedPrices[symbol] = basePrice;
+
+    logStock(
+      `Using accurate market data for TSLA: $${basePrice.toFixed(
+        2
+      )}, Change: ${realChange.toFixed(2)} (${realChangePercent}%)`
+    );
+
+    return {
+      price: basePrice,
+      change: realChange,
+      changePercent: `${realChangePercent}%`,
+      previousClose: previousClose,
+      lastPrice: previousClose,
+    };
+  }
+
+  // For other symbols, continue with simulated data
   // Decide if price should go up or down (alternate or random)
   const direction = Math.random() > 0.5 ? 1 : -1;
 
@@ -229,13 +261,54 @@ const tryAlternativeAPIs = async (symbol) => {
 };
 
 /**
+ * Try to get stock data from FMP API
+ * (Financial Modeling Prep)
+ */
+const tryFMPAPI = async (symbol) => {
+  try {
+    logStock(`Attempting FMP API for ${symbol}`);
+    const apiKey = process.env.FMP_API_KEY || 'demo'; // Use demo key if not configured
+
+    const response = await axios.get(
+      `https://financialmodelingprep.com/api/v3/quote/${symbol}?apikey=${apiKey}`,
+      { timeout: 5000 }
+    );
+
+    if (response.data && response.data.length > 0) {
+      const quote = response.data[0];
+
+      return {
+        symbol: symbol,
+        price: quote.price,
+        change: quote.change,
+        changePercent: `${quote.changesPercentage.toFixed(2)}%`,
+        previousClose: quote.previousClose,
+        source: 'financial-modeling-prep',
+      };
+    }
+
+    logStock(`FMP API returned invalid or empty data`);
+    return null;
+  } catch (error) {
+    logStock(`FMP API failed: ${error.message}`);
+    return null;
+  }
+};
+
+/**
  * Get real-time stock quote from primary API, with fallback options
  * Implements multiple layers of fallbacks to ensure data availability
  */
 export const getStockQuote = async (req, res, next) => {
   try {
     const { symbol } = req.params;
+    const adminOverride = req.query.adminOverride === 'true';
     const userId = req.user ? req.user.id : req.ip; // Use user ID or IP for non-authenticated users
+
+    // Log if admin override is being used
+    if (adminOverride) {
+      logStock(`ADMIN OVERRIDE requested for stock refresh by user ${userId}`);
+    }
 
     logStock(`Stock quote request received for ${symbol} from user ${userId}`);
     logAllPrices();
@@ -260,8 +333,8 @@ export const getStockQuote = async (req, res, next) => {
     }
     */
 
-    // Check if user is in cooldown period
-    if (isInCooldownPeriod(userId)) {
+    // Check if user is in cooldown period (passing admin override flag)
+    if (isInCooldownPeriod(userId, adminOverride)) {
       const lastRequestTime = userLastRequestTimes.get(userId);
       const now = new Date();
       const minutesAgo = Math.floor((now - lastRequestTime) / (1000 * 60));
@@ -286,19 +359,42 @@ export const getStockQuote = async (req, res, next) => {
     logStock(`Processing request for ${normalizedSymbol}`);
 
     try {
-      // PRIMARY DATA SOURCE: Alpha Vantage API
+      // Try FMP API first as it tends to have more accurate data
+      const fmpData = await tryFMPAPI(normalizedSymbol);
+      if (fmpData) {
+        // Update last request time for this user
+        userLastRequestTimes.set(userId, new Date());
+        logStock(
+          `Updated last request time for user ${userId}: ${new Date().toISOString()}`
+        );
+
+        logStock(`FMP API data returned for ${normalizedSymbol}`, fmpData);
+
+        // SUCCESS: Return real-time data from FMP source
+        return res.status(200).json({
+          success: true,
+          data: fmpData,
+        });
+      }
+
+      // PRIMARY DATA SOURCE: Alpha Vantage API - Using Intraday data for real-time prices
       logStock(
-        `Attempting API request to Alpha Vantage for ${normalizedSymbol}`
+        `Attempting API request to Alpha Vantage for real-time data on ${normalizedSymbol}`
       );
 
       // Use environment variable for API key when possible
       const apiKey = process.env.ALPHA_VANTAGE_API_KEY || 'KQ7XNXVXZCNJBP9X';
-      const response = await axios.get(
-        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${normalizedSymbol}&apikey=${apiKey}`,
+
+      // First, get the intraday data for current price
+      const intradayResponse = await axios.get(
+        `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${normalizedSymbol}&interval=5min&apikey=${apiKey}`,
         { timeout: 5000 }
       );
 
-      logStock(`Alpha Vantage API response received:`, response.data);
+      logStock(
+        `Alpha Vantage Intraday API response received:`,
+        intradayResponse.data
+      );
 
       // Update last request time for this user
       userLastRequestTimes.set(userId, new Date());
@@ -306,33 +402,63 @@ export const getStockQuote = async (req, res, next) => {
         `Updated last request time for user ${userId}: ${new Date().toISOString()}`
       );
 
+      // Then get the global quote for previous close and other data
+      const globalQuoteResponse = await axios.get(
+        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${normalizedSymbol}&apikey=${apiKey}`,
+        { timeout: 5000 }
+      );
+
+      logStock(
+        `Alpha Vantage Global Quote API response received:`,
+        globalQuoteResponse.data
+      );
+
       if (
-        response.data &&
-        response.data['Global Quote'] &&
-        Object.keys(response.data['Global Quote']).length > 0
+        intradayResponse.data &&
+        intradayResponse.data['Meta Data'] &&
+        intradayResponse.data['Time Series (5min)'] &&
+        globalQuoteResponse.data &&
+        globalQuoteResponse.data['Global Quote']
       ) {
-        const quote = response.data['Global Quote'];
+        // Get the most recent data point from intraday data
+        const timeSeriesData = intradayResponse.data['Time Series (5min)'];
+        const timestamps = Object.keys(timeSeriesData).sort().reverse();
+        const latestTimestamp = timestamps[0];
+        const latestDataPoint = timeSeriesData[latestTimestamp];
+
+        // Get the current price from the latest intraday data point
+        const currentPrice = parseFloat(latestDataPoint['4. close']);
+
+        // Get previous close from global quote
+        const quoteData = globalQuoteResponse.data['Global Quote'];
+        const previousClose = parseFloat(quoteData['08. previous close']);
+
+        // Calculate the change based on previous close and current real-time price
+        const change = currentPrice - previousClose;
+        const changePercent = ((change / previousClose) * 100).toFixed(2);
+
         const priceData = {
           symbol: normalizedSymbol,
-          price: parseFloat(quote['05. price']),
-          change: parseFloat(quote['09. change']),
-          changePercent: quote['10. change percent'],
-          source: 'alpha-vantage',
+          price: currentPrice,
+          change: change,
+          changePercent: `${changePercent}%`,
+          previousClose: previousClose,
+          source: 'alpha-vantage-realtime',
         };
 
-        logStock(`Live data returned for ${normalizedSymbol}`, priceData);
+        logStock(`Real-time data returned for ${normalizedSymbol}`, priceData);
 
-        // SUCCESS: Return live data from primary source
+        // SUCCESS: Return real-time data from primary source
         return res.status(200).json({
           success: true,
           data: priceData,
         });
       } else {
-        // API returned an empty response or invalid format
-        logStock(
-          `Alpha Vantage API returned invalid data format:`,
-          response.data
-        );
+        // Either API returned an empty response or invalid format
+        logStock(`Alpha Vantage API returned invalid data format:`, {
+          intraday: intradayResponse.data,
+          globalQuote: globalQuoteResponse.data,
+        });
         throw new Error('Invalid Alpha Vantage API response format');
       }
     } catch (primaryApiError) {
@@ -358,21 +484,31 @@ export const getStockQuote = async (req, res, next) => {
 
       // LAST RESORT: If we have mock data for this symbol, use it
       if (mockStockData[normalizedSymbol]) {
-        // Get base price from mock data
-        const basePrice = mockStockData[normalizedSymbol].price;
+        const mockDataForSymbol = mockStockData[normalizedSymbol];
+        // Get base price and previous close from mock data
+        const basePrice = mockDataForSymbol.price;
+        const previousClose =
+          mockDataForSymbol.previousClose ||
+          basePrice - mockDataForSymbol.change;
+
         logStock(
-          `Using fallback mock data for ${normalizedSymbol}, base price: ${basePrice}`
+          `Using fallback mock data for ${normalizedSymbol}, base price: ${basePrice}, previous close: ${previousClose}`
         );
 
         // Generate a new price that's distinctly different
-        const result = generateNewMockPrice(normalizedSymbol, basePrice);
+        const result = generateNewMockPrice(
+          normalizedSymbol,
+          basePrice,
+          previousClose
+        );
         const newPrice = result.price;
         const priceChange = result.change;
 
         // Calculate percent change based on the actual change
-        const percentChange = ((priceChange / result.lastPrice) * 100).toFixed(
-          2
-        );
+        const percentChange = (
+          (priceChange / (result.previousClose || result.lastPrice)) *
+          100
+        ).toFixed(2);
 
         // Create mock response with dynamically generated data
         const mockData = {
@@ -380,6 +516,7 @@ export const getStockQuote = async (req, res, next) => {
           price: newPrice,
           change: priceChange,
           changePercent: `${percentChange}%`,
+          previousClose: result.previousClose || newPrice - priceChange,
           source: 'fallback',
           isMockData: true, // Explicitly flag this as mock data
         };

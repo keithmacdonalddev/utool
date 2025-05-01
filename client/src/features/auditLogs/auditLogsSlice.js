@@ -5,7 +5,7 @@ import api from '../../utils/api'; // Use custom API client instead of axios
 export const fetchAuditLogs = createAsyncThunk(
   'auditLogs/fetchAuditLogs',
   async (
-    { page = 1, limit = 25, sort = '-timestamp', ...filters },
+    { page = 1, limit = 25, sort = '-timestamp', journey = false, ...filters },
     { rejectWithValue, getState }
   ) => {
     try {
@@ -22,6 +22,11 @@ export const fetchAuditLogs = createAsyncThunk(
         limit,
         sort,
       });
+
+      // Add journey parameter if true
+      if (journey) {
+        queryParams.append('journey', 'true');
+      }
 
       // Working with MongoDB-style query operators for effective date filtering
       if (filters.startDate) {
@@ -93,6 +98,21 @@ export const fetchAuditLogs = createAsyncThunk(
         queryParams.append('status', filters.status);
       }
 
+      // Add eventCategory filter if present (for journey filtering)
+      if (filters.eventCategory && filters.eventCategory !== '') {
+        queryParams.append('eventCategory', filters.eventCategory);
+      }
+
+      // Add severityLevel filter if present (for journey filtering)
+      if (filters.severityLevel && filters.severityLevel !== '') {
+        queryParams.append('severityLevel', filters.severityLevel);
+      }
+
+      // Add business operation filter if present (for journey filtering)
+      if (filters.businessOperation && filters.businessOperation !== '') {
+        queryParams.append('businessOperation', filters.businessOperation);
+      }
+
       console.log(`Fetching audit logs: /audit-logs?${queryParams}`);
 
       // Use our custom API client which includes authorization headers automatically
@@ -104,9 +124,15 @@ export const fetchAuditLogs = createAsyncThunk(
 
       // Clear indication of success
       if (response.data.success) {
-        console.log(
-          `✅ SUCCESS: Retrieved ${response.data.data.length} logs out of ${response.data.count} total`
-        );
+        if (journey) {
+          console.log(
+            `✅ SUCCESS: Retrieved ${response.data.data.length} journeys out of ${response.data.count} total`
+          );
+        } else {
+          console.log(
+            `✅ SUCCESS: Retrieved ${response.data.data.length} logs out of ${response.data.count} total`
+          );
+        }
       }
 
       return response.data;
@@ -124,6 +150,32 @@ export const fetchAuditLogs = createAsyncThunk(
         console.error('🚫 Error message:', error.message);
       }
 
+      return rejectWithValue(
+        error.response?.data || { message: error.message }
+      );
+    }
+  }
+);
+
+/**
+ * Fetches the available filter options for audit logs
+ * This helps populate the filter dropdowns with options from the server
+ */
+export const fetchAuditLogFilters = createAsyncThunk(
+  'auditLogs/fetchAuditLogFilters',
+  async (_, { rejectWithValue, getState }) => {
+    try {
+      // Get auth token from Redux state
+      const { token } = getState().auth;
+
+      if (!token) {
+        return rejectWithValue({ message: 'Authentication required' });
+      }
+
+      // Use custom API client which handles auth headers
+      const { data } = await api.get('/audit-logs/filters');
+      return data;
+    } catch (error) {
       return rejectWithValue(
         error.response?.data || { message: error.message }
       );
@@ -203,6 +255,8 @@ export const deleteAuditLogsByDateRange = createAsyncThunk(
 
 const initialState = {
   logs: [],
+  journeys: [],
+  isJourneyView: false,
   totalCount: 0,
   pagination: {},
   loading: false,
@@ -212,6 +266,17 @@ const initialState = {
     status: '',
     startDate: '',
     endDate: '',
+    eventCategory: '',
+    severityLevel: '',
+    businessOperation: '',
+  },
+  filterOptions: {
+    eventCategories: [],
+    severityLevels: [],
+    actions: [],
+    resourceTypes: [],
+    userRoles: [],
+    businessOperations: [],
   },
   searchResults: [],
   searchLoading: false,
@@ -233,7 +298,14 @@ const auditLogsSlice = createSlice({
         status: '',
         startDate: '',
         endDate: '',
+        eventCategory: '',
+        severityLevel: '',
+        businessOperation: '',
       };
+    },
+    toggleJourneyView: (state, action) => {
+      state.isJourneyView =
+        action.payload !== undefined ? action.payload : !state.isJourneyView;
     },
   },
   extraReducers: (builder) => {
@@ -245,7 +317,16 @@ const auditLogsSlice = createSlice({
       })
       .addCase(fetchAuditLogs.fulfilled, (state, action) => {
         state.loading = false;
-        state.logs = action.payload.data;
+
+        // Handle different response formats for journey vs regular logs
+        if (action.meta.arg.journey) {
+          state.journeys = action.payload.data;
+          state.isJourneyView = true;
+        } else {
+          state.logs = action.payload.data;
+          state.isJourneyView = false;
+        }
+
         state.totalCount = action.payload.count;
         state.pagination = action.payload.pagination;
       })
@@ -254,6 +335,17 @@ const auditLogsSlice = createSlice({
         state.error = action.payload || {
           message: 'Failed to fetch audit logs',
         };
+      })
+      // fetchAuditLogFilters cases
+      .addCase(fetchAuditLogFilters.pending, (state) => {
+        // We don't need to set loading here as it would affect the whole page
+      })
+      .addCase(fetchAuditLogFilters.fulfilled, (state, action) => {
+        state.filterOptions = action.payload.data;
+      })
+      .addCase(fetchAuditLogFilters.rejected, (state, action) => {
+        // Just log the error for filter options, don't set the main error state
+        console.error('Failed to fetch filter options:', action.payload);
       })
       // searchAuditLogs cases
       .addCase(searchAuditLogs.pending, (state) => {
@@ -289,6 +381,7 @@ const auditLogsSlice = createSlice({
   },
 });
 
-export const { setFilters, clearFilters } = auditLogsSlice.actions;
+export const { setFilters, clearFilters, toggleJourneyView } =
+  auditLogsSlice.actions;
 
 export default auditLogsSlice.reducer;

@@ -1056,22 +1056,18 @@ const ProjectDetailsPage = () => {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-primary">All Tasks</h2>
 
-              {/* Filter options for all tasks */}
-              <div className="flex space-x-2">
-                <select
-                  value={allTasksFilter}
-                  onChange={(e) => setAllTasksFilter(e.target.value)}
-                  className="bg-dark-700 border border-dark-600 text-foreground rounded-md text-sm p-2"
-                >
-                  <option value="all">All Tasks</option>
-                  <option value="overdue">Overdue</option>
-                  <option value="today">Due Today</option>
-                </select>
-              </div>
+              {/* "Add Task" button that reveals the task creation modal */}
+              <button
+                onClick={() => setShowTaskModal(true)}
+                className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md transition-colors"
+              >
+                <PlusCircle size={16} />
+                Add Task
+              </button>
             </div>
 
             {/* Regular Task List */}
-            {!tasksLoading && !tasksError && visibleTasks.length > 0 && (
+            {!tasksLoading && !tasksError && tasks.length > 0 && (
               <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-dark-700">
@@ -1095,7 +1091,7 @@ const ProjectDetailsPage = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-card divide-y divide-dark-700">
-                      {visibleTasks.map((task) => (
+                      {tasks.map((task) => (
                         <tr
                           key={task._id}
                           className="hover:bg-dark-700 transition-colors cursor-pointer"
@@ -1144,14 +1140,10 @@ const ProjectDetailsPage = () => {
             )}
 
             {/* Empty state for regular task list */}
-            {!tasksLoading && !tasksError && visibleTasks.length === 0 && (
+            {!tasksLoading && !tasksError && tasks.length === 0 && (
               <div className="text-center p-8 border border-dark-700 rounded-lg bg-dark-800">
                 <div className="text-gray-400 mb-2">
-                  {allTasksFilter === 'all'
-                    ? 'No tasks for this project yet'
-                    : `No ${
-                        allTasksFilter === 'overdue' ? 'overdue' : "today's"
-                      } tasks`}
+                  No tasks for this project yet
                 </div>
                 <button
                   onClick={() => setShowTaskModal(true)}

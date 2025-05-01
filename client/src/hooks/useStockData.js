@@ -127,11 +127,21 @@ const useStockData = (options = {}) => {
     }, 60000); // Update every minute
   };
 
-  const fetchStock = async () => {
+  /**
+   * Fetch stock data from the server, with optional admin override
+   * @param {boolean} adminOverride - Whether to override the cooldown check (admin only)
+   * @returns {Promise<void>}
+   */
+  const fetchStock = async (adminOverride = false) => {
     // Don't fetch if we're already fetching
     if (isRefreshing) {
       logStockClient(`Fetch rejected: Already refreshing`);
       return;
+    }
+
+    // Log if admin override is being used
+    if (adminOverride) {
+      logStockClient(`Admin override used to bypass cooldown check`);
     }
 
     // Check if market is open
@@ -144,18 +154,20 @@ const useStockData = (options = {}) => {
       return;
     }
 
-    // Check cooldown status
-    const cooldownElapsed = checkCooldownStatus();
-    if (!cooldownElapsed) {
-      logStockClient(
-        `Fetch rejected: In cooldown (${cooldownRemaining} minutes remaining)`
-      );
-      setError(
-        `Please wait ${cooldownRemaining} minute${
-          cooldownRemaining !== 1 ? 's' : ''
-        } before refreshing again.`
-      );
-      return;
+    // Check cooldown status (skip if admin override)
+    if (!adminOverride) {
+      const cooldownElapsed = checkCooldownStatus();
+      if (!cooldownElapsed) {
+        logStockClient(
+          `Fetch rejected: In cooldown (${cooldownRemaining} minutes remaining)`
+        );
+        setError(
+          `Please wait ${cooldownRemaining} minute${
+            cooldownRemaining !== 1 ? 's' : ''
+          } before refreshing again.`
+        );
+        return;
+      }
     }
 
     // Check if we've hit the daily limit
@@ -169,11 +181,22 @@ const useStockData = (options = {}) => {
 
     setIsRefreshing(true);
     setLoading(true);
-    logStockClient(`Starting stock data fetch for ${symbol}`);
+    logStockClient(
+      `Starting stock data fetch for ${symbol}${
+        adminOverride ? ' with admin override' : ''
+      }`
+    );
 
     try {
-      logStockClient(`Making API request to server for stock data`);
-      const res = await api.get(`/stocks/${symbol}`);
+      logStockClient(
+        `Making API request to server for stock data${
+          adminOverride ? ' with admin override' : ''
+        }`
+      );
+      // Add adminOverride parameter to the API request
+      const res = await api.get(
+        `/stocks/${symbol}${adminOverride ? '?adminOverride=true' : ''}`
+      );
       logStockClient(`Server response received:`, res.data);
 
       if (res.data.success) {

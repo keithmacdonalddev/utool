@@ -11,7 +11,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Wrench,
-  Star,
   StickyNote, // Added for Notes
   Trash2, // Added for Trash
   History, // Added for Audit Logs
@@ -190,19 +189,7 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
             <Archive size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Archive</span>
           </NavLink>
-          <NavLink
-            to="/favorite-quotes"
-            className={({ isActive }) =>
-              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
-                isActive ? activeLinkClasses : inactiveLinkClasses
-              }`
-            }
-            onClick={toggleSidebar}
-            title="Favorite Quotes"
-          >
-            <Star size={20} className="flex-shrink-0" />
-            <span className={linkTextClasses}>Favorite Quotes</span>
-          </NavLink>
+          {/* Removed the standalone Favorite Quotes link as it's now part of Resources */}
           {/* Tasks link removed - tasks are now exclusively project-based */}
           {/* Add Friends Link */}
           <NavLink

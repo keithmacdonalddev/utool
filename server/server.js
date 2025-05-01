@@ -50,6 +50,8 @@ dotenv.config();
 import { logger } from './utils/logger.js';
 import { authenticateSocket, handleConnection } from './utils/socketManager.js';
 import { logoutPriorityMiddleware } from './middleware/logoutPriorityMiddleware.js';
+import { enhancedLogging } from './middleware/enhancedLogging.js';
+import { initializeLogManagement } from './utils/logRotation.js';
 
 // ESM __dirname workaround
 import { fileURLToPath } from 'url';
@@ -72,8 +74,9 @@ const accessLogStream = fs.createWriteStream(path.join(logsDir, 'access.log'), {
 // Initialize Express application
 const app = express();
 
-// Trust proxy for correct client IP extraction (works for both dev and production)
-app.set('trust proxy', true);
+// Trust proxy for correct client IP extraction, but with restrictions
+// Only trust the first hop in a proxy chain for better security
+app.set('trust proxy', 1);
 
 // Create HTTP server using Express app
 const server = http.createServer(app);
@@ -193,8 +196,14 @@ app.use(helmet());
 
 // Setup Morgan for HTTP request logging
 // Uses different formats for file and console output
-app.use(morgan('combined', { stream: accessLogStream })); // Detailed logs to file
+// REMOVED: app.use(morgan('combined', { stream: accessLogStream })); // Detailed logs to file
 app.use(morgan('dev', { stream: logger.stream })); // Concise colored logs to console
+
+// Add enhanced logging middleware for improved access logs
+app.use(enhancedLogging);
+
+// Initialize log rotation system
+initializeLogManagement();
 
 // Parse JSON request bodies with size limit
 app.use(express.json({ limit: '1mb' }));
@@ -217,6 +226,9 @@ const authLimiter = rateLimit({
   max: 100, // Limit each IP to 100 requests per window
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Ensures rate limiting works correctly with our trust proxy setting
+  // This tells the rate limiter to trust the X-Forwarded-For header from the first proxy
+  trustProxy: 1,
   message: {
     success: false,
     message: 'Too many requests, please try again later.',

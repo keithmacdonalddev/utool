@@ -17,6 +17,7 @@ import {
   setFilters,
   clearFilters,
   deleteAuditLogsByDateRange,
+  toggleJourneyView, // Import the toggleJourneyView action
 } from '../features/auditLogs/auditLogsSlice';
 import {
   Eye,
@@ -28,16 +29,19 @@ import {
   AlertTriangle,
   CheckCircle,
   ArrowLeft,
+  BarChart2, // Replace Timeline with BarChart2
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import TableFilters from '../components/common/TableFilters';
 import DataTable from '../components/common/DataTable';
 import Pagination from '../components/common/Pagination';
+import UserJourneyViewer from '../components/auditLogs/UserJourneyViewer'; // Import the UserJourneyViewer component
 
 /**
  * AuditLogsPage Component
  *
  * This page provides a comprehensive interface for viewing, filtering, and managing system audit logs.
+ * It also supports viewing user journeys, which are sequences of related audit log events.
  *
  * Audit logs are critical in any production system as they provide a historical record of all
  * important user and system activities. They help with security monitoring, troubleshooting,
@@ -46,7 +50,9 @@ import Pagination from '../components/common/Pagination';
  * Features include:
  * - Searchable and filterable logs with a reusable TableFilters component
  * - Paginated data display using a reusable DataTable component
- * - Filtering by action type, status, and date range with presets (past hour, today, etc.)
+ * - Toggle between regular audit logs and user journey view
+ * - User journey visualization with interactive timelines
+ * - Filtering by action type, status, event category, severity level, and date range
  * - Detailed view of individual log entries via a modal dialog
  * - Ability to delete logs for a selected time period
  *
@@ -64,15 +70,24 @@ const AuditLogsPage = () => {
    *
    * The state includes:
    * - logs: Array of audit log objects
+   * - journeys: Array of user journey objects (grouped log events)
+   * - isJourneyView: Boolean indicating if we're in journey view mode
    * - totalCount: Total number of logs matching the current filters
    * - pagination: Information about which pages are available
    * - loading: Boolean indicating if data is being fetched
    * - error: Any error that occurred during data fetching
    * - filters: Currently applied filters
    */
-  const { logs, totalCount, pagination, loading, error, filters } = useSelector(
-    (state) => state.auditLogs
-  );
+  const {
+    logs,
+    journeys, // Add journeys from state
+    isJourneyView, // Add isJourneyView from state
+    totalCount,
+    pagination,
+    loading,
+    error,
+    filters,
+  } = useSelector((state) => state.auditLogs);
 
   /**
    * Local component state declarations
@@ -98,6 +113,17 @@ const AuditLogsPage = () => {
   const [statusFilter, setStatusFilter] = useState(filters.status || '');
   const [datePreset, setDatePreset] = useState('past_hour'); // Default to past hour
   const [showCustomDateInputs, setShowCustomDateInputs] = useState(false);
+
+  // Journey-specific filter state variables
+  const [eventCategoryFilter, setEventCategoryFilter] = useState(
+    filters.eventCategory || ''
+  );
+  const [severityLevelFilter, setSeverityLevelFilter] = useState(
+    filters.severityLevel || ''
+  );
+  const [businessOperationFilter, setBusinessOperationFilter] = useState(
+    filters.businessOperation || ''
+  );
 
   // Delete confirmation modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -240,6 +266,7 @@ const AuditLogsPage = () => {
    */
   const auditLogFilterConfig = {
     filters: [
+      // Existing filters
       {
         id: 'action',
         type: 'select',
@@ -270,6 +297,54 @@ const AuditLogsPage = () => {
         defaultValue: 'past_hour',
         showDateSummary: true,
       },
+
+      // Journey-specific filters (only show when in journey view)
+      ...(isJourneyView
+        ? [
+            {
+              id: 'eventCategory',
+              type: 'select',
+              label: 'Event Category',
+              options: [
+                { value: 'authentication', label: 'Authentication' },
+                { value: 'data_access', label: 'Data Access' },
+                { value: 'data_modification', label: 'Data Modification' },
+                { value: 'permission', label: 'Permission' },
+                { value: 'security', label: 'Security' },
+                { value: 'system', label: 'System' },
+                { value: 'user_management', label: 'User Management' },
+              ],
+              defaultValue: '',
+              emptyOptionLabel: 'All Categories',
+            },
+            {
+              id: 'severityLevel',
+              type: 'select',
+              label: 'Severity',
+              options: [
+                { value: 'info', label: 'Info' },
+                { value: 'warning', label: 'Warning' },
+                { value: 'critical', label: 'Critical' },
+              ],
+              defaultValue: '',
+              emptyOptionLabel: 'All Severities',
+            },
+            {
+              id: 'businessOperation',
+              type: 'select',
+              label: 'Business Operation',
+              options: [
+                { value: 'security', label: 'Security Operations' },
+                { value: 'userActivity', label: 'User Activity' },
+                { value: 'systemChanges', label: 'System Changes' },
+                { value: 'failedOperations', label: 'Failed Operations' },
+                { value: 'criticalEvents', label: 'Critical Events' },
+              ],
+              defaultValue: '',
+              emptyOptionLabel: 'All Operations',
+            },
+          ]
+        : []),
     ],
     layout: {
       columns: {
@@ -293,6 +368,9 @@ const AuditLogsPage = () => {
     showCustomDateInputs,
     startDate,
     endDate,
+    eventCategory: eventCategoryFilter,
+    severityLevel: severityLevelFilter,
+    businessOperation: businessOperationFilter,
   };
 
   /**
@@ -324,6 +402,15 @@ const AuditLogsPage = () => {
         break;
       case 'endDate':
         setEndDate(value);
+        break;
+      case 'eventCategory':
+        setEventCategoryFilter(value);
+        break;
+      case 'severityLevel':
+        setSeverityLevelFilter(value);
+        break;
+      case 'businessOperation':
+        setBusinessOperationFilter(value);
         break;
       default:
         break;
@@ -543,6 +630,10 @@ const AuditLogsPage = () => {
         status: statusFilter,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
+        journey: isJourneyView, // Preserve the current view mode
+        eventCategory: isJourneyView ? eventCategoryFilter : undefined,
+        severityLevel: isJourneyView ? severityLevelFilter : undefined,
+        businessOperation: isJourneyView ? businessOperationFilter : undefined,
       })
     );
   };
@@ -619,6 +710,10 @@ const AuditLogsPage = () => {
         status: statusFilter,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate,
+        journey: isJourneyView, // Preserve the current view mode
+        eventCategory: isJourneyView ? eventCategoryFilter : undefined,
+        severityLevel: isJourneyView ? severityLevelFilter : undefined,
+        businessOperation: isJourneyView ? businessOperationFilter : undefined,
       })
     );
   };
@@ -710,6 +805,68 @@ const AuditLogsPage = () => {
   };
 
   /**
+   * Toggles between regular audit logs view and journey view
+   *
+   * When switching to journey view, we fetch the logs with journey=true
+   * to group related events. When switching back, we fetch regular logs.
+   */
+  const handleToggleView = () => {
+    // First dispatch the toggle action to update the Redux state
+    dispatch(toggleJourneyView());
+
+    // Get the current (pre-toggle) state value
+    const wasJourneyView = isJourneyView;
+
+    const dateRange = calculateDateRange(datePreset);
+
+    // If switching to journey view, fetch journeys
+    if (!wasJourneyView) {
+      // Log what we're about to do
+      console.log('Switching to JOURNEY VIEW mode with filters:', {
+        action: actionFilter,
+        status: statusFilter,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        eventCategory: eventCategoryFilter || '',
+        severityLevel: severityLevelFilter || '',
+        businessOperation: businessOperationFilter || '',
+      });
+
+      dispatch(
+        fetchAuditLogs({
+          page,
+          limit,
+          action: actionFilter,
+          status: statusFilter,
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
+          journey: true, // This is the key parameter
+          eventCategory: eventCategoryFilter || '',
+          severityLevel: severityLevelFilter || '',
+          businessOperation: businessOperationFilter || '',
+        })
+      );
+    } else {
+      // If switching back to regular view, fetch regular logs with journey explicitly set to false
+      console.log('Switching back to REGULAR VIEW mode');
+
+      // Instead of using handleRefresh (which would use the current isJourneyView value),
+      // explicitly fetch with journey: false
+      dispatch(
+        fetchAuditLogs({
+          page,
+          limit,
+          action: actionFilter,
+          status: statusFilter,
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
+          journey: false, // Explicitly set to false to ensure we get regular logs
+        })
+      );
+    }
+  };
+
+  /**
    * The component's render method
    *
    * This renders the entire AuditLogsPage, including:
@@ -735,6 +892,40 @@ const AuditLogsPage = () => {
             <ArrowLeft size={18} />
           </Link>
           <h1 className="text-2xl font-bold text-[#F8FAFC]">Audit Logs</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleToggleView}
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              isJourneyView
+                ? 'bg-accent-purple text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
+            }`}
+            title={
+              isJourneyView
+                ? 'Switch to regular view'
+                : 'Switch to journey view'
+            }
+          >
+            <span className="flex items-center gap-1">
+              <BarChart2 size={16} />
+              {isJourneyView ? 'Regular View' : 'Journey View'}
+            </span>
+          </button>
+          <button
+            onClick={handleRefresh}
+            className="p-2 border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 rounded-md"
+            title="Refresh"
+          >
+            <RefreshCw size={18} />
+          </button>
+          <button
+            onClick={() => setDeleteModalOpen(true)}
+            className="p-2 border border-red-300 hover:bg-red-100 dark:border-red-600 dark:hover:bg-red-700 rounded-md"
+            title="Delete Logs"
+          >
+            <Trash2 size={18} className="text-red-600 dark:text-red-400" />
+          </button>
         </div>
       </div>
 
@@ -779,31 +970,72 @@ const AuditLogsPage = () => {
       {/* Results Count - Shows how many logs are being displayed */}
       <div className="mb-4">
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          {`Showing ${logs.length} of ${totalCount} total logs`}
+          {isJourneyView
+            ? `Showing ${journeys.length} user journeys`
+            : `Showing ${logs.length} of ${totalCount} total logs`}
         </p>
       </div>
 
-      {/* Logs Table - Using our reusable DataTable component */}
-      <DataTable
-        columns={auditLogColumns}
-        data={logs}
-        isLoading={loading}
-        keyField="_id"
-        emptyMessage="No audit logs found"
-        renderRowActions={renderRowActions}
-        ariaLabel="Audit logs table"
-      />
+      {/* Conditionally render either Journey View or Regular Logs Table */}
+      {isJourneyView ? (
+        <>
+          {/* Add debugging for journey data */}
+          {console.log('Rendering journey view with data:', journeys)}
 
-      {/* Pagination Controls */}
-      {totalCount > 0 && (
-        <Pagination
-          currentPage={page}
-          totalPages={Math.ceil(totalCount / limit)}
-          onPageChange={setPage}
-          showJumpControls={true}
-          jumpSize={10}
-          ariaLabel="Audit logs pagination"
-        />
+          {/* Enhanced empty state for journey view */}
+          {(!journeys || journeys.length === 0) && !loading ? (
+            <div className="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+              <BarChart2
+                size={48}
+                className="mx-auto text-gray-400 dark:text-gray-500 mb-4"
+              />
+              <h3 className="text-lg font-medium text-gray-600 dark:text-gray-300 mb-2">
+                No User Journeys Found
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
+                User journeys represent sequences of related activities by the
+                same user. Try adjusting your filters or date range to see more
+                data.
+              </p>
+              <button
+                onClick={handleApplyFilters}
+                className="px-4 py-2 bg-accent-purple hover:bg-accent-purple-dark text-white rounded-md"
+              >
+                Refresh Data
+              </button>
+            </div>
+          ) : (
+            <UserJourneyViewer
+              journeys={journeys || []}
+              onViewDetails={handleViewLogDetails}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          {/* Regular Logs Table - Using our reusable DataTable component */}
+          <DataTable
+            columns={auditLogColumns}
+            data={logs}
+            isLoading={loading}
+            keyField="_id"
+            emptyMessage="No audit logs found"
+            renderRowActions={renderRowActions}
+            ariaLabel="Audit logs table"
+          />
+
+          {/* Pagination Controls - Only show for regular view */}
+          {totalCount > 0 && (
+            <Pagination
+              currentPage={page}
+              totalPages={Math.ceil(totalCount / limit)}
+              onPageChange={setPage}
+              showJumpControls={true}
+              jumpSize={10}
+              ariaLabel="Audit logs pagination"
+            />
+          )}
+        </>
       )}
 
       {/* Log Detail Modal - Shown when viewing details of a log */}

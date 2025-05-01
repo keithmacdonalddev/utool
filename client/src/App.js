@@ -52,6 +52,20 @@ const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
+// Custom redirect component for favorite quotes with state to set active tab
+/**
+ * QuotesRedirect Component
+ *
+ * A special redirect component that navigates to the Resources page
+ * with a state parameter that indicates the quotes tab should be active.
+ * This provides a seamless UX transition from the old route to the new location.
+ *
+ * @returns {React.ReactElement} Navigate component with state for tab selection
+ */
+const QuotesRedirect = () => (
+  <Navigate replace to="/resources" state={{ activeTab: 'quotes' }} />
+);
+
 function App() {
   // Extract user authentication state from Redux store
   // This is used to determine if socket connection should be established
@@ -153,10 +167,8 @@ function App() {
                   {/* <Route path="/tasks" element={<TasksPage />} /> */}
                   {/* <Route path="/tasks/:id" element={<TaskDetailsPage />} /> */}
 
-                  <Route
-                    path="/favorite-quotes"
-                    element={<FavoriteQuotesPage />}
-                  />
+                  {/* Redirect old favorite-quotes page to resources with quotes tab active */}
+                  <Route path="/favorite-quotes" element={<QuotesRedirect />} />
                   <Route path="/friends" element={<FriendsPage />} />
 
                   {/* Admin Only Routes - nested protected route */}

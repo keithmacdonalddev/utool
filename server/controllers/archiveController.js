@@ -302,10 +302,16 @@ export const getArchiveItems = async (req, res, next) => {
     if (startDate || endDate) {
       query.completedAt = {};
       if (startDate) {
-        query.completedAt.$gte = new Date(startDate);
+        // Set time to start of day (00:00:00.000)
+        const startDateTime = new Date(startDate);
+        startDateTime.setHours(0, 0, 0, 0);
+        query.completedAt.$gte = startDateTime;
       }
       if (endDate) {
-        query.completedAt.$lte = new Date(endDate);
+        // Set time to end of day (23:59:59.999)
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        query.completedAt.$lte = endDateTime;
       }
     }
 

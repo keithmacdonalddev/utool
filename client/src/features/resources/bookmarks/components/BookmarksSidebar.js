@@ -237,9 +237,9 @@ const BookmarksSidebar = ({ activeFolder, setActiveFolder }) => {
   return (
     <ResourceSidebar
       title="Bookmarks"
-      actionIcon={<FolderPlus size={14} />}
-      onAction={() => setShowAddFolderModal(true)}
-      actionTooltip="Create new folder"
+      addButtonIcon={<FolderPlus size={14} />}
+      onAddClick={() => setShowAddFolderModal(true)}
+      addButtonTitle="Create new folder"
     >
       {/* Default 'Favorites' option */}
       <button
