@@ -443,7 +443,7 @@ const ArchivePage = () => {
     } else if (activeTab === 'metrics') {
       fetchProductivityMetrics();
     }
-  }, [filters, sortOption, activeTab, selectedTimeframe]);
+  }, [filters, activeTab, selectedTimeframe]); // Removed sortOption to prevent server calls when only sorting changes
 
   // Fetch comparison data when in comparison mode and periods change
   useEffect(() => {
@@ -576,6 +576,27 @@ const ArchivePage = () => {
       value: count,
     }));
   }, [metrics]);
+
+  /**
+   * Sort archived items client-side based on the current sortOption
+   * This prevents unnecessary server calls when changing sort order
+   * @returns {Array} Sorted copy of the archived items
+   */
+  const sortedArchivedItems = useMemo(() => {
+    if (!archivedItems.length) return [];
+    
+    // Create a copy to avoid mutating the original state
+    const itemsCopy = [...archivedItems];
+    
+    // Sort based on the current sort option
+    return itemsCopy.sort((a, b) => {
+      if (sortOption === 'newest') {
+        return new Date(b.completedAt) - new Date(a.completedAt);
+      } else {
+        return new Date(a.completedAt) - new Date(b.completedAt);
+      }
+    });
+  }, [archivedItems, sortOption]);
 
   return (
     <div className="container mx-auto p-4 bg-background text-foreground">
@@ -954,7 +975,7 @@ const ArchivePage = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-dark-700">
-                      {archivedItems.map((item) => (
+                      {sortedArchivedItems.map((item) => (
                         <tr key={item._id} className="hover:bg-dark-700">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
@@ -1036,7 +1057,7 @@ const ArchivePage = () => {
               {/* Grid View */}
               {viewMode === 'grid' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {archivedItems.map((item) => (
+                  {sortedArchivedItems.map((item) => (
                     <div
                       key={item._id}
                       className="bg-card p-4 rounded-md border border-dark-700 hover:border-primary transition-colors"
