@@ -55,6 +55,14 @@ const TaskSchema = new mongoose.Schema(
         ref: 'Note', // Each item in array is a reference to Note model
       },
     ],
+    // Tags for task categorization and filtering
+    tags: [
+      {
+        type: String,
+        trim: true,
+        maxlength: [30, 'Tag cannot be more than 30 characters'],
+      },
+    ],
     dueDate: {
       type: Date, // JavaScript Date object (stored as ISODate in MongoDB)
       // Optional field (not required)

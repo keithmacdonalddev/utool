@@ -17,9 +17,9 @@ const SnippetSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please add snippet content'],
     },
-    language: {
-      type: String,
-      default: 'text',
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'SnippetCategory',
     },
     tags: [String],
     favorite: {

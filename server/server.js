@@ -48,6 +48,7 @@ dotenv.config();
 
 // Regular imports continue...
 import { logger } from './utils/logger.js';
+import { isShuttingDown, setShuttingDown } from './utils/serverState.js';
 import { authenticateSocket, handleConnection } from './utils/socketManager.js';
 import { logoutPriorityMiddleware } from './middleware/logoutPriorityMiddleware.js';
 import { enhancedLogging } from './middleware/enhancedLogging.js';
@@ -151,6 +152,7 @@ import notificationRoutes from './routes/notifications.js';
 import bookmarkRoutes from './routes/bookmarks.js';
 import bookmarkFolderRoutes from './routes/bookmarkFolders.js';
 import snippetRoutes from './routes/snippets.js';
+import snippetCategoryRoutes from './routes/snippetCategories.js';
 import archiveRoutes from './routes/archive.js';
 
 // Middleware Section
@@ -366,6 +368,8 @@ app.use('/api/v1/friends', friendRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/bookmarks', bookmarkRoutes);
 app.use('/api/v1/bookmark-folders', bookmarkFolderRoutes);
+// Register the more specific route first to prevent conflict
+app.use('/api/v1/snippets/categories', snippetCategoryRoutes);
 app.use('/api/v1/snippets', snippetRoutes);
 app.use('/api/v1/archive', archiveRoutes);
 
@@ -502,10 +506,9 @@ mongoose.connection.on('disconnected', () => {
 
 // Handle process termination with logging
 // This ensures a clean shutdown when the process is terminated
-export let isShuttingDown = false;
 
 process.on('SIGINT', async () => {
-  isShuttingDown = true;
+  setShuttingDown(true);
   logger.info('SIGINT signal received. Shutting down gracefully...');
   await mongoose.connection.close();
   logger.info('MongoDB connection closed');

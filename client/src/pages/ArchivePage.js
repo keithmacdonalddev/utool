@@ -584,10 +584,10 @@ const ArchivePage = () => {
    */
   const sortedArchivedItems = useMemo(() => {
     if (!archivedItems.length) return [];
-    
+
     // Create a copy to avoid mutating the original state
     const itemsCopy = [...archivedItems];
-    
+
     // Sort based on the current sort option
     return itemsCopy.sort((a, b) => {
       if (sortOption === 'newest') {
@@ -605,9 +605,9 @@ const ArchivePage = () => {
         <div className="flex items-center">
           <div className="flex items-center">
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/dashboard')}
               className="mr-3 p-2 rounded-full hover:bg-dark-700 transition-colors"
-              aria-label="Go back"
+              aria-label="Go back to dashboard"
             >
               <ArrowLeft size={20} className="text-primary" />
             </button>

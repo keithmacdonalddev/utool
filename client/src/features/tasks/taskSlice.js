@@ -46,12 +46,13 @@ const initialState = {
  * @param {string} payload.status - Task status
  * @param {string} payload.priority - Task priority
  * @param {string} payload.dueDate - Task due date
+ * @param {Array} payload.tags - Task tags
  * @returns {Promise<Object>} - Promise with the created task data
  */
 export const createTask = createAsyncThunk(
   'tasks/create',
   async (
-    { title, projectId, description, status, priority, dueDate },
+    { title, projectId, description, status, priority, dueDate, tags },
     thunkAPI
   ) => {
     try {
@@ -69,6 +70,7 @@ export const createTask = createAsyncThunk(
         status,
         priority,
         dueDate,
+        tags, // Include tags in the API call
       });
       return response.data.data; // Return the newly created task data
     } catch (error) {

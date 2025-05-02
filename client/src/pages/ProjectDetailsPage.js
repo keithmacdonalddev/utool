@@ -24,6 +24,7 @@ import {
 import TaskList from '../components/tasks/TaskList';
 import TaskCreateModal from '../components/tasks/TaskCreateModal';
 import ProjectNotes from '../components/projects/ProjectNotes';
+import TagFilter from '../components/tasks/TagFilter'; // Import TagFilter component
 import api from '../utils/api';
 import { PlusCircle, X, Edit, Clock, AlertTriangle } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
@@ -101,6 +102,8 @@ const ProjectDetailsPage = () => {
   const [criticalTaskFilter, setCriticalTaskFilter] = useState('overdue'); // 'overdue', 'today'
   // Track active task filter for all tasks
   const [allTasksFilter, setAllTasksFilter] = useState('all'); // 'all' or specific filters
+  // Track selected tags for filtering
+  const [selectedTags, setSelectedTags] = useState([]);
 
   // Reference to track component mounts and detect page refreshes
   const mountCountRef = useRef(0);
@@ -513,6 +516,48 @@ const ProjectDetailsPage = () => {
   };
 
   /**
+   * Handle tag selection for filtering
+   * @param {string} tag - The tag to select
+   */
+  const handleTagSelect = (tag) => {
+    setSelectedTags([...selectedTags, tag]);
+  };
+
+  /**
+   * Handle tag deselection for filtering
+   * @param {string} tag - The tag to deselect
+   */
+  const handleTagDeselect = (tag) => {
+    setSelectedTags(selectedTags.filter((t) => t !== tag));
+  };
+
+  /**
+   * Clear all selected tags
+   */
+  const handleClearAllTags = () => {
+    setSelectedTags([]);
+  };
+
+  /**
+   * Filter tasks by selected tags and other active filters
+   *
+   * @param {Array} tasksList - List of tasks to filter
+   * @returns {Array} - Tasks filtered by selected tags
+   */
+  const getTagFilteredTasks = (tasksList) => {
+    if (!tasksList || tasksList.length === 0) return [];
+    if (!selectedTags.length) return tasksList;
+
+    return tasksList.filter((task) => {
+      // If task has no tags or tags is not an array, filter it out when tags are selected
+      if (!task.tags || !Array.isArray(task.tags)) return false;
+
+      // Check if task has all selected tags (AND logic)
+      return selectedTags.every((tag) => task.tags.includes(tag));
+    });
+  };
+
+  /**
    * DERIVED DATA PATTERN:
    * Compute new values from existing state and props
    * This is more efficient than storing derived data in state
@@ -524,8 +569,10 @@ const ProjectDetailsPage = () => {
   // Get critical tasks based on the active filter (overdue or today)
   const criticalTasks = getCriticalTasks(tasks);
 
-  // Get tasks for the main task list based on the active filter
-  const visibleTasks = getFilteredTasks(tasks, allTasksFilter);
+  // Apply both date filtering and tag filtering to get the final list of visible tasks
+  const filteredTasks = getTagFilteredTasks(
+    getFilteredTasks(tasks, allTasksFilter)
+  );
 
   /**
    * CONDITIONAL RENDERING PATTERN:
@@ -614,7 +661,6 @@ const ProjectDetailsPage = () => {
             </span>{' '}
             on{' '}
             {new Date(project.createdAt).toLocaleString(undefined, {
-              dateStyle: 'medium',
               timeStyle: 'short',
             })}
           </div>
@@ -1066,6 +1112,17 @@ const ProjectDetailsPage = () => {
               </button>
             </div>
 
+            {/* Tag Filter Component */}
+            {!tasksLoading && !tasksError && tasks.length > 0 && (
+              <TagFilter
+                tasks={tasks}
+                selectedTags={selectedTags}
+                onTagSelect={handleTagSelect}
+                onTagDeselect={handleTagDeselect}
+                onClearAll={handleClearAllTags}
+              />
+            )}
+
             {/* Regular Task List */}
             {!tasksLoading && !tasksError && tasks.length > 0 && (
               <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
@@ -1091,7 +1148,7 @@ const ProjectDetailsPage = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-card divide-y divide-dark-700">
-                      {tasks.map((task) => (
+                      {filteredTasks.map((task) => (
                         <tr
                           key={task._id}
                           className="hover:bg-dark-700 transition-colors cursor-pointer"

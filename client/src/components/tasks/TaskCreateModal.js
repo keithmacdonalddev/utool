@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { createTask } from '../../features/tasks/taskSlice';
 import { X } from 'lucide-react';
+import TagInput from '../common/TagInput';
 
 const TaskCreateModal = ({ isOpen, onClose, projectId = null }) => {
   const dispatch = useDispatch();
@@ -15,6 +16,7 @@ const TaskCreateModal = ({ isOpen, onClose, projectId = null }) => {
     priority: 'Low', // Set default to Low
     dueDate: '',
     project: projectId || '',
+    tags: [], // Add tags array
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -50,6 +52,7 @@ const TaskCreateModal = ({ isOpen, onClose, projectId = null }) => {
           status: form.status,
           priority: form.priority,
           dueDate: form.dueDate,
+          tags: form.tags, // Include tags in task creation
         })
       ).unwrap();
 
@@ -62,6 +65,7 @@ const TaskCreateModal = ({ isOpen, onClose, projectId = null }) => {
         priority: 'Low',
         dueDate: '',
         project: projectId || '',
+        tags: [], // Add tags array
       });
     } catch (error) {
       console.error('Failed to create task:', error);
@@ -206,6 +210,16 @@ const TaskCreateModal = ({ isOpen, onClose, projectId = null }) => {
               value={form.dueDate}
               onChange={handleChange}
               className="w-full p-2 bg-dark-700 text-foreground border border-dark-600 rounded focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          {/* Tags Input */}
+          <div>
+            <TagInput
+              tags={form.tags}
+              onChange={(newTags) => setForm({ ...form, tags: newTags })}
+              label="Tags"
+              placeholder="Add tags (press Enter or comma)"
             />
           </div>
 

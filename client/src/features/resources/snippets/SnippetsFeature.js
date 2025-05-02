@@ -47,9 +47,8 @@ const SnippetsFeature = forwardRef(
     const [snippetToDelete, setSnippetToDelete] = useState(null);
     const [newSnippet, setNewSnippet] = useState({
       title: '',
-      language: '',
       content: '',
-      categoryId: '',
+      category: '',
       tags: [],
     });
 
@@ -77,7 +76,7 @@ const SnippetsFeature = forwardRef(
       if (activeCategory) {
         setNewSnippet((prev) => ({
           ...prev,
-          categoryId: activeCategory._id,
+          category: activeCategory._id,
         }));
       }
     };
@@ -101,9 +100,8 @@ const SnippetsFeature = forwardRef(
       setIsCreateModalOpen(false);
       setNewSnippet({
         title: '',
-        language: '',
         content: '',
-        categoryId: '',
+        category: '',
         tags: [],
       });
     };
@@ -115,14 +113,14 @@ const SnippetsFeature = forwardRef(
      */
     const openEditModal = (snippet) => {
       // Find which category this snippet belongs to
-      let categoryId = '';
-      if (snippet.categoryId) {
-        categoryId = snippet.categoryId;
+      let category = '';
+      if (snippet.category) {
+        category = snippet.category;
       }
 
       setSnippetToEdit({
         ...snippet,
-        categoryId,
+        category,
         // Ensure tags is an array even if it's undefined in the original
         tags: snippet.tags || [],
       });
@@ -193,9 +191,9 @@ const SnippetsFeature = forwardRef(
       const snippetData = { ...newSnippet };
 
       // Add category information if selected
-      if (snippetData.categoryId) {
-        // Store categoryId for backend processing
-        snippetData.categoryId = snippetData.categoryId;
+      if (snippetData.category) {
+        // Store category for backend processing
+        snippetData.category = snippetData.category;
       }
 
       dispatch(createSnippet(snippetData))
@@ -226,8 +224,7 @@ const SnippetsFeature = forwardRef(
         snippetData: {
           title: updatedSnippet.title,
           content: updatedSnippet.content,
-          language: updatedSnippet.language,
-          categoryId: updatedSnippet.categoryId || null,
+          category: updatedSnippet.category || null,
         },
       };
 
@@ -282,14 +279,13 @@ const SnippetsFeature = forwardRef(
       // Filter by search term
       const matchesSearch =
         snippet.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        snippet.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        snippet.language.toLowerCase().includes(searchTerm.toLowerCase());
+        snippet.content.toLowerCase().includes(searchTerm.toLowerCase());
 
       // Filter by category
       // If activeCategory is null, show all snippets
       // Otherwise, show only snippets in the active category
       const matchesCategory = activeCategory
-        ? snippet.categoryId === activeCategory._id
+        ? snippet.category === activeCategory._id
         : true;
 
       return matchesSearch && matchesCategory;
@@ -310,9 +306,6 @@ const SnippetsFeature = forwardRef(
                 Title
               </th>
               <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
-                Language
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
                 Content
               </th>
               <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider">
@@ -329,14 +322,11 @@ const SnippetsFeature = forwardRef(
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[#F8FAFC]">
                   {snippet.title}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1]">
-                  {snippet.language}
-                </td>
                 <td className="px-6 py-4 max-w-xs text-sm text-[#C7C9D1]">
                   <div className="relative group max-w-xs">
                     <span className="block truncate">{snippet.content}</span>
                     <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-64 bg-dark-800 text-white text-xs p-2 rounded shadow-lg whitespace-pre-wrap break-words">
-                      <div className="font-mono">{snippet.content}</div>
+                      <div>{snippet.content}</div>
                     </div>
                   </div>
                 </td>
@@ -521,31 +511,11 @@ const SnippetsFeature = forwardRef(
                   />
                 </div>
 
-                <div className="mb-4">
-                  <label
-                    htmlFor="language"
-                    className="block text-sm font-medium text-[#F8FAFC] mb-1"
-                  >
-                    Language
-                  </label>
-                  <input
-                    type="text"
-                    id="language"
-                    name="language"
-                    value={newSnippet.language}
-                    onChange={handleInputChange}
-                    placeholder="javascript, python, css, etc."
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
-                    required
-                    aria-required="true"
-                  />
-                </div>
-
                 {/* Category Selector */}
                 {renderCategorySelect(
-                  'categoryId',
-                  'categoryId',
-                  newSnippet.categoryId,
+                  'category',
+                  'category',
+                  newSnippet.category,
                   handleInputChange
                 )}
 
@@ -554,7 +524,7 @@ const SnippetsFeature = forwardRef(
                     htmlFor="content"
                     className="block text-sm font-medium text-[#F8FAFC] mb-1"
                   >
-                    Code Content
+                    Content
                   </label>
                   <textarea
                     id="content"
@@ -562,7 +532,7 @@ const SnippetsFeature = forwardRef(
                     value={newSnippet.content}
                     onChange={handleInputChange}
                     rows={8}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC] font-mono"
+                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
                     required
                     aria-required="true"
                   />
@@ -631,31 +601,11 @@ const SnippetsFeature = forwardRef(
                   />
                 </div>
 
-                <div className="mb-4">
-                  <label
-                    htmlFor="edit-language"
-                    className="block text-sm font-medium text-[#F8FAFC] mb-1"
-                  >
-                    Language
-                  </label>
-                  <input
-                    type="text"
-                    id="edit-language"
-                    name="language"
-                    value={snippetToEdit.language}
-                    onChange={handleEditInputChange}
-                    placeholder="javascript, python, css, etc."
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
-                    required
-                    aria-required="true"
-                  />
-                </div>
-
                 {/* Category Selector */}
                 {renderCategorySelect(
-                  'edit-categoryId',
-                  'categoryId',
-                  snippetToEdit.categoryId || '',
+                  'edit-category',
+                  'category',
+                  snippetToEdit.category || '',
                   handleEditInputChange
                 )}
 
@@ -664,7 +614,7 @@ const SnippetsFeature = forwardRef(
                     htmlFor="edit-content"
                     className="block text-sm font-medium text-[#F8FAFC] mb-1"
                   >
-                    Code Content
+                    Content
                   </label>
                   <textarea
                     id="edit-content"
@@ -672,7 +622,7 @@ const SnippetsFeature = forwardRef(
                     value={snippetToEdit.content}
                     onChange={handleEditInputChange}
                     rows={8}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC] font-mono"
+                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
                     required
                     aria-required="true"
                   />

@@ -1,4 +1,4 @@
-// @desc    Snippet controller for managing code/text snippets
+// @desc    Snippet controller for managing reusable content snippets (text, code, prompts, etc.)
 import Snippet from '../models/Snippet.js';
 import asyncHandler from '../middleware/async.js';
 import ErrorResponse from '../utils/errorResponse.js';

@@ -10,7 +10,7 @@ import React from 'react';
 import { useDispatch } from 'react-redux'; // Hook to dispatch actions to Redux store
 import { Link } from 'react-router-dom'; // For navigation between routes
 import { deleteTask } from '../../features/tasks/taskSlice'; // Redux action
-import { Trash2, Calendar } from 'lucide-react'; // SVG icons from Lucide library
+import { Trash2, Calendar, Tag } from 'lucide-react'; // SVG icons from Lucide library
 
 /**
  * Helper function for status badge styling
@@ -103,7 +103,16 @@ const TaskItem = ({
 
   // Destructure task properties for easier access
   // This avoids repetitive task.title, task.status, etc.
-  const { _id, title, status, priority, dueDate, project, createdAt } = task;
+  const {
+    _id,
+    title,
+    status,
+    priority,
+    dueDate,
+    project,
+    createdAt,
+    tags = [],
+  } = task;
 
   /**
    * Handle delete button click
@@ -217,6 +226,21 @@ const TaskItem = ({
 
               {/* Due Date display */}
               <span className="text-gray-400">{formatDate(dueDate)}</span>
+
+              {/* Display tags if available */}
+              {tags && tags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1 mt-1">
+                  <Tag size={12} className="text-primary" />
+                  {tags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

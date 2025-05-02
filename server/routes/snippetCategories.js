@@ -9,7 +9,7 @@ import {
 
 // Import middleware
 import { protect } from '../middleware/authMiddleware.js';
-import { auditLog } from '../middleware/auditLogMiddleware.js';
+import { withAuditLog } from '../middleware/auditLogMiddleware.js';
 
 /**
  * Router for snippet category endpoints
@@ -25,13 +25,13 @@ router.use(protect);
 router
   .route('/')
   .get(getCategories)
-  .post(auditLog('create-snippet-category'), createCategory);
+  .post(withAuditLog('create-snippet-category'), createCategory);
 
 // Routes for /api/v1/snippets/categories/:id
 router
   .route('/:id')
   .get(getCategory)
-  .put(auditLog('update-snippet-category'), updateCategory)
-  .delete(auditLog('delete-snippet-category'), deleteCategory);
+  .put(withAuditLog('update-snippet-category'), updateCategory)
+  .delete(withAuditLog('delete-snippet-category'), deleteCategory);
 
 export default router;

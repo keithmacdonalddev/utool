@@ -73,6 +73,19 @@ export const getTasksForProject = async (req, res, next) => {
       query.status = { $ne: 'Completed' };
     }
 
+    // Filter by tag if specified
+    if (req.query.tag) {
+      query.tags = req.query.tag;
+    }
+
+    // Filter by multiple tags if specified
+    if (req.query.tags) {
+      const tagArray = req.query.tags.split(',');
+      if (tagArray.length > 0) {
+        query.tags = { $all: tagArray };
+      }
+    }
+
     const tasks = await Task.find(query)
       .sort({ createdAt: -1 })
       .populate('assignee', 'name email');
@@ -201,6 +214,7 @@ export const createTask = async (req, res, next) => {
       dueDate,
       estimatedTime,
       assignee,
+      tags,
     } = req.body;
 
     // Create basic task with required fields
@@ -213,6 +227,7 @@ export const createTask = async (req, res, next) => {
       ...(priority && { priority }),
       ...(dueDate && { dueDate }),
       ...(estimatedTime && { estimatedTime }),
+      ...(tags && { tags }),
     };
 
     // Validation: Check required fields

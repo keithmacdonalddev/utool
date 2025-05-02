@@ -1,6 +1,6 @@
 import AuditLog from '../models/AuditLog.js';
 import mongoose from 'mongoose';
-import { isShuttingDown } from '../server.js';
+import { isShuttingDown } from '../utils/serverState.js';
 import { UAParser } from 'ua-parser-js';
 import crypto from 'crypto';
 

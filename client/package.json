@@ -32,7 +32,7 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "cross-env TSC_COMPILE_ON_ERROR=true DISABLE_ESLINT_PLUGIN=true react-scripts start",
     "start:local": "node scripts/start-with-server.js local",
     "start:prod": "node scripts/start-with-server.js prod",
     "build": "react-scripts build",
@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
+    "cross-env": "^7.0.3",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17"
   },
