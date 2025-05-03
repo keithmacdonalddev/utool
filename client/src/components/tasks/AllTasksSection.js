@@ -48,14 +48,14 @@ const AllTasksSection = ({
   const hasFilteredTasks = filteredTasks && filteredTasks.length > 0;
 
   return (
-    <div className="bg-card rounded-lg p-4 shadow">
+    <div className="bg-card rounded-lg p-4 shadow-md">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4 sm:gap-0">
         <h2 className="text-xl font-semibold text-primary">All Tasks</h2>
 
         {/* "Add Task" button that reveals the task creation modal */}
         <button
           onClick={onAddTaskClick} // Use the callback prop
-          className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md transition-colors self-start sm:self-auto"
+          className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md transition-colors self-start sm:self-auto shadow-sm"
         >
           <PlusCircle size={16} />
           Add Task
@@ -78,7 +78,7 @@ const AllTasksSection = ({
 
       {/* Regular Task List Table */}
       {!tasksLoading && !tasksError && hasFilteredTasks && (
-        <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
+        <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700 shadow-sm">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-dark-700">
               <thead>
@@ -138,7 +138,16 @@ const AllTasksSection = ({
                         {formatDateForDisplay(task.dueDate)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
-                        {task.title}
+                        <div className="relative group">
+                          <div className="w-[170px] overflow-hidden">
+                            <span className="block truncate">{task.title}</span>
+                          </div>
+                          {task.title && (
+                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-64 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                              {task.title}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs hidden md:table-cell">
                         {/* Hide desc on small screens */}

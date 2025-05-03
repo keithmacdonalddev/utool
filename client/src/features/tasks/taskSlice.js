@@ -11,6 +11,9 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../utils/api'; // Use our configured axios instance
 
+// Default cache timeout (5 minutes in milliseconds)
+const CACHE_TIMEOUT = 5 * 60 * 1000;
+
 /**
  * Initial state object for the tasks slice
  *
@@ -19,6 +22,7 @@ import api from '../../utils/api'; // Use our configured axios instance
  * - Use null for single-entity references when not loaded
  * - Use arrays for collections of entities
  * - Include status messages for user feedback
+ * - Cache tracking for optimized data fetching
  */
 const initialState = {
   tasks: [], // Collection of task objects
@@ -28,6 +32,9 @@ const initialState = {
   isSuccess: false, // Success state flag
   isLoading: false, // Loading state flag for UI spinners/indicators
   message: '', // Message for notifications/alerts
+  lastFetched: null, // When tasks were last fetched
+  tasksByProject: {}, // Cache of tasks organized by project ID
+  projectTasksTimestamps: {}, // Track last fetch time per project
 };
 
 /**
@@ -88,29 +95,61 @@ export const createTask = createAsyncThunk(
 );
 
 /**
- * Get Tasks For Project Async Thunk
+ * Get Tasks For Project Async Thunk with caching support
  *
  * Gets tasks that belong to a specific project
- * Shows error handling and validation patterns
+ * Only fetches new data if cache is stale or forced refresh
  *
- * @param {string} projectId - ID of the project to fetch tasks for (required)
+ * @param {Object} payload - Parameters object
+ * @param {string} payload.projectId - ID of the project to fetch tasks for (required)
+ * @param {boolean} payload.forceRefresh - Whether to bypass cache and force a refresh
+ * @param {number} payload.cacheTimeout - Custom cache timeout in ms (defaults to 5 minutes)
  */
 export const getTasksForProject = createAsyncThunk(
   'tasks/getForProject',
-  async (projectId, thunkAPI) => {
+  async (payload, thunkAPI) => {
+    // Handle both string projectId and object payload formats for backward compatibility
+    const projectId = typeof payload === 'string' ? payload : payload.projectId;
+    const options = typeof payload === 'object' ? payload : {};
+    const { forceRefresh = false, cacheTimeout = CACHE_TIMEOUT } = options;
+
     // VALIDATION PATTERN: Early return for invalid input
     if (!projectId) {
       return thunkAPI.rejectWithValue('Project ID is required to fetch tasks');
     }
 
+    // Check if we have valid cached data for this project
+    const state = thunkAPI.getState().tasks;
+    const now = Date.now();
+    const projectTimestamp = state.projectTasksTimestamps[projectId];
+    const cachedTasks = state.tasksByProject[projectId];
+    const cacheIsValid =
+      projectTimestamp &&
+      now - projectTimestamp < cacheTimeout &&
+      cachedTasks &&
+      cachedTasks.length > 0;
+
+    // Use cached data if available and not forcing refresh
+    if (cacheIsValid && !forceRefresh) {
+      console.log(`Using cached tasks for project ${projectId}`);
+      return {
+        tasks: cachedTasks,
+        projectId,
+        fromCache: true,
+      };
+    }
+
     try {
+      console.log(`Fetching fresh tasks for project ${projectId} from API`);
       // Use the project-specific task route
       // API PATTERN: RESTful nested resource URL
       const response = await api.get(`/projects/${projectId}/tasks`);
       return {
         tasks: response.data.data,
         projectId,
-      }; // Return the array of tasks for this project and the project ID
+        fromCache: false,
+        timestamp: now,
+      };
     } catch (error) {
       const message =
         (error.response &&
@@ -440,15 +479,27 @@ export const taskSlice = createSlice({
 
       // Get Tasks for Project Cases
       .addCase(getTasksForProject.pending, (state) => {
-        state.isLoading = true; // Reuse general loading flag for now
+        state.isLoading = true;
       })
       .addCase(getTasksForProject.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        // Replace the tasks state with only the tasks for the current project
+
+        // Store tasks in the main tasks array for current view
         state.tasks = action.payload.tasks;
-        // Store the current project ID context
+
+        // Update the project context
         state.currentProjectId = action.payload.projectId;
+
+        // Only update cache if data was freshly fetched (not from cache)
+        if (!action.payload.fromCache) {
+          // Cache the tasks by project ID
+          state.tasksByProject[action.payload.projectId] = action.payload.tasks;
+
+          // Update the timestamp for this project's data
+          state.projectTasksTimestamps[action.payload.projectId] =
+            action.payload.timestamp;
+        }
       })
       .addCase(getTasksForProject.rejected, (state, action) => {
         state.isLoading = false;

@@ -1,8 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const ProjectCard = ({ project }) => {
+const ProjectCard = ({ project, taskCounts = { open: 0, critical: 0 } }) => {
   const { _id, name, status, progress } = project;
+  const { open, critical } = taskCounts;
+
   return (
     <Link
       to={`/projects/${_id}`}
@@ -19,6 +21,18 @@ const ProjectCard = ({ project }) => {
       <div className="flex justify-between items-center mt-2 text-sm text-[#C7C9D1]">
         <span>Status: {status}</span>
         <span>{progress}%</span>
+      </div>
+
+      {/* Task counts section with border for visual separation */}
+      <div className="mt-3 pt-3 border-t border-dark-600">
+        <div className="flex">
+          <span className="text-sm font-medium text-[#C7C9D1]">
+            Open tasks: <span className="text-blue-400">{open}</span>
+            {critical > 0 && (
+              <span className="text-red-400 ml-1">({critical} Critical)</span>
+            )}
+          </span>
+        </div>
       </div>
     </Link>
   );

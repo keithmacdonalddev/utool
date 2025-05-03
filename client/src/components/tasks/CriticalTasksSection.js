@@ -34,7 +34,7 @@ const CriticalTasksSection = ({
   const criticalTaskCount = criticalTasks ? criticalTasks.length : 0;
 
   return (
-    <div className="bg-card rounded-lg p-4 shadow">
+    <div className="bg-card rounded-lg p-4 shadow-md">
       {/* Section Header and Add Task Button */}
       <div className="flex justify-between items-center mb-4">
         <div>
@@ -45,7 +45,7 @@ const CriticalTasksSection = ({
         </div>
         <button
           onClick={onAddTaskClick} // Use the callback prop
-          className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded flex items-center gap-2 transition-colors"
+          className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded flex items-center gap-2 transition-colors shadow-sm"
         >
           <PlusCircle size={18} />
           Add Task
@@ -54,11 +54,11 @@ const CriticalTasksSection = ({
 
       {/* Critical Task List Table */}
       {!tasksLoading && !tasksError && criticalTasks.length > 0 && (
-        <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700">
+        <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700 shadow-sm">
           <div className="overflow-y-auto" style={{ maxHeight: '18rem' }}>
             {/* Adjusted max height slightly */}
             <table className="min-w-full divide-y divide-dark-700">
-              <thead className="sticky top-0 bg-primary bg-opacity-10 z-10 shadow-sm">
+              <thead className="sticky top-0 bg-dark-800 bg-opacity-95 z-20 shadow-md backdrop-filter backdrop-blur-sm">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
                     Due Date
@@ -126,7 +126,16 @@ const CriticalTasksSection = ({
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
-                        {task.title}
+                        <div className="relative group">
+                          <div className="w-[170px] overflow-hidden">
+                            <span className="block truncate">{task.title}</span>
+                          </div>
+                          {task.title && (
+                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-64 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                              {task.title}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs hidden md:table-cell">
                         {/* Hide desc on small screens */}

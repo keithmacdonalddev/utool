@@ -15,15 +15,57 @@ const initialState = {
   isLoading: false,
   message: '',
   selectedNote: null,
+  lastFetched: null, // Track when data was last fetched for caching
+  filter: {}, // Track current filter options for dependency tracking
 };
 
-// Fetch all notes (with filters/search/sort)
+/**
+ * Fetch all notes with optional filtering, sorting, and limiting
+ * Now supports enhanced caching through lastFetched timestamp
+ *
+ * @param {Object} params - API parameters including sort, limit, etc.
+ * @returns {Array} Array of note objects
+ */
 export const fetchNotes = createAsyncThunk(
   'notes/fetchNotes',
   async (params = {}, thunkAPI) => {
     try {
-      const response = await api.get(NOTE_URL, { params });
-      return response.data.data;
+      // Track the current filter configuration
+      const state = thunkAPI.getState();
+
+      // Check if this is a forced refresh
+      const forceRefresh = params.forceRefresh;
+
+      // Check if we have cached data we can use
+      const lastFetched = state.notes.lastFetched;
+      const cacheTimeout = params.cacheTimeout || 5 * 60 * 1000; // Default 5 minutes
+
+      if (
+        !forceRefresh &&
+        lastFetched &&
+        Date.now() - lastFetched < cacheTimeout
+      ) {
+        // Use cached data if it's still fresh and not a forced refresh
+        // Return existing notes data, but still update the filter
+        return {
+          data: state.notes.notes,
+          useCache: true,
+        };
+      }
+
+      // Remove internal params before sending to API
+      const apiParams = { ...params };
+      delete apiParams.forceRefresh;
+      delete apiParams.cacheTimeout;
+
+      const response = await api.get(NOTE_URL, { params: apiParams });
+
+      // Return API data with current timestamp
+      return {
+        data: response.data.data,
+        useCache: false,
+        filter: apiParams, // Store filter for dependency tracking
+      };
     } catch (error) {
       const message =
         (error.response &&
@@ -164,6 +206,13 @@ export const noteSlice = createSlice({
     setSelectedNote: (state, action) => {
       state.selectedNote = action.payload;
     },
+    /**
+     * Clear the lastFetched timestamp to force a refresh on next fetch
+     * Useful when data is known to be stale (e.g., after socket updates)
+     */
+    invalidateNotesCache: (state) => {
+      state.lastFetched = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -174,17 +223,29 @@ export const noteSlice = createSlice({
       .addCase(fetchNotes.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.notes = action.payload.filter((n) => !n.archived && !n.deletedAt);
-        state.trash = action.payload.filter((n) => n.deletedAt);
-        state.archived = action.payload.filter(
-          (n) => n.archived && !n.deletedAt
-        );
-        state.favorites = action.payload.filter(
-          (n) => n.favorite && !n.deletedAt && !n.archived
-        );
-        state.pinned = action.payload.filter(
-          (n) => n.pinned && !n.deletedAt && !n.archived
-        );
+
+        // Only update the filter when not using cache
+        if (!action.payload.useCache) {
+          state.filter = action.payload.filter || {};
+        }
+
+        // Always update lastFetched timestamp unless using cache
+        if (!action.payload.useCache) {
+          state.lastFetched = Date.now();
+
+          // Process the new data
+          const allNotes = action.payload.data;
+
+          state.notes = allNotes.filter((n) => !n.archived && !n.deletedAt);
+          state.trash = allNotes.filter((n) => n.deletedAt);
+          state.archived = allNotes.filter((n) => n.archived && !n.deletedAt);
+          state.favorites = allNotes.filter(
+            (n) => n.favorite && !n.deletedAt && !n.archived
+          );
+          state.pinned = allNotes.filter(
+            (n) => n.pinned && !n.deletedAt && !n.archived
+          );
+        }
       })
       .addCase(fetchNotes.rejected, (state, action) => {
         state.isLoading = false;
@@ -329,5 +390,6 @@ export const noteSlice = createSlice({
   },
 });
 
-export const { resetNoteStatus, setSelectedNote } = noteSlice.actions;
+export const { resetNoteStatus, setSelectedNote, invalidateNotesCache } =
+  noteSlice.actions;
 export default noteSlice.reducer;

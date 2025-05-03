@@ -1,19 +1,40 @@
-import React, { useEffect, memo, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
+import React, { memo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  getProjects,
-  resetProjectStatus,
-} from '../features/projects/projectSlice';
 import ProjectCard from '../components/projects/ProjectCard';
 import { ArrowLeft, Grid, List, AlignJustify } from 'lucide-react';
 import Button from '../components/common/Button';
+import { isTaskOverdue, isTaskDueToday } from '../utils/taskUtils';
+import useProjects from '../hooks/useProjects';
+import useRecentTasks from '../hooks/useRecentTasks';
 
+/**
+ * ProjectListPage Component
+ *
+ * Displays a list of projects in either grid, list, or table view.
+ * Uses custom hooks with caching to prevent redundant API calls.
+ *
+ * @component
+ * @returns {JSX.Element} The rendered ProjectListPage component
+ */
 const ProjectListPage = memo(() => {
-  const dispatch = useDispatch();
-  const { projects, isLoading, isError, message } = useSelector(
-    (state) => state.projects
-  );
+  // Use our custom hooks with caching instead of direct Redux dispatches
+  const {
+    projects,
+    isLoading,
+    error: projectsError,
+    refetchProjects,
+  } = useProjects({
+    cacheTimeout: 5 * 60 * 1000, // 5 minutes cache
+  });
+
+  const {
+    tasks,
+    isLoading: tasksLoading,
+    error: tasksError,
+  } = useRecentTasks({
+    cacheTimeout: 3 * 60 * 1000, // 3 minutes cache for tasks (they change more frequently)
+  });
+
   // Add view mode state with localStorage persistence
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('projectViewMode') || 'grid';
@@ -25,14 +46,41 @@ const ProjectListPage = memo(() => {
     setViewMode(mode);
   };
 
-  useEffect(() => {
-    dispatch(getProjects()); // Fetch projects on component mount
+  /**
+   * Calculates open and critical task counts for a specific project
+   *
+   * @param {string} projectId - The ID of the project
+   * @returns {Object} Object with open and critical task counts
+   */
+  const getTaskCountsForProject = (projectId) => {
+    if (!tasks || tasks.length === 0) {
+      return { open: 0, critical: 0 };
+    }
 
-    // Clean up on unmount
-    return () => {
-      dispatch(resetProjectStatus());
+    // Filter tasks that belong to this project
+    const projectTasks = tasks.filter(
+      (task) =>
+        task.project === projectId ||
+        (task.project && task.project._id === projectId)
+    );
+
+    // Count open tasks (not completed)
+    const openTasks = projectTasks.filter(
+      (task) => task.status !== 'Completed'
+    );
+
+    // Count critical tasks (overdue or due today)
+    const criticalTasks = projectTasks.filter(
+      (task) =>
+        task.status !== 'Completed' &&
+        (isTaskOverdue(task) || isTaskDueToday(task))
+    );
+
+    return {
+      open: openTasks.length,
+      critical: criticalTasks.length,
     };
-  }, [dispatch]);
+  };
 
   // Format date for display
   const formatDate = (dateString) => {
@@ -42,6 +90,8 @@ const ProjectListPage = memo(() => {
 
   // Render project as a list item
   const renderListItem = (project) => {
+    const { open, critical } = getTaskCountsForProject(project._id);
+
     return (
       <Link
         to={`/projects/${project._id}`}
@@ -69,12 +119,24 @@ const ProjectListPage = memo(() => {
             </div>
           </div>
         </div>
+        <div className="flex mt-3 border-t border-dark-600 pt-3">
+          <div className="flex items-center">
+            <span className="text-sm font-medium text-[#C7C9D1]">
+              Open tasks: <span className="text-blue-400">{open}</span>
+              {critical > 0 && (
+                <span className="text-red-400 ml-1">({critical} Critical)</span>
+              )}
+            </span>
+          </div>
+        </div>
       </Link>
     );
   };
 
   // Render project as a table row
   const renderTableItem = (project) => {
+    const { open, critical } = getTaskCountsForProject(project._id);
+
     return (
       <tr
         key={project._id}
@@ -86,6 +148,12 @@ const ProjectListPage = memo(() => {
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
           {project.status}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-left">
+          <span className="font-medium text-blue-400">{open}</span>
+          {critical > 0 && (
+            <span className="font-medium text-red-400 ml-1">({critical})</span>
+          )}
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
           {formatDate(project.dueDate || project.endDate)}
@@ -107,6 +175,11 @@ const ProjectListPage = memo(() => {
     );
   };
 
+  // Add a function to handle manual refresh when needed
+  const handleManualRefresh = () => {
+    refetchProjects();
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-4 text-center">
@@ -116,14 +189,14 @@ const ProjectListPage = memo(() => {
     );
   }
 
-  if (isError) {
+  if (projectsError) {
     return (
       <div className="container mx-auto p-4">
         <div
           className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
           role="alert"
         >
-          <strong className="font-bold">Error!</strong> {message}
+          <strong className="font-bold">Error!</strong> {projectsError}
         </div>
       </div>
     );
@@ -145,6 +218,30 @@ const ProjectListPage = memo(() => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Refresh Button */}
+          <button
+            onClick={handleManualRefresh}
+            className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-dark-600"
+            title="Refresh Projects"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 2v6h-6"></path>
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+              <path d="M3 22v-6h6"></path>
+              <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+            </svg>
+          </button>
+
           {/* View Toggle Buttons */}
           <div className="bg-dark-700 rounded-lg p-1 flex">
             <button
@@ -193,13 +290,24 @@ const ProjectListPage = memo(() => {
         </div>
       </div>
 
+      {/* Task Loading Indicator */}
+      {tasksLoading && (
+        <div className="text-center text-sm text-gray-400 mb-2">
+          Loading task data...
+        </div>
+      )}
+
       {/* Scrollable Content Area */}
       <div className="flex-grow overflow-y-auto p-4 md:px-0">
         {projects && projects.length > 0 ? (
           viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {projects.map((project) => (
-                <ProjectCard key={project._id} project={project} />
+                <ProjectCard
+                  key={project._id}
+                  project={project}
+                  taskCounts={getTaskCountsForProject(project._id)}
+                />
               ))}
             </div>
           ) : viewMode === 'list' ? (
@@ -222,6 +330,13 @@ const ProjectListPage = memo(() => {
                       className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider"
                     >
                       Status
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider"
+                    >
+                      OPEN TASKS{' '}
+                      <span className="text-red-400">(critical)</span>
                     </th>
                     <th
                       scope="col"
