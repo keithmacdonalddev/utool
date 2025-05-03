@@ -6,7 +6,7 @@
 // It receives the list of critical tasks and necessary UI handlers as props.
 
 import React from 'react';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Tag } from 'lucide-react';
 import { formatDateForDisplay } from '../../utils/dateUtils'; // Assuming this utility exists
 import { isTaskOverdue, isTaskDueToday } from '../../utils/taskUtils'; // Use the utility functions
 
@@ -78,6 +78,9 @@ const CriticalTasksSection = ({
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
                     Priority
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                    Tags
                   </th>
                 </tr>
               </thead>
@@ -161,6 +164,23 @@ const CriticalTasksSection = ({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
                         {task.priority}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                        {task.tags && task.tags.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {task.tags.map((tag, index) => (
+                              <span
+                                key={index}
+                                className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full flex items-center"
+                              >
+                                <Tag size={10} className="mr-1" />
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-500 italic">No tags</span>
+                        )}
                       </td>
                     </tr>
                   );

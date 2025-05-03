@@ -13,6 +13,7 @@ import {
   Grid,
   List,
   AlignJustify,
+  Tag,
 } from 'lucide-react';
 import Button from '../components/common/Button';
 import { getTasks, resetTaskStatus } from '../features/tasks/taskSlice';
@@ -415,6 +416,23 @@ const TasksPage = () => {
         <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
           {formatDate(task.dueDate)}
         </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+          {task.tags && task.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {task.tags.map((tag, index) => (
+                <span
+                  key={index}
+                  className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full flex items-center"
+                >
+                  <Tag size={10} className="mr-1" />
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-gray-500 italic">No tags</span>
+          )}
+        </td>
       </tr>
     );
   };
@@ -696,6 +714,12 @@ const TasksPage = () => {
                       className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
                     >
                       Due Date
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700"
+                    >
+                      Tags
                     </th>
                   </tr>
                 </thead>

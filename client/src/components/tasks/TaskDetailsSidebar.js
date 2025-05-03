@@ -8,6 +8,7 @@ import {
   Clock,
   AlertTriangle,
   Loader,
+  Tag,
 } from 'lucide-react';
 import {
   updateTask,
@@ -23,6 +24,7 @@ import {
   normalizeDate,
 } from '../../utils/dateUtils';
 import SlidePanel from '../common/SlidePanel';
+import TagInput from '../common/TagInput';
 
 /**
  * TaskDetailsSidebar Component
@@ -59,6 +61,7 @@ const TaskDetailsSidebar = ({
     priority: 'Medium',
     dueDate: '',
     project: '',
+    tags: [], // Added tags array to formData
   });
   const [originalData, setOriginalData] = useState(null); // Store initial data to compare for changes
   const [isEditing, setIsEditing] = useState(false);
@@ -89,6 +92,7 @@ const TaskDetailsSidebar = ({
             ? task.project._id
             : task.project
           : '',
+        tags: task.tags || [], // Include task tags with empty array fallback
       };
 
       setFormData(formattedData);
@@ -111,6 +115,7 @@ const TaskDetailsSidebar = ({
         priority: 'Medium',
         dueDate: '',
         project: '',
+        tags: [], // Remember to also reset tags when closing
       });
       setIsEditing(false); // Also reset editing state
     }
@@ -443,6 +448,28 @@ const TaskDetailsSidebar = ({
               </select>
             </div>
 
+            {/* Tags Input */}
+            <div>
+              <label
+                htmlFor="tags"
+                className="block text-sm font-medium text-gray-300"
+              >
+                Tags
+              </label>
+              <TagInput
+                tags={formData.tags}
+                onChange={(newTags) => {
+                  setFormData((prevState) => ({
+                    ...prevState,
+                    tags: newTags,
+                  }));
+                  setHasChanges(true);
+                }}
+                placeholder="Add tags (press Enter or comma)"
+                className="mt-1"
+              />
+            </div>
+
             {/* Action Buttons */}
             <div className="flex justify-end space-x-2 pt-4">
               <Button
@@ -535,6 +562,26 @@ const TaskDetailsSidebar = ({
                     ? getProjectName(formData.project)
                     : 'No Project'}
                 </p>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-400">Tags</h3>
+                {task.tags && task.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {task.tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-full flex items-center"
+                      >
+                        <Tag size={12} className="mr-1" />
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 italic mt-1">No tags</p>
+                )}
               </div>
 
               {/* Description */}
