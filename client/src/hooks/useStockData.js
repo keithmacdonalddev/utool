@@ -145,7 +145,7 @@ const useStockData = (options = {}) => {
     }
 
     // Check if market is open
-    const marketOpen = isMarketOpen(false); // Explicitly set shouldLog to false
+    const marketOpen = isMarketOpen(false);
     if (!marketOpen) {
       logStockClient(`Fetch rejected: Market is closed`);
       setError(
@@ -181,23 +181,23 @@ const useStockData = (options = {}) => {
 
     setIsRefreshing(true);
     setLoading(true);
-    logStockClient(
-      `Starting stock data fetch for ${symbol}${
-        adminOverride ? ' with admin override' : ''
-      }`
-    );
+    logStockClient(`Client → Server: Fetching stock data for ${symbol}`);
 
     try {
-      logStockClient(
-        `Making API request to server for stock data${
-          adminOverride ? ' with admin override' : ''
-        }`
-      );
       // Add adminOverride parameter to the API request
       const res = await api.get(
         `/stocks/${symbol}${adminOverride ? '?adminOverride=true' : ''}`
       );
-      logStockClient(`Server response received:`, res.data);
+
+      // Simplified logging with clear client-server flow markers
+      logStockClient(
+        `Server → Client: Received ${res.data.data.source} data for ${symbol}`,
+        {
+          price: res.data.data.price,
+          change: res.data.data.change,
+          source: res.data.data.source,
+        }
+      );
 
       if (res.data.success) {
         const currentTime = new Date();
@@ -206,33 +206,7 @@ const useStockData = (options = {}) => {
           lastUpdated: currentTime.toISOString(),
         };
 
-        // Check if this is fallback data and show indicator if needed
-        if (res.data.data.source === 'fallback') {
-          stockData.isFallback = true;
-          logStockClient(`Received fallback data from server`);
-        }
-
-        // Log current and new stock data for comparison
-        if (stock) {
-          logStockClient(`Comparing stock data:`, {
-            previous: {
-              price: stock.price,
-              change: stock.change,
-              changePercent: stock.changePercent,
-            },
-            new: {
-              price: stockData.price,
-              change: stockData.change,
-              changePercent: stockData.changePercent,
-            },
-            difference: stockData.price - stock.price,
-          });
-        } else {
-          logStockClient(`No previous stock data to compare with`);
-        }
-
-        // Update state and storage
-        logStockClient(`Updating stock data in state and localStorage`);
+        // Update state and storage with minimal logging
         setStock(stockData);
         localStorage.setItem('lastStockData', JSON.stringify(stockData));
         localStorage.setItem('stockLastFetchTime', currentTime.toISOString());
@@ -240,32 +214,30 @@ const useStockData = (options = {}) => {
 
         // Start cooldown timer
         startCooldownTimer();
+
+        logStockClient(
+          `Client: Stock data successfully updated in UI for ${symbol}`
+        );
       } else {
-        logStockClient(`Server returned unsuccessful response:`, res.data);
+        logStockClient(`Server returned unsuccessful response`);
         throw new Error(res.data.message || 'Failed to fetch stock data');
       }
     } catch (err) {
-      logStockClient(`Error during fetch:`, {
-        message: err.message,
-        response: err.response?.data,
-      });
+      logStockClient(`Error during fetch: ${err.message}`);
       setError(err.response?.data?.message || err.message || 'Stock N/A');
 
-      // Even if there's an error, we still want to update the lastUpdated time
-      // so the UI shows when we last attempted to fetch
+      // Even if there's an error, update the lastUpdated time
       if (stock) {
         const updatedStock = {
           ...stock,
           lastUpdated: new Date().toISOString(),
         };
-        logStockClient(`Updating last updated time after error`);
         setStock(updatedStock);
         localStorage.setItem('lastStockData', JSON.stringify(updatedStock));
       }
     } finally {
       setLoading(false);
       setIsRefreshing(false);
-      logStockClient(`Stock fetch process completed`);
     }
   };
 
@@ -287,6 +259,11 @@ const useStockData = (options = {}) => {
       }
     } else {
       logStockClient(`No saved stock data found in localStorage`);
+      // Auto-fetch stock data if none is found in localStorage
+      setTimeout(() => {
+        logStockClient(`Auto-fetching initial stock data for ${symbol}`);
+        fetchStock();
+      }, 500); // Small delay to ensure component is fully mounted
     }
 
     // Initialize the API calls counter

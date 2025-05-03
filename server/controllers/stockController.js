@@ -298,6 +298,12 @@ const tryFMPAPI = async (symbol) => {
 /**
  * Get real-time stock quote from primary API, with fallback options
  * Implements multiple layers of fallbacks to ensure data availability
+ * Optimized to only return the most recent price without excessive data
+ *
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Promise<void>} - Resolves when the API call completes
  */
 export const getStockQuote = async (req, res, next) => {
   try {
@@ -305,33 +311,17 @@ export const getStockQuote = async (req, res, next) => {
     const adminOverride = req.query.adminOverride === 'true';
     const userId = req.user ? req.user.id : req.ip; // Use user ID or IP for non-authenticated users
 
-    // Log if admin override is being used
-    if (adminOverride) {
-      logStock(`ADMIN OVERRIDE requested for stock refresh by user ${userId}`);
-    }
-
-    logStock(`Stock quote request received for ${symbol} from user ${userId}`);
-    logAllPrices();
+    // Simple request logging - keep this minimal
+    logStock(
+      `Stock request: ${symbol} from ${userId} ${
+        adminOverride ? '(admin override)' : ''
+      }`
+    );
 
     // Validate symbol
     if (!symbol) {
-      logStock(`Error: No symbol provided`);
       return next(new errorResponse('Stock symbol is required', 400));
     }
-
-    // Market check is optional - skipping this would allow getting data even when market is closed
-    // Uncomment the following if you want to enforce market hours
-    /*
-    if (!isMarketOpen()) {
-      logStock(`Request rejected: Market is closed`);
-      return next(
-        new errorResponse(
-          'Stock market is closed. Try during market hours (9:30 AM - 4:00 PM EST, weekdays).',
-          403
-        )
-      );
-    }
-    */
 
     // Check if user is in cooldown period (passing admin override flag)
     if (isInCooldownPeriod(userId, adminOverride)) {
@@ -339,10 +329,6 @@ export const getStockQuote = async (req, res, next) => {
       const now = new Date();
       const minutesAgo = Math.floor((now - lastRequestTime) / (1000 * 60));
       const minutesRemaining = Math.max(0, 15 - minutesAgo);
-
-      logStock(
-        `Request rejected: User ${userId} in cooldown (${minutesRemaining} minutes remaining)`
-      );
 
       return next(
         new errorResponse(
@@ -356,197 +342,160 @@ export const getStockQuote = async (req, res, next) => {
 
     // Normalized symbol (uppercase)
     const normalizedSymbol = symbol.toUpperCase();
-    logStock(`Processing request for ${normalizedSymbol}`);
 
     try {
-      // Try FMP API first as it tends to have more accurate data
-      const fmpData = await tryFMPAPI(normalizedSymbol);
-      if (fmpData) {
-        // Update last request time for this user
-        userLastRequestTimes.set(userId, new Date());
-        logStock(
-          `Updated last request time for user ${userId}: ${new Date().toISOString()}`
-        );
-
-        logStock(`FMP API data returned for ${normalizedSymbol}`, fmpData);
-
-        // SUCCESS: Return real-time data from FMP source
-        return res.status(200).json({
-          success: true,
-          data: fmpData,
-        });
-      }
-
-      // PRIMARY DATA SOURCE: Alpha Vantage API - Using Intraday data for real-time prices
-      logStock(
-        `Attempting API request to Alpha Vantage for real-time data on ${normalizedSymbol}`
-      );
-
-      // Use environment variable for API key when possible
+      // Use Time Series Intraday API for real-time data instead of Global Quote
       const apiKey = process.env.ALPHA_VANTAGE_API_KEY || 'KQ7XNXVXZCNJBP9X';
 
-      // First, get the intraday data for current price
-      const intradayResponse = await axios.get(
-        `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${normalizedSymbol}&interval=5min&apikey=${apiKey}`,
-        { timeout: 5000 }
+      logStock(
+        `Fetching real-time stock data for ${normalizedSymbol} from Alpha Vantage Intraday API`
       );
 
-      logStock(
-        `Alpha Vantage Intraday API response received:`,
-        intradayResponse.data
+      // Get intraday data with 5-minute interval
+      const response = await axios.get(
+        `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${normalizedSymbol}&interval=5min&apikey=${apiKey}&outputsize=compact`,
+        { timeout: 8000 } // Increased timeout as intraday data can be larger
       );
 
       // Update last request time for this user
       userLastRequestTimes.set(userId, new Date());
-      logStock(
-        `Updated last request time for user ${userId}: ${new Date().toISOString()}`
-      );
 
-      // Then get the global quote for previous close and other data
-      const globalQuoteResponse = await axios.get(
-        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${normalizedSymbol}&apikey=${apiKey}`,
-        { timeout: 5000 }
-      );
-
-      logStock(
-        `Alpha Vantage Global Quote API response received:`,
-        globalQuoteResponse.data
-      );
-
+      // Check if we have valid data
       if (
-        intradayResponse.data &&
-        intradayResponse.data['Meta Data'] &&
-        intradayResponse.data['Time Series (5min)'] &&
-        globalQuoteResponse.data &&
-        globalQuoteResponse.data['Global Quote']
+        response.data &&
+        response.data['Meta Data'] &&
+        response.data['Time Series (5min)']
       ) {
-        // Get the most recent data point from intraday data
-        const timeSeriesData = intradayResponse.data['Time Series (5min)'];
+        // Get the most recent data point (first key in the time series)
+        const timeSeriesData = response.data['Time Series (5min)'];
         const timestamps = Object.keys(timeSeriesData).sort().reverse();
+
+        if (timestamps.length === 0) {
+          throw new Error('No time series data available');
+        }
+
         const latestTimestamp = timestamps[0];
         const latestDataPoint = timeSeriesData[latestTimestamp];
 
-        // Get the current price from the latest intraday data point
+        // Get previous close from meta data or fallback to using nearby points
+        const metaData = response.data['Meta Data'];
+        let previousClose;
+
+        // Try to get previous day's data for comparison
+        // For simplicity, we'll use the opening price of the day if we can't determine the previous close
+        const currentDate = new Date(latestTimestamp)
+          .toISOString()
+          .split('T')[0];
+        const openingTimestamps = timestamps.filter(
+          (ts) => ts.startsWith(currentDate) && ts.includes('09:30')
+        );
+
+        if (openingTimestamps.length > 0) {
+          previousClose = parseFloat(
+            timeSeriesData[openingTimestamps[0]]['1. open']
+          );
+        } else {
+          // Fallback: use an earlier point if opening data isn't available
+          const earlierTimestamp =
+            timestamps[Math.min(timestamps.length - 1, 30)]; // Use an earlier point as reference
+          previousClose = parseFloat(
+            timeSeriesData[earlierTimestamp]['4. close']
+          );
+        }
+
+        // Current price is the latest close value
         const currentPrice = parseFloat(latestDataPoint['4. close']);
 
-        // Get previous close from global quote
-        const quoteData = globalQuoteResponse.data['Global Quote'];
-        const previousClose = parseFloat(quoteData['08. previous close']);
-
-        // Calculate the change based on previous close and current real-time price
+        // Calculate change
         const change = currentPrice - previousClose;
         const changePercent = ((change / previousClose) * 100).toFixed(2);
 
-        const priceData = {
+        // Build the stock data object
+        const stockData = {
           symbol: normalizedSymbol,
           price: currentPrice,
           change: change,
           changePercent: `${changePercent}%`,
           previousClose: previousClose,
+          latestTradingDay: currentDate, // Today's date
+          latestUpdate: latestTimestamp, // The exact timestamp
           source: 'alpha-vantage-realtime',
         };
 
-        logStock(`Real-time data returned for ${normalizedSymbol}`, priceData);
+        logStock(`Returning real-time data for ${normalizedSymbol}`, stockData);
 
-        // SUCCESS: Return real-time data from primary source
         return res.status(200).json({
           success: true,
-          data: priceData,
+          data: stockData,
         });
       } else {
-        // Either API returned an empty response or invalid format
-        logStock(`Alpha Vantage API returned invalid data format:`, {
-          intraday: intradayResponse.data,
-          globalQuote: globalQuoteResponse.data,
-        });
-        throw new Error('Invalid Alpha Vantage API response format');
+        throw new Error(
+          'Invalid or empty response from Alpha Vantage Intraday API'
+        );
       }
     } catch (primaryApiError) {
-      // Log the primary API error
-      logStock(`Primary API Error: ${primaryApiError.message}`);
+      logStock(`Alpha Vantage API Error: ${primaryApiError.message}`);
 
-      // Update last request time for this user even on error
-      userLastRequestTimes.set(userId, new Date());
+      // Try FMP as fallback (simpler implementation)
+      try {
+        const fmpApiKey = process.env.FMP_API_KEY || 'demo';
+        logStock(`Trying fallback FMP API for ${normalizedSymbol}`);
 
-      // SECONDARY DATA SOURCE: Try alternative APIs
-      const alternativeData = await tryAlternativeAPIs(normalizedSymbol);
-      if (alternativeData) {
-        logStock(
-          `Alternative API succeeded for ${normalizedSymbol}`,
-          alternativeData
+        const fmpResponse = await axios.get(
+          `https://financialmodelingprep.com/api/v3/quote/${normalizedSymbol}?apikey=${fmpApiKey}`,
+          { timeout: 5000 }
         );
-        return res.status(200).json({
-          success: true,
-          data: alternativeData,
-          message: 'Using alternative data source',
-        });
+
+        if (fmpResponse.data && fmpResponse.data.length > 0) {
+          const quote = fmpResponse.data[0];
+
+          const stockData = {
+            symbol: normalizedSymbol,
+            price: quote.price,
+            change: quote.change,
+            changePercent: `${quote.changesPercentage.toFixed(2)}%`,
+            previousClose: quote.previousClose,
+            source: 'financial-modeling-prep',
+          };
+
+          logStock(`Returning FMP data for ${normalizedSymbol}`, stockData);
+
+          return res.status(200).json({
+            success: true,
+            data: stockData,
+          });
+        }
+      } catch (fmpError) {
+        logStock(`FMP API failed: ${fmpError.message}`);
       }
 
-      // LAST RESORT: If we have mock data for this symbol, use it
+      // Last resort: Use mock data
       if (mockStockData[normalizedSymbol]) {
-        const mockDataForSymbol = mockStockData[normalizedSymbol];
-        // Get base price and previous close from mock data
-        const basePrice = mockDataForSymbol.price;
-        const previousClose =
-          mockDataForSymbol.previousClose ||
-          basePrice - mockDataForSymbol.change;
-
-        logStock(
-          `Using fallback mock data for ${normalizedSymbol}, base price: ${basePrice}, previous close: ${previousClose}`
-        );
-
-        // Generate a new price that's distinctly different
-        const result = generateNewMockPrice(
-          normalizedSymbol,
-          basePrice,
-          previousClose
-        );
-        const newPrice = result.price;
-        const priceChange = result.change;
-
-        // Calculate percent change based on the actual change
-        const percentChange = (
-          (priceChange / (result.previousClose || result.lastPrice)) *
-          100
-        ).toFixed(2);
-
-        // Create mock response with dynamically generated data
         const mockData = {
-          symbol: normalizedSymbol,
-          price: newPrice,
-          change: priceChange,
-          changePercent: `${percentChange}%`,
-          previousClose: result.previousClose || newPrice - priceChange,
+          ...mockStockData[normalizedSymbol],
           source: 'fallback',
-          isMockData: true, // Explicitly flag this as mock data
+          isMockData: true,
         };
 
-        logStock(`Mock data generated for ${normalizedSymbol}`, mockData);
-        logAllPrices();
+        logStock(`Using mock data for ${normalizedSymbol}`, mockData);
 
         return res.status(200).json({
           success: true,
           data: mockData,
-          message:
-            'Using fallback data due to API limitations. This is not real-time market data.',
+          message: 'Using fallback data. This is not real-time market data.',
         });
       }
 
       // No data available from any source
-      logStock(
-        `No data available for symbol ${normalizedSymbol} from any source`
-      );
       return next(
         new errorResponse(
-          `Stock data for ${normalizedSymbol} is currently unavailable from any source`,
+          `Stock data for ${normalizedSymbol} is currently unavailable`,
           503
         )
       );
     }
   } catch (err) {
-    logStock(`Critical Stock Controller Error: ${err.message}`, {
-      stack: err.stack,
-    });
+    logStock(`Critical error in stock controller: ${err.message}`);
     next(new errorResponse('Error fetching stock data', 500));
   }
 };

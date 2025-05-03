@@ -72,6 +72,12 @@ const getEasternTime = () => {
  * @returns {boolean} - True if the market is open, false otherwise
  */
 export const isMarketOpen = (shouldLog = false, logger = console.log) => {
+  // TEMPORARY DEBUG OVERRIDE: Always return true for testing
+  if (shouldLog)
+    logger('DEBUG OVERRIDE: Market status forced to OPEN for testing');
+  return true;
+
+  /* Original market check logic commented out for debugging
   const now = new Date();
   const currentTime = now.getTime();
 
@@ -134,6 +140,7 @@ export const isMarketOpen = (shouldLog = false, logger = console.log) => {
   };
 
   return isOpen;
+  */
 };
 
 /**

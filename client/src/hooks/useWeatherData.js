@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import { createLogger } from '../utils/clientLogger';
+import { useNotifications } from '../context/NotificationContext';
+import { toast } from 'react-toastify';
 
 // Create a weather-specific logger
 const logWeather = createLogger('WEATHER');
@@ -20,13 +22,22 @@ const useWeatherData = (options = {}) => {
     location = 'Halifax',
     refreshInterval = 15 * 60 * 1000, // 15 minutes
     maxRetries = 2,
-    retryDelay = 5000, // 5 seconds
+    retryDelay = 8000, // Increased to 8 seconds for better user experience
   } = options;
+
+  // Get the notification functions from context
+  const { showNotification } = useNotifications();
 
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isServerError, setIsServerError] = useState(false);
+
+  // Track toast IDs to manage them
+  const toastIdsRef = useRef({
+    error: null,
+    retry: null,
+  });
 
   const weatherFetchedRef = useRef(false);
   const intervalRef = useRef(null);
@@ -63,9 +74,22 @@ const useWeatherData = (options = {}) => {
           logWeather('Weather data fetched successfully', res.data.data);
           setWeather(res.data.data);
           retryCountRef.current = 0; // Reset retry count on success
+
+          // Clear any existing retry timer
           if (retryTimerRef.current) {
             clearTimeout(retryTimerRef.current);
             retryTimerRef.current = null;
+          }
+
+          // Dismiss retry notification if it exists
+          if (toastIdsRef.current.retry) {
+            toast.dismiss(toastIdsRef.current.retry);
+            toastIdsRef.current.retry = null;
+          }
+
+          // If we succeeded after a retry, show a success notification
+          if (isRetry) {
+            showNotification('Weather data successfully retrieved!', 'success');
           }
         } else {
           throw new Error(res.data.message || 'Failed to fetch weather');
@@ -120,6 +144,32 @@ const useWeatherData = (options = {}) => {
           logWeather(
             `Scheduling retry ${currentRetry}/${maxRetries} in ${retryDelay}ms`
           );
+
+          // First, show the error notification
+          if (!isRetry) {
+            // Only show error notification on first failure, not on retry failures
+            showNotification(errorMessage, 'error');
+          }
+
+          // Then show retry notification
+          const retryMessage = `Automatically retrying to fetch weather data in ${Math.round(
+            retryDelay / 1000
+          )} seconds. Attempt ${currentRetry} of ${maxRetries}.`;
+
+          // Dismiss previous retry toast if it exists
+          if (toastIdsRef.current.retry) {
+            toast.dismiss(toastIdsRef.current.retry);
+          }
+
+          // Create a new toast for the retry notification
+          toastIdsRef.current.retry = toast.info(retryMessage, {
+            autoClose: retryDelay - 500, // Close just before the retry happens
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            className: 'weather-retry-toast',
+          });
 
           // Clear any existing retry timer
           if (retryTimerRef.current) {
