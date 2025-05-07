@@ -6,7 +6,16 @@ import React, {
 } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import PropTypes from 'prop-types';
-import { Clipboard, Plus, X, Edit, Trash2, Tag } from 'lucide-react';
+import {
+  Clipboard,
+  Plus,
+  Minus,
+  X,
+  Edit,
+  Trash2,
+  Tag,
+  RefreshCw,
+} from 'lucide-react';
 import { useNotifications } from '../../../context/NotificationContext';
 import Button from '../../../components/common/Button';
 import ResourceSearch from '../components/ResourceSearch';
@@ -45,6 +54,7 @@ const SnippetsFeature = forwardRef(
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [snippetToEdit, setSnippetToEdit] = useState(null);
     const [snippetToDelete, setSnippetToDelete] = useState(null);
+    const [tooltipFontSize, setTooltipFontSize] = useState(12); // State for tooltip font size
     const [newSnippet, setNewSnippet] = useState({
       title: '',
       content: '',
@@ -274,6 +284,38 @@ const SnippetsFeature = forwardRef(
         });
     };
 
+    /**
+     * Increases the tooltip font size
+     * Prevents font size from exceeding a max size (18px)
+     *
+     * @param {Event} e - The click event
+     */
+    const increaseTooltipFontSize = (e) => {
+      e.stopPropagation(); // Prevent event from bubbling up to parent elements
+      setTooltipFontSize((prev) => Math.min(prev + 2, 18)); // Increase by 2px with a max of 18px
+    };
+
+    /**
+     * Decreases the tooltip font size
+     * Prevents font size from becoming too small (8px)
+     *
+     * @param {Event} e - The click event
+     */
+    const decreaseTooltipFontSize = (e) => {
+      e.stopPropagation(); // Prevent event from bubbling up to parent elements
+      setTooltipFontSize((prev) => Math.max(prev - 2, 8)); // Decrease by 2px with a min of 8px
+    };
+
+    /**
+     * Resets the tooltip font size to the default value (12px)
+     *
+     * @param {Event} e - The click event
+     */
+    const resetTooltipFontSize = (e) => {
+      e.stopPropagation(); // Prevent event from bubbling up to parent elements
+      setTooltipFontSize(12); // Reset to default font size (12px)
+    };
+
     // Filter snippets based on search term and active category
     const filteredSnippets = snippets.filter((snippet) => {
       // Filter by search term
@@ -326,7 +368,42 @@ const SnippetsFeature = forwardRef(
                   <div className="relative group max-w-xs">
                     <span className="block truncate">{snippet.content}</span>
                     <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-64 bg-dark-800 text-white text-xs p-2 rounded shadow-lg whitespace-pre-wrap break-words">
-                      <div>{snippet.content}</div>
+                      {/* Font size adjustment controls at top of tooltip */}
+                      <div className="flex justify-end mb-2 border-b border-dark-600 pb-1">
+                        <button
+                          onClick={decreaseTooltipFontSize}
+                          className="text-gray-400 hover:text-white mr-2"
+                          title="Decrease text size"
+                          aria-label="Decrease snippet text size"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        {/* Display current zoom level as percentage */}
+                        <span className="text-gray-400 mx-1 text-xs">
+                          {Math.round((tooltipFontSize / 12) * 100)}%
+                        </span>
+                        <button
+                          onClick={increaseTooltipFontSize}
+                          className="text-gray-400 hover:text-white ml-2"
+                          title="Increase text size"
+                          aria-label="Increase snippet text size"
+                        >
+                          <Plus size={14} />
+                        </button>
+                        {/* Reset zoom button */}
+                        <button
+                          onClick={resetTooltipFontSize}
+                          className="text-gray-400 hover:text-white ml-3"
+                          title="Reset to default text size"
+                          aria-label="Reset to default text size"
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                      </div>
+                      {/* Snippet content with dynamic font size */}
+                      <div style={{ fontSize: `${tooltipFontSize}px` }}>
+                        {snippet.content}
+                      </div>
                     </div>
                   </div>
                 </td>
