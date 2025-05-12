@@ -153,7 +153,7 @@ const ResourcesPage = () => {
         return (
           <QuotesSidebar
             activeCategory={activeQuoteCategory}
-            setActiveCategory={setActiveQuoteCategory}
+            setActiveCategory={setActiveCategory}
           />
         );
       default:
@@ -184,7 +184,7 @@ const ResourcesPage = () => {
           <FavoriteQuotesFeature
             ref={quotesFeatureRef}
             activeCategory={activeQuoteCategory}
-            setActiveCategory={setActiveQuoteCategory}
+            setActiveCategory={setActiveCategory}
           />
         );
       default:
@@ -196,13 +196,52 @@ const ResourcesPage = () => {
     }
   };
 
-  // Clear any location state after initial render to prevent persisting the tab selection
-  // across future navigations to the resources page
+  /**
+   * useEffect hook to synchronize the component's active tab with `location.state.activeTab`.
+   * This is primarily intended to handle initial tab setting when navigating to this page
+   * with a specific tab pre-selected via `NavLink` state (e.g., from a sidebar submenu).
+   *
+   * How it works:
+   * 1. It runs when the `location` object changes (e.g., on navigation or history manipulation like `replaceState`)
+   *    or when `setActiveTab` reference changes (which is stable from `useState`, so `location` is the main trigger).
+   * 2. It checks if `location.state?.activeTab` (referred to as `stateActiveTab`) is present.
+   * 3. If `stateActiveTab` exists:
+   *    a. It calls `setActiveTab(stateActiveTab)` to update the component's `activeTab` state.
+   *       This ensures the page reflects the tab specified in the navigation state.
+   *    b. It then immediately clears `activeTab` from `location.state` using `window.history.replaceState`.
+   *       This is crucial. It makes `location.state.activeTab` a "one-time" instruction.
+   *       Once processed, it's removed to prevent this effect from re-applying the same tab if the
+   *       component re-renders for other reasons (e.g., user clicking an on-page tab, other state changes).
+   *       The `replaceState` call itself will cause the `location` object to update (its `key` changes),
+   *       triggering this effect to run again. On that subsequent run, `location.state.activeTab` will
+   *       be gone, so the `if (stateActiveTab)` block will be skipped, achieving stability.
+   *
+   * This mechanism ensures that on-page tab clicks (which only call `setActiveTab` and don't change `location.state`)
+   * are not overridden by this effect, as `location.state.activeTab` will be null/undefined at that point.
+   */
   useEffect(() => {
-    if (location.state) {
-      window.history.replaceState({}, document.title);
+    const stateActiveTab = location.state?.activeTab;
+
+    if (stateActiveTab) {
+      // A tab was specified in the navigation state. Update the component's activeTab.
+      setActiveTab(stateActiveTab);
+
+      // Clear activeTab from location.state to make it a one-time instruction.
+      // location.state is guaranteed non-null here because stateActiveTab was derived from it.
+      // Also ensure location.state itself is not null before attempting to destructure from it,
+      // though the outer if (stateActiveTab) should already guarantee location.state is not null.
+      if (location.state) {
+        const { activeTab: _, ...newStateWithoutActiveTab } = location.state;
+        window.history.replaceState(
+          Object.keys(newStateWithoutActiveTab).length > 0
+            ? newStateWithoutActiveTab
+            : null,
+          document.title,
+          location.pathname // Preserve the current path
+        );
+      }
     }
-  }, [location.state]);
+  }, [location, setActiveTab]); // Dependencies: `location` object and `setActiveTab` function.
 
   return (
     <ResourceLayout
