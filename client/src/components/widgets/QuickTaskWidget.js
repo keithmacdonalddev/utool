@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Link } from 'react-router-dom';
 import useRecentTasks from '../../hooks/useRecentTasks';
 
@@ -15,6 +15,8 @@ const QuickTaskWidget = () => {
   // Use our custom hook with caching instead of direct Redux dispatches
   const { tasks, isLoading, error, refetchTasks } = useRecentTasks({
     cacheTimeout: 2 * 60 * 1000, // 2 minutes cache for tasks (change more frequently)
+    backgroundRefresh: true, // Enable background refresh for better UX
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
 
   // Filter out completed tasks, then take the first 3
@@ -121,4 +123,4 @@ const QuickTaskWidget = () => {
   );
 };
 
-export default QuickTaskWidget;
+export default memo(QuickTaskWidget);

@@ -10,6 +10,10 @@
 
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../utils/api'; // Use our configured axios instance
+import {
+  hasCollectionChanged,
+  deepCompareObjects,
+} from '../../utils/objectUtils';
 
 // Default cache timeout (5 minutes in milliseconds)
 const CACHE_TIMEOUT = 5 * 60 * 1000;
@@ -35,6 +39,7 @@ const initialState = {
   lastFetched: null, // When tasks were last fetched
   tasksByProject: {}, // Cache of tasks organized by project ID
   projectTasksTimestamps: {}, // Track last fetch time per project
+  backgroundRefreshingRecent: false, // Flag for background refreshing recent tasks
 };
 
 /**
@@ -169,20 +174,43 @@ export const getTasksForProject = createAsyncThunk(
  * from a single payload object for cleaner function calls
  *
  * Special handling for completed tasks that get archived and deleted on the server.
+ * Also supports optimistic updates for better UI responsiveness.
  *
  * @param {Object} payload - Update payload
  * @param {string} payload.projectId - ID of the project the task belongs to (required)
  * @param {string} payload.taskId - ID of the task to update
  * @param {Object} payload.updates - Object with fields to update
+ * @param {boolean} payload.optimistic - Whether to apply optimistic update
  */
 export const updateTask = createAsyncThunk(
   'tasks/update',
-  async ({ projectId, taskId, updates }, thunkAPI) => {
+  async ({ projectId, taskId, updates, optimistic = false }, thunkAPI) => {
     // Validate required fields
     if (!projectId || !taskId) {
       return thunkAPI.rejectWithValue(
         'Project ID and Task ID are required to update a task'
       );
+    }
+
+    // For optimistic updates, return early with the data for immediate UI update
+    if (optimistic) {
+      // Get the current task from state
+      const state = thunkAPI.getState();
+      const existingTask = state.tasks.tasks.find((t) => t._id === taskId);
+
+      if (!existingTask) {
+        return thunkAPI.rejectWithValue(
+          'Cannot apply optimistic update - task not found in state'
+        );
+      }
+
+      return {
+        ...existingTask,
+        ...updates,
+        _id: taskId,
+        project: projectId,
+        optimistic: true, // Flag to identify optimistic updates
+      };
     }
 
     // Check if we're marking a task as complete - this will be handled specially
@@ -361,41 +389,86 @@ export const getTask = createAsyncThunk(
  */
 export const getRecentTasks = createAsyncThunk(
   'tasks/getRecent',
-  async (_, thunkAPI) => {
+  async (options = {}, thunkAPI) => {
+    const {
+      forceRefresh = false,
+      cacheTimeout = CACHE_TIMEOUT,
+      backgroundRefresh = false,
+      smartRefresh = true, // Default to smart refresh for recent tasks
+    } = options;
+
+    const state = thunkAPI.getState().tasks;
+    const now = Date.now();
+    const cacheIsValid =
+      state.lastFetched &&
+      now - state.lastFetched < cacheTimeout &&
+      state.tasks &&
+      state.tasks.length > 0;
+
+    // If background refresh, smart refresh, and cache is valid, return cached data and refresh in background
+    if (backgroundRefresh && smartRefresh && cacheIsValid && !forceRefresh) {
+      console.log(
+        'RecentTasks: Cache valid, returning cached data and queueing background refresh.'
+      );
+      // Dispatch a specific action or thunk for background fetching
+      // We'll create a new thunk for this: fetchRecentTasksInBackground
+      setTimeout(() => {
+        thunkAPI.dispatch(fetchRecentTasksInBackground({ smartRefresh })); // Pass smartRefresh option
+      }, 100); // Short delay to allow current call stack to clear
+
+      return {
+        tasks: state.tasks, // Return current tasks from cache
+        fromCache: true,
+        backgroundRefreshInitiated: true, // Indicate that a background refresh has been started
+      };
+    }
+
+    // Proceed with normal fetch if not background refreshing or cache is invalid/forced
+    console.log(
+      forceRefresh
+        ? 'RecentTasks: Force refreshing data.'
+        : cacheIsValid
+        ? 'RecentTasks: Cache valid, but not a background/smart refresh, or forceRefresh is true. Fetching fresh data.'
+        : 'RecentTasks: Cache invalid or not present. Fetching fresh data.'
+    );
+
     try {
-      // First, fetch all projects the user has access to
+      // ... existing API call logic ...
       const projectsResponse = await api.get('/projects');
       const projects = projectsResponse.data.data;
 
       if (!projects || projects.length === 0) {
-        return { tasks: [] };
+        return { tasks: [], timestamp: now, fromCache: false };
       }
 
-      // Get tasks from the user's most recent projects (limit to avoid too many requests)
-      const recentProjects = projects.slice(0, 3);
+      const recentProjects = projects.slice(0, 5); // Fetch from more projects for recent view
       const taskPromises = recentProjects.map(
         (project) =>
           api
-            .get(`/projects/${project._id}/tasks`)
-            .then((response) => response.data.data)
-            .catch((err) => []) // Return empty array if fetching tasks for a project fails
+            .get(
+              `/projects/${project._id}/tasks?limit=10&sortBy=createdAt:desc`
+            ) // Fetch recent tasks per project
+            .then((response) =>
+              response.data.data.map((task) => ({
+                ...task,
+                projectName: project.name, // Add project name directly
+              }))
+            )
+            .catch((err) => {
+              console.error(
+                `Error fetching tasks for project ${project._id}:`,
+                err
+              );
+              return [];
+            }) // Return empty array if fetching tasks for a project fails
       );
 
-      // Wait for all task requests to complete
       const projectTasks = await Promise.all(taskPromises);
-
-      // Flatten the arrays and add project information to each task
-      const allTasks = projectTasks.flat().map((task) => ({
-        ...task,
-        projectName:
-          recentProjects.find((p) => p._id === task.project)?.name ||
-          'Unknown Project',
-      }));
-
-      // Sort by creation date (newest first)
+      let allTasks = projectTasks.flat();
       allTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      allTasks = allTasks.slice(0, 20); // Limit to overall 20 most recent tasks
 
-      return { tasks: allTasks };
+      return { tasks: allTasks, timestamp: now, fromCache: false };
     } catch (error) {
       const message =
         (error.response &&
@@ -529,19 +602,63 @@ export const taskSlice = createSlice({
           );
           state.message = 'Task completed and archived successfully!';
         } else {
+          // First check if this was an optimistic update
+          if (action.payload.optimistic) {
+            // For optimistic updates, we replace the task immediately
+            state.tasks = state.tasks.map((t) => {
+              if (t._id === action.payload._id) {
+                return action.payload;
+              }
+              return t;
+            });
+
+            // No message for optimistic updates to avoid disrupting the UI
+            return;
+          }
+
           // Standard update - replace the updated task in the array based on ID
-          state.tasks = state.tasks.map((t) =>
-            t._id === action.payload._id ? action.payload : t
-          );
+          // Only update if there are actual differences to avoid unnecessary re-renders
+          state.tasks = state.tasks.map((t) => {
+            if (t._id === action.payload._id) {
+              // Use our deep comparison utility with excluded metadata fields
+              const existingTask = { ...t };
+              const newTask = { ...action.payload };
+
+              const hasMeaningfulChanges = !deepCompareObjects(
+                existingTask,
+                newTask,
+                ['__v', 'updatedAt', 'lastModified']
+              );
+
+              return hasMeaningfulChanges ? action.payload : t;
+            }
+            return t;
+          });
           state.message = 'Task updated successfully!';
         }
       })
       .addCase(updateTask.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload || 'Failed to update task';
+
+        // If the rejection is from a failed optimistic update, we need to restore original state
+        if (
+          action.payload &&
+          typeof action.payload === 'object' &&
+          action.payload.failedTaskId
+        ) {
+          // Find and revert the optimistically updated task
+          state.tasks = state.tasks.map((t) => {
+            if (t._id === action.payload.failedTaskId) {
+              return action.payload.originalTask;
+            }
+            return t;
+          });
+          state.message = `Failed to update task: ${action.payload.message}`;
+        } else {
+          state.message = action.payload || 'Failed to update task';
+        }
         // Important: Do NOT clear tasks array on error - tasks should remain visible
-        // state.tasks remains unchanged
       })
 
       // Delete Task Cases
@@ -600,21 +717,212 @@ export const taskSlice = createSlice({
       })
 
       // Get Recent Tasks Cases
-      .addCase(getRecentTasks.pending, (state) => {
-        state.isLoading = true;
+      .addCase(getRecentTasks.pending, (state, action) => {
+        // Only set isLoading if it's not a background refresh where cache is being returned
+        const isBackgroundCacheReturn =
+          action.meta.arg.backgroundRefresh &&
+          action.meta.arg.smartRefresh &&
+          state.lastFetched &&
+          Date.now() - state.lastFetched <
+            (action.meta.arg.cacheTimeout || CACHE_TIMEOUT) &&
+          state.tasks &&
+          state.tasks.length > 0 &&
+          !action.meta.arg.forceRefresh;
+
+        if (!isBackgroundCacheReturn) {
+          state.isLoading = true;
+        } else {
+          // If cache is being returned and background refresh is initiated,
+          // we might briefly set a background flag, though the main fetch is deferred.
+          // The actual backgroundRefreshingRecent will be more accurately set by fetchRecentTasksInBackground.pending
+          // For now, let's ensure isLoading is false if we are returning cache.
+          state.isLoading = false;
+        }
+        // Clear previous error/success messages related to this specific operation
+        state.isError = false;
+        state.message = '';
       })
       .addCase(getRecentTasks.fulfilled, (state, action) => {
+        // If data came from cache and a background refresh was initiated,
+        // the main state update will be handled by fetchRecentTasksInBackground.
+        // We just ensure isLoading is false.
+        if (
+          action.payload.fromCache &&
+          action.payload.backgroundRefreshInitiated
+        ) {
+          state.isLoading = false;
+          state.isSuccess = true; // Indicate that cached data was successfully returned
+          // state.backgroundRefreshingRecent might be true if the background thunk started
+          return; // No further processing for main state here
+        }
+
+        // If data was fetched directly (not from cache, or cache was invalid/bypassed)
         state.isLoading = false;
         state.isSuccess = true;
-        state.tasks = action.payload.tasks;
+
+        const { tasks: newTasks, timestamp } = action.payload;
+        const smartRefresh =
+          action.meta.arg.smartRefresh !== undefined
+            ? action.meta.arg.smartRefresh
+            : true;
+
+        if (smartRefresh) {
+          if (hasCollectionChanged(state.tasks, newTasks, '_id')) {
+            console.log(
+              'RecentTasks: Smart refresh detected changes, updating tasks.'
+            );
+            state.tasks = newTasks;
+            state.lastFetched = timestamp;
+          } else {
+            console.log(
+              'RecentTasks: Smart refresh detected no changes, preserving existing tasks.'
+            );
+            // Even if no data change, update timestamp if this was a direct fetch,
+            // as it signifies a successful refresh attempt.
+            state.lastFetched = timestamp;
+          }
+        } else {
+          // If not smart refreshing, always update
+          console.log('RecentTasks: Not a smart refresh, updating tasks.');
+          state.tasks = newTasks;
+          state.lastFetched = timestamp;
+        }
+        // Ensure background flag is reset if it was somehow set by this thunk's pending state
+        state.backgroundRefreshingRecent = false;
       })
       .addCase(getRecentTasks.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload;
+        state.message =
+          action.payload?.message ||
+          action.payload ||
+          'Failed to fetch recent tasks';
+        state.backgroundRefreshingRecent = false; // Ensure reset on failure
+      })
+
+      // Fetch Recent Tasks In Background Cases
+      .addCase(fetchRecentTasksInBackground.pending, (state) => {
+        state.backgroundRefreshingRecent = true;
+        // DO NOT set state.isLoading = true for background fetches
+        state.isError = false; // Clear previous errors for this specific background operation
+        state.message = '';
+      })
+      .addCase(fetchRecentTasksInBackground.fulfilled, (state, action) => {
+        state.backgroundRefreshingRecent = false;
+        // No change to global isLoading or isSuccess for background updates
+
+        const { tasks: newTasks, timestamp, smartRefresh } = action.payload;
+
+        if (smartRefresh) {
+          if (hasCollectionChanged(state.tasks, newTasks, '_id')) {
+            console.log(
+              'RecentTasks (Background): Smart refresh detected changes, updating tasks.'
+            );
+            state.tasks = newTasks;
+            state.lastFetched = timestamp;
+          } else {
+            console.log(
+              'RecentTasks (Background): Smart refresh detected no changes, preserving existing tasks.'
+            );
+            // Update timestamp even if no data change to reflect the background refresh time
+            state.lastFetched = timestamp;
+          }
+        } else {
+          console.log(
+            'RecentTasks (Background): Not a smart refresh, updating tasks.'
+          );
+          state.tasks = newTasks;
+          state.lastFetched = timestamp;
+        }
+      })
+      .addCase(fetchRecentTasksInBackground.rejected, (state, action) => {
+        state.backgroundRefreshingRecent = false;
+        // For background errors, we typically don't set the global isError flag
+        // as it might be too disruptive. Log it instead.
+        console.error(
+          'Error during background fetch of recent tasks:',
+          action.payload?.message || action.payload
+        );
+        // Optionally, set a specific error message for background failures if needed for UI
+        // state.message = `Background refresh failed: ${action.payload?.message || action.payload}`;
       });
   },
 });
+
+/**
+ * Fetch Recent Tasks In Background Async Thunk
+ *
+ * This thunk is dispatched by getRecentTasks when a background refresh is needed.
+ * It fetches the latest recent tasks without setting the main isLoading flag,
+ * and can use smartRefresh to avoid unnecessary state updates.
+ *
+ * @param {Object} options - Options object.
+ * @param {boolean} options.smartRefresh - Whether to perform a smart comparison before updating state.
+ * @returns {Promise<Object>} - Promise with fetched tasks, timestamp, and smartRefresh flag.
+ */
+export const fetchRecentTasksInBackground = createAsyncThunk(
+  'tasks/fetchRecentInBackground',
+  async ({ smartRefresh = true } = {}, thunkAPI) => {
+    const now = Date.now();
+    console.log('RecentTasks (Background): Fetching fresh data.');
+    try {
+      const projectsResponse = await api.get('/projects');
+      const projects = projectsResponse.data.data;
+
+      if (!projects || projects.length === 0) {
+        return {
+          tasks: [],
+          timestamp: now,
+          smartRefresh,
+          fromBackground: true,
+        };
+      }
+
+      const recentProjects = projects.slice(0, 5);
+      const taskPromises = recentProjects.map((project) =>
+        api
+          .get(`/projects/${project._id}/tasks?limit=10&sortBy=createdAt:desc`)
+          .then((response) =>
+            response.data.data.map((task) => ({
+              ...task,
+              projectName: project.name,
+            }))
+          )
+          .catch((err) => {
+            console.error(
+              `Background fetch tasks for project ${project._id} failed:`,
+              err
+            );
+            return [];
+          })
+      );
+
+      const projectTasks = await Promise.all(taskPromises);
+      let allTasks = projectTasks.flat();
+      allTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      allTasks = allTasks.slice(0, 20);
+
+      return {
+        tasks: allTasks,
+        timestamp: now,
+        smartRefresh,
+        fromBackground: true,
+      };
+    } catch (error) {
+      const message =
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
+        error.message ||
+        error.toString();
+      console.error('RecentTasks (Background) fetch failed:', message);
+      // For background errors, we might not want to blast the main error state
+      // but rather just log it or handle it more subtly.
+      // However, for consistency with other thunks, we'll use rejectWithValue.
+      return thunkAPI.rejectWithValue({ message, fromBackground: true });
+    }
+  }
+);
 
 // Export the reducer's actions
 export const { resetTaskStatus, setTaskProjectContext, clearTasks } =

@@ -4,6 +4,9 @@
  * This hook leverages our generic useDataFetching hook to provide a simple interface
  * for components that need to load and display projects. It prevents redundant API
  * calls by using the caching system in Redux.
+ *
+ * Enhanced with smart data comparison and background refresh capabilities for
+ * optimal UI performance and reduced unnecessary updates.
  */
 
 import { useMemo } from 'react';
@@ -17,6 +20,8 @@ import useDataFetching from './useDataFetching';
  * @param {Object} options - Additional options
  * @param {number} options.cacheTimeout - How long to consider cached data fresh (ms)
  * @param {boolean} options.skipInitialFetch - Whether to skip the initial fetch
+ * @param {boolean} options.backgroundRefresh - Whether to refresh in background while showing cached data
+ * @param {boolean} options.smartRefresh - Whether to apply smart comparison for state updates
  * @param {Function} options.selector - Custom selector function to get specific data (e.g., for a single project)
  * @param {string} options.actionCreator - Which action to use ('getProjects' or 'getProject')
  * @param {any} options.actionParams - Parameters to pass to the action creator (e.g., projectId)
@@ -26,6 +31,8 @@ const useProjects = (options = {}) => {
   const {
     cacheTimeout,
     skipInitialFetch,
+    backgroundRefresh = true,
+    smartRefresh = true,
     selector: customSelector,
     actionCreator = 'getProjects',
     actionParams = {},
@@ -46,7 +53,6 @@ const useProjects = (options = {}) => {
     }
     return (state) => state.projects.projects;
   }, [customSelector]);
-
   // Selector for last fetched timestamp - different for single project vs all projects
   const selectLastFetched = useMemo(() => {
     if (actionCreator === 'getProject' && actionParams) {
@@ -56,7 +62,30 @@ const useProjects = (options = {}) => {
           typeof actionParams === 'string'
             ? actionParams
             : actionParams.projectId;
-        return state.projects.projectCache?.[projectId]?.lastFetched;
+
+        // Check if this project exists in cache
+        const cachedTimestamp =
+          state.projects.projectCache?.[projectId]?.lastFetched;
+
+        // Also check if the current project matches the requested ID
+        const isCurrent = state.projects.currentProject?._id === projectId;
+
+        // Debug information
+        console.log(`Project ${projectId} cache check:`, {
+          cachedTimestamp: cachedTimestamp
+            ? new Date(cachedTimestamp).toLocaleTimeString()
+            : 'none',
+          isCurrent,
+          currentProjectId: state.projects.currentProject?._id,
+        });
+
+        // If there's no cache entry or the current project doesn't match,
+        // return null to force a refresh
+        if (!cachedTimestamp || !isCurrent) {
+          return null;
+        }
+
+        return cachedTimestamp;
       };
     }
     // For all projects, use the global lastFetched timestamp
@@ -72,39 +101,58 @@ const useProjects = (options = {}) => {
     () => (state) => state.projects.isError ? state.projects.message : null,
     []
   );
-
   // Construct fetch parameters based on the action and options
   const fetchParams = useMemo(() => {
+    // Make sure we include the smartRefresh and backgroundRefresh options
+    const enhancedParams = {
+      ...(actionCreator === 'getProjects' ? actionParams : {}),
+      smartRefresh,
+      backgroundRefresh,
+    };
+
     if (actionCreator === 'getProject') {
       // For getProject, we need to ensure we pass the project ID in the correct format
       if (typeof actionParams === 'string') {
         // If it's a string ID, convert it to the object format expected by getProject
-        return { projectId: actionParams };
+        return {
+          projectId: actionParams,
+          smartRefresh,
+          backgroundRefresh,
+        };
       } else if (actionParams && actionParams.projectId) {
-        // If it's already an object with projectId, use it as is
-        return actionParams;
+        // If it's already an object with projectId, merge with our enhancement options
+        return {
+          ...actionParams,
+          smartRefresh,
+          backgroundRefresh,
+        };
       } else {
-        // If it's empty or invalid, return an empty object (will be caught by the thunk)
-        return {};
+        // If it's empty or invalid, return an object with just our enhancement options
+        return {
+          smartRefresh,
+          backgroundRefresh,
+        };
       }
     }
-    // For getProjects, we pass any options (forceRefresh, cacheTimeout)
-    return actionParams;
-  }, [actionCreator, actionParams]);
-
+    // For getProjects, we pass any options with our enhancements
+    return enhancedParams;
+  }, [actionCreator, actionParams, smartRefresh, backgroundRefresh]);
   // Use our generic hook with project-specific selectors
-  const { data, isLoading, error, refetch } = useDataFetching({
-    fetchAction,
-    selectData,
-    selectLastFetched,
-    selectIsLoading,
-    selectError,
-    dependencies: [], // Only re-fetch on explicit refetch or cache timeout
-    fetchParams,
-    cacheTimeout,
-    skipInitialFetch,
-  });
-
+  const { data, isLoading, error, refetch, backgroundRefreshState } =
+    useDataFetching({
+      fetchAction,
+      selectData,
+      selectLastFetched,
+      selectIsLoading,
+      selectError,
+      dependencies: [], // Only re-fetch on explicit refetch or cache timeout
+      fetchParams,
+      cacheTimeout,
+      skipInitialFetch,
+      backgroundRefresh,
+      smartRefresh,
+      idField: '_id', // Use _id for comparing project objects
+    });
   // Return appropriate property names based on what's being fetched
   if (actionCreator === 'getProject') {
     return {
@@ -112,6 +160,7 @@ const useProjects = (options = {}) => {
       isLoading,
       error,
       refetch,
+      backgroundRefreshState, // Expose background refresh state to components
     };
   }
 
@@ -120,6 +169,7 @@ const useProjects = (options = {}) => {
     isLoading,
     error,
     refetchProjects: refetch,
+    backgroundRefreshState, // Expose background refresh state to components
   };
 };
 

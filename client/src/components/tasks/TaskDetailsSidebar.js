@@ -146,9 +146,7 @@ const TaskDetailsSidebar = ({
       alert('Error: A project is required to update this task.');
       setIsCompletingTask(false); // Reset completing state
       return;
-    }
-
-    // Create updates object with just the status change
+    } // Create updates object with just the status change
     const updates = {
       ...formData, // Keep all existing data
       status: 'Completed', // Only change the status
@@ -157,6 +155,24 @@ const TaskDetailsSidebar = ({
         : null,
     };
 
+    // Optimistically update the UI immediately for better UX
+    setIsCompletingTask(false); // Reset completing state
+    if (onClose) onClose(); // Auto-close the sidebar immediately
+
+    // Keep a reference to the original task for rollback if needed
+    const originalTask = task;
+
+    // First dispatch an optimistic update for immediate UI response
+    dispatch(
+      updateTask({
+        projectId: taskProjectId,
+        taskId,
+        updates: updates,
+        optimistic: true, // This will apply the update immediately in the reducer
+      })
+    );
+
+    // Then perform the actual API update
     dispatch(
       updateTask({
         projectId: taskProjectId,
@@ -166,17 +182,17 @@ const TaskDetailsSidebar = ({
     )
       .unwrap()
       .then((updatedTaskData) => {
-        setIsCompletingTask(false); // Reset completing state
+        // Task was already removed from Redux store in the reducer
         if (onUpdate) onUpdate(updatedTaskData);
-        // Auto-close the sidebar after successful completion
-        onClose();
       })
       .catch((error) => {
         // Show error message with more details if available
         const errorMsg = error ? error.toString() : 'Unknown error';
         alert(`Failed to complete task: ${errorMsg}`);
         console.error('Task completion error:', error);
-        setIsCompletingTask(false); // Reset completing state
+
+        // If optimistic update was used but failed, we don't need to restore the state
+        // The updateTask.rejected case in the reducer will handle it
       });
   };
 
@@ -196,15 +212,35 @@ const TaskDetailsSidebar = ({
     };
 
     // Use the current projectId or the form's project value
-    const taskProjectId = projectId || formData.project;
-
-    // Make sure we have a valid project ID
+    const taskProjectId = projectId || formData.project; // Make sure we have a valid project ID
     if (!taskProjectId) {
       alert('Error: A project is required to update this task.');
       setIsSaving(false); // Reset saving state
       return;
     }
 
+    // Keep reference to original task for potential rollback
+    const originalTask = task;
+
+    // Optimistically close the sidebar immediately (better UX)
+    setIsEditing(false);
+    setIsSaving(false); // Reset saving state
+    setHasChanges(false); // Reset changes flag
+
+    // For better UX, close the sidebar immediately unless an error occurs
+    if (onClose) onClose();
+
+    // First dispatch an optimistic update for immediate UI response
+    dispatch(
+      updateTask({
+        projectId: taskProjectId,
+        taskId,
+        updates: updatedTask,
+        optimistic: true, // Apply changes immediately in UI
+      })
+    );
+
+    // Then perform the actual API update
     dispatch(
       updateTask({
         projectId: taskProjectId,
@@ -214,19 +250,18 @@ const TaskDetailsSidebar = ({
     )
       .unwrap()
       .then((updatedTaskData) => {
-        setIsEditing(false);
-        setIsSaving(false); // Reset saving state
-        setHasChanges(false); // Reset changes flag
+        // Task was already updated in Redux store by the action
+        // Just call onUpdate callback if provided
         if (onUpdate) onUpdate(updatedTaskData);
-        // Auto-close the sidebar after successful update
-        onClose();
       })
       .catch((error) => {
         // Show error message with more details if available
         const errorMsg = error ? error.toString() : 'Unknown error';
         alert(`Failed to update task: ${errorMsg}`);
         console.error('Task update error:', error);
-        setIsSaving(false); // Reset saving state
+
+        // If optimistic update was used but failed, we don't need to restore the state
+        // The updateTask.rejected case in the reducer will handle it
       });
   };
 

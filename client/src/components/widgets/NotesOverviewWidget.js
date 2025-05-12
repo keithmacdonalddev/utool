@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import Spinner from '../common/Spinner';
 import useNotes from '../../hooks/useNotes';
 
@@ -16,6 +16,8 @@ const NotesOverviewWidget = () => {
   const { notes, isLoading, error, refetchNotes } = useNotes({
     cacheTimeout: 2 * 60 * 1000, // 2 minutes cache for notes
     queryParams: { sort: '-updatedAt', limit: 5 },
+    backgroundRefresh: true, // Enable background refresh for better UX
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
 
   // Get the 5 most recent notes
@@ -92,4 +94,4 @@ const NotesOverviewWidget = () => {
   );
 };
 
-export default NotesOverviewWidget;
+export default memo(NotesOverviewWidget);

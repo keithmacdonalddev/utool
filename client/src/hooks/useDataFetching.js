@@ -14,6 +14,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { hasCollectionChanged } from '../utils/objectUtils';
 
 /**
  * Default cache timeout of 5 minutes in milliseconds
@@ -90,6 +91,9 @@ const useDataFetching = ({
   cacheTimeout = DEFAULT_CACHE_TIMEOUT,
   skipInitialFetch = false,
   priority = false,
+  backgroundRefresh = false,
+  smartRefresh = true, // New parameter to control smart data comparison
+  idField = '_id', // ID field to use for comparison
 }) => {
   const dispatch = useDispatch();
 
@@ -153,9 +157,28 @@ const useDataFetching = ({
    *
    * @param {boolean} forceRefresh - Whether to bypass cache and force a refresh
    * @returns {Promise} The dispatch promise for chaining
-   */
-  const fetchData = useCallback(
+   */ const fetchData = useCallback(
     (forceRefresh = false) => {
+      // If backgroundRefresh is enabled and we have data, start a refresh in the background
+      // but immediately return existing data
+      if (backgroundRefresh && data && data.length > 0 && !forceRefresh) {
+        // Still trigger the refresh in the background if needed
+        if (isCacheStale()) {
+          setTimeout(() => {
+            dispatch(
+              fetchAction({
+                ...fetchParams,
+                forceRefresh: false,
+                cacheTimeout,
+              })
+            );
+          }, 0);
+        }
+
+        // Immediately return existing data without waiting for the refresh
+        return Promise.resolve(data);
+      }
+
       // Check if cache is stale or force refresh is requested
       if (forceRefresh || isCacheStale()) {
         // Check for existing request - return its promise if found
@@ -183,14 +206,15 @@ const useDataFetching = ({
 
         console.log(
           `Fetching fresh data for ${actionType} - cache is stale or forced refresh`
-        );
-
-        // Create and store promise
+        ); // Create and store promise
         const fetchPromise = dispatch(
           fetchAction({
             ...fetchParams,
             forceRefresh,
             cacheTimeout,
+            smartRefresh, // Pass the smartRefresh flag to the action
+            compareWithExisting: smartRefresh ? data : null, // Only send data for comparison if smartRefresh is enabled
+            idField, // Pass the ID field for comparison
           })
         );
 
@@ -215,6 +239,18 @@ const useDataFetching = ({
         console.log(
           `Using cached data for ${actionType} - cache is still fresh`
         );
+
+        // Check if we're fetching a project and the data is null/undefined
+        // In this case, we'll force a refresh anyway despite the cache being fresh
+        const isProjectFetch = actionType.includes('projects/getOne');
+        if (isProjectFetch && (!data || !data._id)) {
+          console.log(
+            `Cache hit, but project data is invalid or missing. Forcing refresh.`
+          );
+          // Return a fresh fetch
+          return fetchData(true);
+        }
+
         // Return resolved promise for consistent interface
         return Promise.resolve(data);
       }

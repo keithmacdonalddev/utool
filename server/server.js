@@ -46,6 +46,139 @@ import helmet from 'helmet'; // Security middleware for HTTP headers
 import rateLimit from 'express-rate-limit'; // API rate limiting
 dotenv.config();
 
+/**
+ * Validates required environment variables to ensure proper server configuration.
+ * This function checks for the presence of critical variables and exits if any are missing.
+ * It also warns about recommended variables that aren't set.
+ *
+ * @returns {void} - Exits process with code 1 if critical variables are missing
+ */
+function validateEnvironmentVariables(logger) {
+  // Critical variables that must be defined for the application to function
+  const criticalVariables = [
+    { name: 'MONGO_URI', reason: 'Required for database connection' },
+    { name: 'JWT_SECRET', reason: 'Required for authentication functionality' },
+  ];
+
+  // Recommended variables with default values or optional functionality
+  const recommendedVariables = [
+    {
+      name: 'PORT',
+      reason: 'Server will use default port 5000 if not specified',
+      defaultValue: '5000',
+    },
+    {
+      name: 'FRONTEND_URL',
+      reason: 'Required for proper CORS configuration',
+      defaultValue: 'http://localhost:3000',
+    },
+    {
+      name: 'NODE_ENV',
+      reason: 'Will default to development if not specified',
+      defaultValue: 'development',
+    },
+    {
+      name: 'JWT_EXPIRES_IN',
+      reason: 'Token expiration will use default if not specified',
+      defaultValue: '30d',
+    },
+    {
+      name: 'JWT_COOKIE_EXPIRE_DAYS',
+      reason: 'Cookie expiration will use default if not specified',
+      defaultValue: '30',
+    },
+    {
+      name: 'EMAIL_HOST',
+      reason: 'Email functionality will be disabled if not configured',
+    },
+    {
+      name: 'EMAIL_PORT',
+      reason: 'Email functionality will be disabled if not configured',
+    },
+    {
+      name: 'EMAIL_USER',
+      reason: 'Email functionality will be disabled if not configured',
+    },
+    {
+      name: 'EMAIL_PASS',
+      reason: 'Email functionality will be disabled if not configured',
+    },
+    {
+      name: 'EMAIL_FROM',
+      reason: 'Email functionality will use default sender if not configured',
+    },
+    {
+      name: 'OPENWEATHER_API_KEY_PRIMARY',
+      reason: 'Weather functionality will be disabled if not configured',
+    },
+  ];
+
+  // Check critical variables
+  let missingCriticalVars = [];
+
+  criticalVariables.forEach((variable) => {
+    if (!process.env[variable.name]) {
+      missingCriticalVars.push(`${variable.name}: ${variable.reason}`);
+    }
+  });
+
+  // Exit if any critical variables are missing
+  if (missingCriticalVars.length > 0) {
+    logger.error('╔════════════════════════════════════════════════════╗');
+    logger.error('║ FATAL ERROR: MISSING CRITICAL ENVIRONMENT VARIABLES ║');
+    logger.error('╚════════════════════════════════════════════════════╝');
+
+    missingCriticalVars.forEach((variable) => {
+      logger.error(`• ${variable}`);
+    });
+
+    logger.error(
+      '\nPlease set these variables in your .env file and restart the server.'
+    );
+    logger.error(
+      'See .env.example for a template with all required variables.\n'
+    );
+
+    // Exit with error code
+    process.exit(1);
+  }
+
+  // Check recommended variables
+  let missingRecommendedVars = [];
+
+  recommendedVariables.forEach((variable) => {
+    if (!process.env[variable.name]) {
+      const message = variable.defaultValue
+        ? `${variable.name}: ${variable.reason} (Will use default: ${variable.defaultValue})`
+        : `${variable.name}: ${variable.reason}`;
+      missingRecommendedVars.push(message);
+    }
+  });
+
+  // Warn about missing recommended variables
+  if (missingRecommendedVars.length > 0) {
+    logger.warn('╔═══════════════════════════════════════════════════╗');
+    logger.warn('║ WARNING: MISSING RECOMMENDED ENVIRONMENT VARIABLES ║');
+    logger.warn('╚═══════════════════════════════════════════════════╝');
+
+    missingRecommendedVars.forEach((variable) => {
+      logger.warn(`• ${variable}`);
+    });
+
+    logger.warn('\nConsider setting these variables for full functionality.');
+    logger.warn(
+      'See .env.example for a template with all recommended variables.\n'
+    );
+  }
+
+  // Log successful validation
+  logger.info('✓ Environment variables validated successfully');
+}
+
+// Validate environment variables before proceeding
+// This must be called after logger import
+validateEnvironmentVariables(logger);
+
 // Regular imports continue...
 import { logger } from './utils/logger.js';
 import { isShuttingDown, setShuttingDown } from './utils/serverState.js';
@@ -420,11 +553,8 @@ app.use((err, req, res, next) => {
 // Connect to MongoDB with better error handling and logging
 // This is an async function to use try/catch with await
 async function connectToDatabase() {
-  if (!MONGO_URI) {
-    logger.error('FATAL ERROR: MONGO_URI is not defined.');
-    process.exit(1); // Exit with error code if no connection string
-  } // Log connection attempt - only show first part of URI for security
-
+  // MONGO_URI is already validated by validateEnvironmentVariables
+  // Log connection attempt - only show first part of URI for security
   logger.info(
     `Attempting to connect to MongoDB at ${MONGO_URI.substring(
       0,

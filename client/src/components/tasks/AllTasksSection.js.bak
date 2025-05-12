@@ -106,6 +106,22 @@ const AllTasksSection = ({
         // The reducer will handle reverting the optimistic update if needed
       });
   };
+  useEffect(() => {
+    setOptimisticTasks(filteredTasks);
+  }, [filteredTasks]);
+    dispatch(
+      updateTask({
+        projectId,
+        taskId,
+        updates: { priority: newPriority },
+      })
+    )
+      .unwrap()
+      .catch((error) => {
+        console.error('Failed to update task priority:', error);
+        // The reducer will handle reverting the optimistic update if needed
+      });
+  };
 
   // Determine if tasks exist at all, regardless of filter
   const hasTasks = tasks && tasks.length > 0;

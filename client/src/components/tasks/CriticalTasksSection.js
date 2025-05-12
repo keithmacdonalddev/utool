@@ -21,6 +21,7 @@ import { isTaskOverdue, isTaskDueToday } from '../../utils/taskUtils'; // Use th
  * @param {string|null} props.tasksMessage - Error message for tasks.
  * @param {Function} props.onTaskClick - Callback when a task row is clicked.
  * @param {Function} props.onAddTaskClick - Callback to trigger adding a new task.
+ * @param {Object} props.backgroundRefreshState - Background refresh state information.
  */
 const CriticalTasksSection = ({
   criticalTasks,
@@ -29,19 +30,31 @@ const CriticalTasksSection = ({
   tasksMessage,
   onTaskClick,
   onAddTaskClick,
+  backgroundRefreshState,
 }) => {
   // Calculate count for display message
   const criticalTaskCount = criticalTasks ? criticalTasks.length : 0;
-
   return (
-    <div className="bg-card rounded-lg p-4 shadow-md">
+    <div className="bg-card rounded-lg p-4 shadow-md relative">
       {/* Section Header and Add Task Button */}
       <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-xl font-semibold text-primary">Critical Tasks</h2>
-          <p className="text-sm text-muted-foreground">
-            Tasks that are overdue or due today ({criticalTaskCount})
-          </p>
+        <div className="flex items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-primary">
+              Critical Tasks
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Tasks that are overdue or due today ({criticalTaskCount})
+            </p>
+          </div>
+
+          {/* Background refresh indicator */}
+          {backgroundRefreshState?.backgroundRefreshing && (
+            <div className="ml-2 flex items-center text-xs text-muted-foreground">
+              <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse mr-1"></div>
+              <span className="hidden sm:inline">Refreshing...</span>
+            </div>
+          )}
         </div>
         <button
           onClick={onAddTaskClick} // Use the callback prop

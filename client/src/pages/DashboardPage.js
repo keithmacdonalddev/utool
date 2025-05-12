@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import QuickTaskWidget from '../components/widgets/QuickTaskWidget';
 import NotesOverviewWidget from '../components/widgets/NotesOverviewWidget';
 import KbQuickAccessWidget from '../components/widgets/KbQuickAccessWidget';
@@ -37,4 +37,4 @@ const DashboardPage = () => {
   );
 };
 
-export default DashboardPage;
+export default memo(DashboardPage);

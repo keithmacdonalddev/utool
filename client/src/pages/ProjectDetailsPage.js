@@ -8,12 +8,13 @@
 // 5. Custom Hooks: Reusing logic across components (useProjects, useProjectTasks, useFriends)
 // 6. Improved Code Readability: Delegated rendering of sections to child components
 
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, lazy, Suspense, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   updateProject, // Keep updateProject for adding members via handler
   resetProjectStatus,
+  getProject,
 } from '../features/projects/projectSlice';
 import {
   resetTaskStatus,
@@ -86,40 +87,47 @@ const ProjectDetailsPage = () => {
    * - useProjects: Gets project data with caching
    * - useProjectTasks: Gets tasks for the project with caching
    * - useFriends: Gets friends data for member management
-   */
-  const {
+   */ const {
     projects,
     isLoading: projectsLoading,
-    error: projectsError,
+    error: projectsErrorHook, // Renamed to avoid conflict with projectError from useProjects single fetch
     refetchProjects,
+    backgroundRefreshState: projectsListBackgroundState,
   } = useProjects({
     skipInitialFetch: true, // We'll fetch the individual project instead
-  });
-
-  // Get the current project data with intelligent caching
+    backgroundRefresh: true, // Enable background refresh for the projects list
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
+  }); // Get the current project data with intelligent caching
   // Note: Using the enhanced useProjects hook specifically for single project
   const {
     data: project,
     isLoading,
-    error: projectError,
+    error: projectError, // This is the primary error state for the current project
     refetch: refetchProject,
+    backgroundRefreshState: projectBackgroundState,
   } = useProjects({
     selector: (state) => state.projects.currentProject,
     actionCreator: 'getProject',
-    actionParams: id,
+    actionParams: {
+      projectId: id,
+      forceRefresh: false, // Use cached data for initial load if available
+    },
     cacheTimeout: 5 * 60 * 1000, // 5 minutes cache (project details change infrequently)
+    backgroundRefresh: true, // Enable background refresh for seamless updates
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
-
   // Get tasks for this project with intelligent caching
   const {
     tasks,
     isLoading: tasksLoading,
     error: tasksError,
     refetchTasks,
+    backgroundRefreshState: tasksBackgroundRefreshState,
   } = useProjectTasks(id, {
     cacheTimeout: 2 * 60 * 1000, // 2 minutes cache (tasks change more frequently)
+    backgroundRefresh: true, // Enable background refresh for smoother UX
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
-
   const { showNotification } = useNotifications();
 
   /**
@@ -131,6 +139,101 @@ const ProjectDetailsPage = () => {
     isLoading: friendsLoading,
     error: friendsError,
   } = useFriends();
+
+  // Check if the project exists in Redux store
+  const projectInReduxStore = useSelector((state) => {
+    // Check if the current project matches the requested ID
+    const currentProjectMatches = state.projects.currentProject?._id === id;
+    // Check if the project exists in the projects list
+    const existsInProjectsList = state.projects.projects.some(
+      (p) => p._id === id
+    );
+
+    // Debug info
+    console.log(`Project ${id} cache status check:`, {
+      currentProjectMatches,
+      existsInProjectsList,
+      currentProjectId: state.projects.currentProject?._id,
+      projectsCount: state.projects.projects.length,
+    });
+
+    return currentProjectMatches || existsInProjectsList;
+  });
+
+  // const effectFetchAttemptedRef = useRef(false); // No longer needed
+
+  // Enhanced data loading strategy with smart caching
+  useEffect(() => {
+    if (!id) {
+      // effectFetchAttemptedRef.current = false; // No longer needed
+      return;
+    }
+
+    // if (project || projectError) { // No longer needed here as the problematic block is removed
+    //   effectFetchAttemptedRef.current = false;
+    // }
+
+    // Cache validation state for background refresh
+    const lastCheckedKey = `project_${id}_last_checked`;
+    const lastCheckedTime = sessionStorage.getItem(lastCheckedKey);
+    const now = Date.now();
+    const recentlyValidated =
+      lastCheckedTime && now - parseInt(lastCheckedTime) < 30000; // 30 second throttle
+
+    // Case 1: Project data IS loaded AND we are not currently loading AND no error
+    // This is primarily for background validation.
+    if (project && !isLoading && !projectError) {
+      if (recentlyValidated) {
+        console.log(
+          `Skipping background validation for project ${id} - validated recently`
+        );
+        return; // Skip background validation if done recently
+      }
+      // Schedule background validation
+      console.log(`Scheduling background validation for project ${id}`);
+      const timeoutId = setTimeout(() => {
+        console.log(`Running background validation for project ${id}`);
+        refetchProject(false); // Background refresh
+        sessionStorage.setItem(lastCheckedKey, now.toString());
+      }, 300); // Existing 300ms delay, consider increasing if too frequent
+      return () => clearTimeout(timeoutId);
+    }
+    // Case 2: (REMOVED) No project data, not currently loading, AND no project error reported by useProjects yet
+    // The useProjects hook is now solely responsible for the initial fetch.
+    // else if (!project && !isLoading && !projectError) {
+    //   if (!effectFetchAttemptedRef.current) {
+    //     console.log(
+    //       `ProjectDetailsPage effect: Project ${id} not loaded, no error from useProjects, and not loading. Attempting effect-driven fetch.`
+    //     );
+    //     const forceThisFetch = !projectInReduxStore;
+    //     dispatch(getProject({ projectId: id, forceRefresh: forceThisFetch }));
+    //     effectFetchAttemptedRef.current = true;
+    //   }
+    // }
+
+    // Optional: React to projectError (e.g., for additional logging or side effects beyond UI rendering)
+    if (projectError) {
+      console.error(
+        `ProjectDetailsPage useEffect: Encountered projectError for ${id}:`,
+        projectError
+      );
+      // Be cautious about dispatching or setting state here to avoid new loops.
+      // UI rendering for errors is handled in the return statement of the component.
+    }
+
+    // General cleanup when component unmounts or id changes
+    return () => {
+      dispatch(resetProjectStatus());
+    };
+  }, [
+    id,
+    project,
+    isLoading,
+    projectError, // Keep projectError for logging and conditional logic
+    // projectInReduxStore, // Removed as it's no longer used in this simplified effect
+    dispatch,
+    refetchProject,
+  ]);
 
   /**
    * Local Component State:
@@ -160,10 +263,33 @@ const ProjectDetailsPage = () => {
       showNotification('User is already a member.', 'warning');
       return;
     }
-
     const updatedMembers = [...currentMemberIds, userId];
 
     try {
+      // First get the member details from friends list
+      const memberToAdd = friends.find((friend) => friend._id === userId);
+
+      if (memberToAdd) {
+        // Create an optimistic update version of the project
+        const optimisticProject = {
+          ...project,
+          members: [
+            ...(project.members || []),
+            memberToAdd, // Add the complete member object
+          ],
+        };
+
+        // Apply optimistic update immediately for better UX
+        await dispatch(
+          updateProject({
+            projectId: id,
+            projectData: optimisticProject,
+            optimistic: true,
+          })
+        ).unwrap();
+      }
+
+      // Now actually send the update to the server
       await dispatch(
         updateProject({
           projectId: id,
@@ -172,8 +298,8 @@ const ProjectDetailsPage = () => {
       ).unwrap();
       showNotification('Member added successfully!', 'success');
 
-      // Force refresh the project data after updating members
-      refetchProject(true);
+      // We don't need to force refresh since we have optimistic updates
+      // and background refresh will catch any server-side changes
     } catch (error) {
       console.error('Failed to add member:', error);
       showNotification(
@@ -251,13 +377,15 @@ const ProjectDetailsPage = () => {
           updates: updatedTask,
         })
       ).unwrap();
-
       if (!isCompletingTask) {
         showNotification('Task updated successfully', 'success');
       }
 
-      // Force refresh the tasks list after update
-      refetchTasks(true);
+      // Only force refresh for task completion (which causes archiving) or significant state changes
+      // Otherwise, rely on the Redux update which is already optimized
+      if (isCompletingTask || updatedTask.status !== 'Completed') {
+        refetchTasks(true);
+      }
     } catch (error) {
       console.error('Error during task update:', error);
       // Handle expected archiving error on completion
@@ -352,7 +480,7 @@ const ProjectDetailsPage = () => {
    * These are top-level states, so this logic stays here.
    */
 
-  // Overall Loading state for the page
+  // Overall Loading state for the page (isLoading is from the single project useProjects hook)
   if (isLoading || tasksLoading || friendsLoading)
     return (
       <div className="container mx-auto p-4 flex items-center justify-center h-screen">
@@ -363,7 +491,7 @@ const ProjectDetailsPage = () => {
       </div>
     );
 
-  // Overall Error state for the project fetch
+  // Overall Error state for the project fetch (projectError is from the single project useProjects hook)
   if (projectError) {
     return (
       <div className="container mx-auto p-4 flex items-center justify-center h-screen">
@@ -375,23 +503,48 @@ const ProjectDetailsPage = () => {
         </div>
       </div>
     );
-  }
-
-  // Project Not Found state
-  if (!project) {
+  } // Project Not Found state (and no error reported by useProjects yet, and not loading)
+  if (!project && !isLoading && !projectError) {
     return (
       <div className="container mx-auto p-4 flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="text-foreground text-lg">
             Project not found or you don't have permission to view it.
           </div>
-          <Link to="/projects" className="mt-4 text-primary hover:underline">
-            Back to projects
-          </Link>
+          <div className="mt-4 flex justify-center space-x-4">
+            <Link to="/projects" className="text-primary hover:underline">
+              Back to projects
+            </Link>
+            <button
+              onClick={() => {
+                // Force refresh the project data from the API
+                console.log('Forcing fresh project fetch for ID:', id);
+                dispatch(getProject({ projectId: id, forceRefresh: true }));
+                showNotification('Refreshing project data...', 'info');
+              }}
+              className="text-accent-blue hover:underline cursor-pointer"
+            >
+              Retry Loading
+            </button>
+          </div>
+          {projectError && (
+            <div className="mt-4 p-3 bg-red-900/20 text-red-400 rounded-md max-w-md mx-auto text-sm">
+              Error details: {projectError}
+            </div>
+          )}
+          {/* Show cache status for debugging */}
+          <div className="mt-4 text-xs text-gray-500">
+            Cache Status:{' '}
+            {projectInReduxStore
+              ? 'Project exists in Redux store but could not be loaded'
+              : 'Project not found in Redux store'}
+          </div>
         </div>
       </div>
     );
   }
+  // Remove the second useEffect that's causing problems
+  // We're already using the initialization parameters to force a refresh on initial load
 
   /**
    * MAIN PAGE STRUCTURE RENDERING:
@@ -458,14 +611,22 @@ const ProjectDetailsPage = () => {
           <h1 className="text-2xl font-bold text-[#F8FAFC]">{project.name}</h1>
         </div>
         <div className="flex items-center gap-2 mt-4 md:mt-0">
+          {' '}
           {/* Refresh Button */}
           <button
             onClick={() => {
-              refetchProject(true);
+              // Clear the "last checked" entry from session storage to force a fresh check
+              sessionStorage.removeItem(`project_${id}_last_checked`);
+              // Use direct dispatch for the most reliable refresh
+              dispatch(getProject({ projectId: id, forceRefresh: true }));
               refetchTasks(true);
               showNotification('Refreshing project data...', 'info');
             }}
-            className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-dark-600"
+            className={`p-2 rounded-md ${
+              projectBackgroundState?.backgroundRefreshingSingle
+                ? 'text-blue-400 bg-blue-400 bg-opacity-10'
+                : 'text-gray-400 hover:text-white hover:bg-dark-600'
+            }`}
             title="Refresh Project Data"
             aria-label="Refresh project data"
           >
@@ -479,6 +640,11 @@ const ProjectDetailsPage = () => {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
+              className={
+                projectBackgroundState?.backgroundRefreshingSingle
+                  ? 'animate-spin'
+                  : ''
+              }
             >
               <path d="M21 2v6h-6"></path>
               <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
@@ -486,7 +652,6 @@ const ProjectDetailsPage = () => {
               <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
             </svg>
           </button>
-
           {/* Edit Project Button */}
           <Link
             to={`/projects/${id}/edit`}
@@ -512,12 +677,10 @@ const ProjectDetailsPage = () => {
               </p>
             </div>
           )}
-
           {/* Project Notes Component (already separate) */}
           <div className="bg-card rounded-lg p-4 shadow-md">
             <ProjectNotes projectId={id} />
-          </div>
-
+          </div>{' '}
           {/* Project Details Info Component - Replaces the large details block */}
           {/* Pass necessary data and the handler for adding members */}
           <ProjectDetailsInfo
@@ -526,6 +689,7 @@ const ProjectDetailsPage = () => {
             friendsLoading={friendsLoading}
             friendsError={friendsError}
             onAddMember={handleAddMember} // Pass the handler down
+            backgroundRefreshState={projectBackgroundState} // Pass background refresh state
           />
         </div>
 
@@ -534,13 +698,14 @@ const ProjectDetailsPage = () => {
           {' '}
           {/* Added space-y-6 for separation */}
           {/* Critical Tasks Section Component */}
-          {/* Pass the derived critical tasks data and relevant handlers */}
+          {/* Pass the derived critical tasks data and relevant handlers */}{' '}
           <CriticalTasksSection
             criticalTasks={criticalTasks}
             tasksLoading={tasksLoading}
             tasksError={tasksError}
             onTaskClick={handleTaskClick} // Pass the task click handler
             onAddTaskClick={handleShowTaskModal} // Pass the handler to show the modal
+            backgroundRefreshState={tasksBackgroundRefreshState} // Pass background refresh state
           />
           {/* All Tasks Section Component */}
           {/* Pass task data, derived filtered tasks, filters, and handlers */}
@@ -555,6 +720,7 @@ const ProjectDetailsPage = () => {
             onTagSelect={handleTagSelect} // Pass tag filter handlers
             onTagDeselect={handleTagDeselect}
             onClearAllTags={handleClearAllTags}
+            backgroundRefreshState={tasksBackgroundRefreshState} // Pass background refresh state
           />
         </div>
       </div>

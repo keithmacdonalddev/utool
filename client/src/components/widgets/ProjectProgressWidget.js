@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Link } from 'react-router-dom';
 import Spinner from '../common/Spinner';
 import useProjects from '../../hooks/useProjects';
@@ -16,6 +16,8 @@ const ProjectProgressWidget = () => {
   // Use our custom hook with caching instead of direct Redux dispatches
   const { projects, isLoading, error, refetchProjects } = useProjects({
     cacheTimeout: 5 * 60 * 1000, // 5 minutes cache for projects (change less frequently)
+    backgroundRefresh: true, // Enable background refresh for better UX
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
 
   // Sort projects by due date (closest first)
@@ -106,4 +108,4 @@ const ProjectProgressWidget = () => {
   );
 };
 
-export default ProjectProgressWidget;
+export default memo(ProjectProgressWidget);

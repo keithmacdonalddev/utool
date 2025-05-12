@@ -25,6 +25,8 @@ const useNotes = ({
   queryParams = {},
   cacheTimeout,
   skipInitialFetch = false,
+  backgroundRefresh = false,
+  smartRefresh = false,
 }) => {
   // Selectors for accessing notes state from Redux
   const selectNotes = (state) => state.notes.notes;
@@ -35,7 +37,6 @@ const useNotes = ({
 
   // Get the current filter from Redux if needed for dependency tracking
   const notesFilter = useSelector((state) => state.notes.filter);
-
   // Use the enhanced data fetching hook
   const {
     data: notes,
@@ -52,6 +53,9 @@ const useNotes = ({
     fetchParams: queryParams,
     cacheTimeout,
     skipInitialFetch,
+    backgroundRefresh,
+    smartRefresh,
+    idField: '_id', // Use _id for comparing note objects
   });
 
   return {

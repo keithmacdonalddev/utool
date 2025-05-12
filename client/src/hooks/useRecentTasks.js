@@ -17,10 +17,17 @@ import useDataFetching from './useDataFetching';
  * @param {Object} options - Additional options
  * @param {number} options.cacheTimeout - How long to consider cached data fresh (ms)
  * @param {boolean} options.skipInitialFetch - Whether to skip the initial fetch
+ * @param {boolean} options.backgroundRefresh - Whether to refresh in the background without blocking UI
+ * @param {boolean} options.smartRefresh - Whether to apply smart comparison to prevent unnecessary updates
  * @returns {Object} Object containing { tasks, isLoading, error, refetchTasks }
  */
 const useRecentTasks = (options = {}) => {
-  const { cacheTimeout, skipInitialFetch } = options;
+  const {
+    cacheTimeout,
+    skipInitialFetch,
+    backgroundRefresh = true,
+    smartRefresh = true,
+  } = options;
 
   // Selector functions for the useDataFetching hook
   const selectTasks = useMemo(() => (state) => state.tasks.tasks, []);
@@ -53,6 +60,9 @@ const useRecentTasks = (options = {}) => {
     fetchParams: {}, // No specific params needed for recent tasks
     cacheTimeout,
     skipInitialFetch,
+    backgroundRefresh,
+    smartRefresh,
+    idField: '_id', // Use _id as the identification field for comparison
   });
 
   return { tasks, isLoading, error, refetchTasks };

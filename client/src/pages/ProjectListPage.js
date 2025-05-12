@@ -23,16 +23,21 @@ const ProjectListPage = memo(() => {
     isLoading,
     error: projectsError,
     refetchProjects,
+    backgroundRefreshState,
   } = useProjects({
     cacheTimeout: 5 * 60 * 1000, // 5 minutes cache
+    backgroundRefresh: true, // Enable background refresh for better UX
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
-
   const {
     tasks,
     isLoading: tasksLoading,
     error: tasksError,
+    backgroundRefreshState: tasksBackgroundRefreshState,
   } = useRecentTasks({
     cacheTimeout: 3 * 60 * 1000, // 3 minutes cache for tasks (they change more frequently)
+    backgroundRefresh: true, // Enable background refresh for better UX
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
 
   // Add view mode state with localStorage persistence
@@ -45,40 +50,63 @@ const ProjectListPage = memo(() => {
     localStorage.setItem('projectViewMode', mode);
     setViewMode(mode);
   };
-
   /**
    * Calculates open and critical task counts for a specific project
+   * Shows loading indicators within the cells rather than a global message
    *
    * @param {string} projectId - The ID of the project
-   * @returns {Object} Object with open and critical task counts
+   * @returns {Object} Object with open and critical task counts and loading/refreshing states
    */
   const getTaskCountsForProject = (projectId) => {
-    if (!tasks || tasks.length === 0) {
-      return { open: 0, critical: 0 };
+    // If we're still loading and don't have tasks data yet, return loading state
+    if (tasksLoading && (!tasks || tasks.length === 0)) {
+      return {
+        open: null,
+        critical: null,
+        isLoading: true,
+        isRefreshing: false,
+      };
     }
 
-    // Filter tasks that belong to this project
-    const projectTasks = tasks.filter(
-      (task) =>
-        task.project === projectId ||
-        (task.project && task.project._id === projectId)
-    );
+    // Check if tasks are currently being refreshed in the background
+    const isRefreshing =
+      tasksBackgroundRefreshState?.backgroundRefreshing || false;
 
-    // Count open tasks (not completed)
-    const openTasks = projectTasks.filter(
-      (task) => task.status !== 'Completed'
-    );
+    // If we have tasks data, use it even if a refresh is happening in the background
+    if (tasks && tasks.length > 0) {
+      // Filter tasks that belong to this project
+      const projectTasks = tasks.filter(
+        (task) =>
+          task.project === projectId ||
+          (task.project && task.project._id === projectId)
+      );
 
-    // Count critical tasks (overdue or due today)
-    const criticalTasks = projectTasks.filter(
-      (task) =>
-        task.status !== 'Completed' &&
-        (isTaskOverdue(task) || isTaskDueToday(task))
-    );
+      // Count open tasks (not completed)
+      const openTasks = projectTasks.filter(
+        (task) => task.status !== 'Completed'
+      );
 
+      // Count critical tasks (overdue or due today)
+      const criticalTasks = projectTasks.filter(
+        (task) =>
+          task.status !== 'Completed' &&
+          (isTaskOverdue(task) || isTaskDueToday(task))
+      );
+
+      return {
+        open: openTasks.length,
+        critical: criticalTasks.length,
+        isLoading: false,
+        isRefreshing: isRefreshing,
+      };
+    }
+
+    // Fallback for when no data is available and not loading
     return {
-      open: openTasks.length,
-      critical: criticalTasks.length,
+      open: 0,
+      critical: 0,
+      isLoading: false,
+      isRefreshing: isRefreshing,
     };
   };
 
@@ -86,11 +114,11 @@ const ProjectListPage = memo(() => {
   const formatDate = (dateString) => {
     if (!dateString) return 'Not set';
     return new Date(dateString).toLocaleDateString();
-  };
-
-  // Render project as a list item
+  }; // Render project as a list item
   const renderListItem = (project) => {
-    const { open, critical } = getTaskCountsForProject(project._id);
+    const { open, critical, isLoading, isRefreshing } = getTaskCountsForProject(
+      project._id
+    );
 
     return (
       <Link
@@ -122,20 +150,59 @@ const ProjectListPage = memo(() => {
         <div className="flex mt-3 border-t border-dark-600 pt-3">
           <div className="flex items-center">
             <span className="text-sm font-medium text-[#C7C9D1]">
-              Open tasks: <span className="text-blue-400">{open}</span>
-              {critical > 0 && (
-                <span className="text-red-400 ml-1">({critical} Critical)</span>
+              {isLoading ? (
+                <span className="inline-flex items-center">
+                  <svg
+                    className="animate-spin h-4 w-4 text-blue-400 mr-1"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <span>Loading tasks...</span>{' '}
+                </span>
+              ) : (
+                <div className="flex items-center">
+                  <span>
+                    Open tasks: <span className="text-blue-400">{open}</span>
+                    {critical > 0 && (
+                      <span className="text-red-400 ml-1">
+                        ({critical} Critical)
+                      </span>
+                    )}
+                  </span>
+
+                  {/* Background refresh indicator */}
+                  {isRefreshing && (
+                    <div className="ml-2">
+                      <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
+                    </div>
+                  )}
+                </div>
               )}
             </span>
           </div>
         </div>
       </Link>
     );
-  };
-
-  // Render project as a table row
+  }; // Render project as a table row
   const renderTableItem = (project) => {
-    const { open, critical } = getTaskCountsForProject(project._id);
+    const { open, critical, isLoading, isRefreshing } = getTaskCountsForProject(
+      project._id
+    );
 
     return (
       <tr
@@ -150,9 +217,47 @@ const ProjectListPage = memo(() => {
           {project.status}
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-left">
-          <span className="font-medium text-blue-400">{open}</span>
-          {critical > 0 && (
-            <span className="font-medium text-red-400 ml-1">({critical})</span>
+          {isLoading ? (
+            <span className="inline-flex items-center">
+              <svg
+                className="animate-spin h-4 w-4 text-blue-400 mr-1"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            </span>
+          ) : (
+            <div className="flex items-center">
+              <div>
+                <span className="font-medium text-blue-400">{open}</span>
+                {critical > 0 && (
+                  <span className="font-medium text-red-400 ml-1">
+                    ({critical})
+                  </span>
+                )}
+              </div>
+
+              {/* Background refresh indicator */}
+              {isRefreshing && (
+                <div className="ml-2">
+                  <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse"></div>
+                </div>
+              )}
+            </div>
           )}
         </td>
         <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
@@ -174,10 +279,21 @@ const ProjectListPage = memo(() => {
       </tr>
     );
   };
-
   // Add a function to handle manual refresh when needed
   const handleManualRefresh = () => {
-    refetchProjects();
+    // If a background refresh is already in progress, don't trigger another
+    if (backgroundRefreshState?.backgroundRefreshing) {
+      console.log(
+        'Background refresh already in progress, skipping manual refresh'
+      );
+      return;
+    }
+
+    // Use background refresh for a smoother UX
+    refetchProjects({
+      forceRefresh: true,
+      backgroundRefresh: true,
+    });
   };
 
   if (isLoading) {
@@ -206,6 +322,7 @@ const ProjectListPage = memo(() => {
     <div className="flex flex-col h-full">
       {/* Header Row: Back Link, Title, View Toggle, Create Button */}
       <div className="flex justify-between items-center mb-3 px-4 md:px-0 pt-4">
+        {' '}
         <div className="flex items-center gap-4">
           <Link
             to="/dashboard"
@@ -214,15 +331,36 @@ const ProjectListPage = memo(() => {
           >
             <ArrowLeft size={18} />
           </Link>
-          <h1 className="text-2xl font-bold text-[#F8FAFC]">Projects</h1>
-        </div>
+          <div className="flex items-center">
+            <h1 className="text-2xl font-bold text-[#F8FAFC]">Projects</h1>
 
+            {/* Background refresh indicator */}
+            {backgroundRefreshState?.backgroundRefreshing && (
+              <div className="ml-2 flex items-center text-xs text-muted-foreground">
+                <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse mr-1"></div>
+                <span className="hidden sm:inline">
+                  Refreshing in background...
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
         <div className="flex items-center gap-3">
+          {' '}
           {/* Refresh Button */}
           <button
             onClick={handleManualRefresh}
-            className="p-2 rounded-md text-gray-400 hover:text-white hover:bg-dark-600"
-            title="Refresh Projects"
+            className={`p-2 rounded-md ${
+              backgroundRefreshState?.backgroundRefreshing
+                ? 'text-blue-400 bg-blue-400 bg-opacity-10'
+                : 'text-gray-400 hover:text-white hover:bg-dark-600'
+            }`}
+            title={
+              backgroundRefreshState?.backgroundRefreshing
+                ? 'Refreshing Projects...'
+                : 'Refresh Projects'
+            }
+            disabled={backgroundRefreshState?.backgroundRefreshing}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -234,6 +372,11 @@ const ProjectListPage = memo(() => {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
+              className={
+                backgroundRefreshState?.backgroundRefreshing
+                  ? 'animate-spin'
+                  : ''
+              }
             >
               <path d="M21 2v6h-6"></path>
               <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
@@ -241,7 +384,6 @@ const ProjectListPage = memo(() => {
               <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
             </svg>
           </button>
-
           {/* View Toggle Buttons */}
           <div className="bg-dark-700 rounded-lg p-1 flex">
             <button
@@ -278,7 +420,6 @@ const ProjectListPage = memo(() => {
               <AlignJustify size={18} />
             </button>
           </div>
-
           <Button
             variant="primary"
             className="py-2 px-6 text-base font-bold shadow"
@@ -287,15 +428,8 @@ const ProjectListPage = memo(() => {
           >
             + New Project
           </Button>
-        </div>
+        </div>{' '}
       </div>
-
-      {/* Task Loading Indicator */}
-      {tasksLoading && (
-        <div className="text-center text-sm text-gray-400 mb-2">
-          Loading task data...
-        </div>
-      )}
 
       {/* Scrollable Content Area */}
       <div className="flex-grow overflow-y-auto p-4 md:px-0">

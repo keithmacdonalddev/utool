@@ -61,6 +61,7 @@ const getPriorityPillClasses = (priority) => {
  * @param {boolean} props.friendsLoading - Loading state for friends.
  * @param {boolean} props.friendsError - Error state for friends.
  * @param {Function} props.onAddMember - Callback function to add a member.
+ * @param {Object} props.backgroundRefreshState - Background refresh state for displaying status.
  */
 const ProjectDetailsInfo = ({
   project,
@@ -68,6 +69,7 @@ const ProjectDetailsInfo = ({
   friendsLoading,
   friendsError,
   onAddMember,
+  backgroundRefreshState,
 }) => {
   // State for the "Add Member" dropdown visibility
   const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false);
@@ -96,9 +98,17 @@ const ProjectDetailsInfo = ({
   if (!project) {
     return null; // Or some placeholder/error state if project prop is expected but missing
   }
-
   return (
-    <div className="bg-card rounded-lg p-4 shadow space-y-4">
+    <div className="bg-card rounded-lg p-4 shadow space-y-4 relative">
+      {/* Background refresh indicator */}
+      {backgroundRefreshState?.backgroundRefreshingSingle &&
+        backgroundRefreshState?.backgroundRefreshTarget === project?._id && (
+          <div className="absolute top-2 right-2 flex items-center text-xs text-muted-foreground">
+            <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse mr-1"></div>
+            <span>Refreshing...</span>
+          </div>
+        )}
+
       <h2 className="text-lg font-semibold mb-4 text-primary">
         Project Details
       </h2>

@@ -1,34 +1,64 @@
-import React, { useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import React, { memo } from 'react';
 import { Link } from 'react-router-dom'; // To link to articles later
-import { getKbArticles } from '../../features/kb/kbSlice'; // Import the action
 import Button from '../common/Button';
+import useKbArticles from '../../hooks/useKbArticles';
 
 const KbQuickAccessWidget = () => {
-  const dispatch = useDispatch();
-  // Get KB state from Redux store
-  const { articles, isLoading, isError, message } = useSelector(
-    (state) => state.kb
-  );
+  // Use our custom hook with caching instead of direct Redux dispatches
+  const { articles, isLoading, error, refetchArticles } = useKbArticles({
+    cacheTimeout: 5 * 60 * 1000, // 5 minutes cache for KB articles
+    backgroundRefresh: true, // Enable background refresh for better UX
+    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
+    queryParams: { sort: '-createdAt', limit: 3 }, // Get most recent articles, limited to 3
+  });
 
-  useEffect(() => {
-    // Dispatch action to fetch KB articles when component mounts
-    // We might want a specific action for "recent" or "popular" later
-    dispatch(getKbArticles());
-  }, [dispatch]);
+  /**
+   * Handle manual refresh of KB articles
+   * This provides a way for users to force refresh the data if needed
+   */
+  const handleRefresh = () => {
+    refetchArticles(true); // Force a refresh regardless of cache
+  };
 
   return (
     <div className="p-4 border border-dark-700 rounded-xl shadow-card bg-app-card text-text">
-      <h3 className="text-lg font-bold mb-3 text-[#F8FAFC]">Knowledge Base</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-bold text-[#F8FAFC]">Knowledge Base</h3>
+        {/* Add refresh button */}
+        <button
+          onClick={handleRefresh}
+          className="text-sm text-gray-400 hover:text-white p-1 rounded-full hover:bg-dark-600"
+          title="Refresh KB data"
+          aria-label="Refresh KB data"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 2v6h-6"></path>
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+            <path d="M3 22v-6h6"></path>
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+          </svg>
+        </button>
+      </div>
+
       {isLoading && <p className="text-[#C7C9D1]">Loading articles...</p>}
-      {isError && (
+      {error && (
         <p className="text-red-400 text-sm">
-          {message || 'Error loading articles.'}
+          {error || 'Error loading articles.'}
         </p>
       )}
-      {!isLoading && !isError && (
+      {!isLoading && !error && (
         <ul className="space-y-2">
-          {articles.length > 0 ? (
+          {articles && articles.length > 0 ? (
             // Show top 3 articles
             articles.slice(0, 3).map((article) => (
               <li
@@ -71,4 +101,4 @@ const KbQuickAccessWidget = () => {
   );
 };
 
-export default KbQuickAccessWidget;
+export default memo(KbQuickAccessWidget);
