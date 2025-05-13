@@ -3,6 +3,7 @@ import React, {
   useEffect,
   forwardRef,
   useImperativeHandle,
+  useMemo,
 } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import PropTypes from 'prop-types';
@@ -18,6 +19,8 @@ import {
 } from 'lucide-react';
 import { useNotifications } from '../../../context/NotificationContext';
 import Button from '../../../components/common/Button';
+import Modal from '../../../components/common/Modal';
+import TooltipPortal from '../../../components/common/TooltipPortal';
 import ResourceSearch from '../components/ResourceSearch';
 import {
   createSnippet,
@@ -55,6 +58,8 @@ const SnippetsFeature = forwardRef(
     const [snippetToEdit, setSnippetToEdit] = useState(null);
     const [snippetToDelete, setSnippetToDelete] = useState(null);
     const [tooltipFontSize, setTooltipFontSize] = useState(12); // State for tooltip font size
+    const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 }); // State for tooltip position
+    const [activeTooltipSnippet, setActiveTooltipSnippet] = useState(null); // State for the currently active tooltip
     const [newSnippet, setNewSnippet] = useState({
       title: '',
       content: '',
@@ -197,14 +202,10 @@ const SnippetsFeature = forwardRef(
      */
     const handleCreateSubmit = (e) => {
       e.preventDefault();
-
       const snippetData = { ...newSnippet };
 
-      // Add category information if selected
-      if (snippetData.category) {
-        // Store category for backend processing
-        snippetData.category = snippetData.category;
-      }
+      // No need to modify snippetData.category as it's already correctly set
+      // through the form input handling
 
       dispatch(createSnippet(snippetData))
         .unwrap()
@@ -291,10 +292,33 @@ const SnippetsFeature = forwardRef(
      * @param {Event} e - The click event
      */
     const increaseTooltipFontSize = (e) => {
-      e.stopPropagation(); // Prevent event from bubbling up to parent elements
-      setTooltipFontSize((prev) => Math.min(prev + 2, 18)); // Increase by 2px with a max of 18px
+      e.stopPropagation(); // Prevent event from bubbling up to parent elements      setTooltipFontSize((prev) => Math.min(prev + 2, 18)); // Increase by 2px with a max of 18px
     };
 
+    /**
+     * Opens a tooltip for a snippet, setting its position from the event
+     *
+     * @param {Event} e - The click event
+     * @param {Object} snippet - The snippet to show in the tooltip
+     */
+    const openSnippetTooltip = (e, snippet) => {
+      e.stopPropagation(); // Prevent event from bubbling up
+
+      // Calculate position relative to where the user clicked
+      // We want to position it slightly offset from the cursor
+      const x = e.clientX + 10;
+      const y = e.clientY + 10;
+
+      setTooltipPosition({ x, y });
+      setActiveTooltipSnippet(snippet);
+    };
+
+    /**
+     * Closes the active snippet tooltip
+     */
+    const closeSnippetTooltip = () => {
+      setActiveTooltipSnippet(null);
+    };
     /**
      * Decreases the tooltip font size
      * Prevents font size from becoming too small (8px)
@@ -305,7 +329,6 @@ const SnippetsFeature = forwardRef(
       e.stopPropagation(); // Prevent event from bubbling up to parent elements
       setTooltipFontSize((prev) => Math.max(prev - 2, 8)); // Decrease by 2px with a min of 8px
     };
-
     /**
      * Resets the tooltip font size to the default value (12px)
      *
@@ -313,25 +336,30 @@ const SnippetsFeature = forwardRef(
      */
     const resetTooltipFontSize = (e) => {
       e.stopPropagation(); // Prevent event from bubbling up to parent elements
-      setTooltipFontSize(12); // Reset to default font size (12px)
-    };
+      setTooltipFontSize(12); // Reset to default size of 12px
+    }; // Filter snippets based on search term and active category
+    const filteredSnippets = useMemo(() => {
+      // Start with all snippets
+      let filtered = snippets;
 
-    // Filter snippets based on search term and active category
-    const filteredSnippets = snippets.filter((snippet) => {
       // Filter by search term
-      const matchesSearch =
-        snippet.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        snippet.content.toLowerCase().includes(searchTerm.toLowerCase());
+      if (searchTerm) {
+        filtered = filtered.filter(
+          (snippet) =>
+            snippet.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            snippet.content.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
 
       // Filter by category
-      // If activeCategory is null, show all snippets
-      // Otherwise, show only snippets in the active category
-      const matchesCategory = activeCategory
-        ? snippet.category === activeCategory._id
-        : true;
+      if (activeCategory) {
+        filtered = filtered.filter(
+          (snippet) => snippet.category === activeCategory._id
+        );
+      }
 
-      return matchesSearch && matchesCategory;
-    });
+      return filtered;
+    }, [snippets, searchTerm, activeCategory]);
 
     /**
      * Renders the snippet table with the provided snippets
@@ -361,50 +389,18 @@ const SnippetsFeature = forwardRef(
                 key={snippet._id}
                 className="hover:bg-dark-700 transition-colors"
               >
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#F8FAFC]">
+                {' '}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-[#F8FAFC] text-left">
                   {snippet.title}
-                </td>
-                <td className="px-6 py-4 max-w-xs text-sm text-[#C7C9D1]">
-                  <div className="relative group max-w-xs">
-                    <span className="block truncate">{snippet.content}</span>
-                    <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-64 bg-dark-800 text-white text-xs p-2 rounded shadow-lg whitespace-pre-wrap break-words">
-                      {/* Font size adjustment controls at top of tooltip */}
-                      <div className="flex justify-end mb-2 border-b border-dark-600 pb-1">
-                        <button
-                          onClick={decreaseTooltipFontSize}
-                          className="text-gray-400 hover:text-white mr-2"
-                          title="Decrease text size"
-                          aria-label="Decrease snippet text size"
-                        >
-                          <Minus size={14} />
-                        </button>
-                        {/* Display current zoom level as percentage */}
-                        <span className="text-gray-400 mx-1 text-xs">
-                          {Math.round((tooltipFontSize / 12) * 100)}%
-                        </span>
-                        <button
-                          onClick={increaseTooltipFontSize}
-                          className="text-gray-400 hover:text-white ml-2"
-                          title="Increase text size"
-                          aria-label="Increase snippet text size"
-                        >
-                          <Plus size={14} />
-                        </button>
-                        {/* Reset zoom button */}
-                        <button
-                          onClick={resetTooltipFontSize}
-                          className="text-gray-400 hover:text-white ml-3"
-                          title="Reset to default text size"
-                          aria-label="Reset to default text size"
-                        >
-                          <RefreshCw size={14} />
-                        </button>
-                      </div>
-                      {/* Snippet content with dynamic font size */}
-                      <div style={{ fontSize: `${tooltipFontSize}px` }}>
-                        {snippet.content}
-                      </div>
-                    </div>
+                </td>{' '}
+                <td className="px-6 py-4 max-w-xs text-sm text-[#C7C9D1] text-left">
+                  <div className="relative max-w-xs">
+                    <span
+                      className="block truncate cursor-pointer hover:text-white"
+                      onClick={(e) => openSnippetTooltip(e, snippet)}
+                    >
+                      {snippet.content}
+                    </span>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -543,210 +539,164 @@ const SnippetsFeature = forwardRef(
           renderSnippetTable(filteredSnippets)
         )}
 
-        {/* Create Snippet Modal */}
-        {isCreateModalOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-snippet-title"
-          >
-            <div className="bg-dark-800 rounded-lg p-6 w-full max-w-2xl">
-              <div className="flex justify-between items-center mb-4">
-                <h2
-                  id="create-snippet-title"
-                  className="text-xl font-semibold text-[#F8FAFC]"
-                >
-                  Create New Snippet
-                </h2>
-                <button
-                  onClick={closeCreateModal}
-                  className="text-gray-400 hover:text-white"
-                  aria-label="Close modal"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateSubmit}>
-                <div className="mb-4">
-                  <label
-                    htmlFor="title"
-                    className="block text-sm font-medium text-[#F8FAFC] mb-1"
-                  >
-                    Title
-                  </label>
-                  <input
-                    type="text"
-                    id="title"
-                    name="title"
-                    value={newSnippet.title}
-                    onChange={handleInputChange}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
-                    required
-                    aria-required="true"
-                  />
-                </div>
-
-                {/* Category Selector */}
-                {renderCategorySelect(
-                  'category',
-                  'category',
-                  newSnippet.category,
-                  handleInputChange
-                )}
-
-                <div className="mb-4">
-                  <label
-                    htmlFor="content"
-                    className="block text-sm font-medium text-[#F8FAFC] mb-1"
-                  >
-                    Content
-                  </label>
-                  <textarea
-                    id="content"
-                    name="content"
-                    value={newSnippet.content}
-                    onChange={handleInputChange}
-                    rows={8}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
-                    required
-                    aria-required="true"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
-                    onClick={closeCreateModal}
-                    variant="secondary"
-                    className="px-4 py-2"
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" className="px-4 py-2">
-                    Save Snippet
-                  </Button>
-                </div>
-              </form>
+        {/* Create Snippet Modal - Using Portal Component */}
+        <Modal
+          isOpen={isCreateModalOpen}
+          onClose={closeCreateModal}
+          title="Create New Snippet"
+          titleId="create-snippet-title"
+        >
+          <form onSubmit={handleCreateSubmit}>
+            <div className="mb-4">
+              <label
+                htmlFor="title"
+                className="block text-sm font-medium text-[#F8FAFC] mb-1"
+              >
+                Title
+              </label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                value={newSnippet.title}
+                onChange={handleInputChange}
+                className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
+                required
+                aria-required="true"
+              />
             </div>
-          </div>
-        )}
 
-        {/* Edit Snippet Modal */}
-        {isEditModalOpen && snippetToEdit && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="edit-snippet-title"
-          >
-            <div className="bg-dark-800 rounded-lg p-6 w-full max-w-2xl">
-              <div className="flex justify-between items-center mb-4">
-                <h2
-                  id="edit-snippet-title"
-                  className="text-xl font-semibold text-[#F8FAFC]"
-                >
-                  Edit Snippet
-                </h2>
-                <button
-                  onClick={closeEditModal}
-                  className="text-gray-400 hover:text-white"
-                  aria-label="Close edit modal"
-                >
-                  <X size={20} />
-                </button>
-              </div>
+            {/* Category Selector */}
+            {renderCategorySelect(
+              'category',
+              'category',
+              newSnippet.category,
+              handleInputChange
+            )}
 
-              <form onSubmit={handleEditSubmit}>
-                <div className="mb-4">
-                  <label
-                    htmlFor="edit-title"
-                    className="block text-sm font-medium text-[#F8FAFC] mb-1"
-                  >
-                    Title
-                  </label>
-                  <input
-                    type="text"
-                    id="edit-title"
-                    name="title"
-                    value={snippetToEdit.title}
-                    onChange={handleEditInputChange}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
-                    required
-                    aria-required="true"
-                  />
-                </div>
-
-                {/* Category Selector */}
-                {renderCategorySelect(
-                  'edit-category',
-                  'category',
-                  snippetToEdit.category || '',
-                  handleEditInputChange
-                )}
-
-                <div className="mb-4">
-                  <label
-                    htmlFor="edit-content"
-                    className="block text-sm font-medium text-[#F8FAFC] mb-1"
-                  >
-                    Content
-                  </label>
-                  <textarea
-                    id="edit-content"
-                    name="content"
-                    value={snippetToEdit.content}
-                    onChange={handleEditInputChange}
-                    rows={8}
-                    className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
-                    required
-                    aria-required="true"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
-                    onClick={closeEditModal}
-                    variant="secondary"
-                    className="px-4 py-2"
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" className="px-4 py-2">
-                    Save Snippet
-                  </Button>
-                </div>
-              </form>
+            <div className="mb-4">
+              <label
+                htmlFor="content"
+                className="block text-sm font-medium text-[#F8FAFC] mb-1"
+              >
+                Content
+              </label>
+              <textarea
+                id="content"
+                name="content"
+                value={newSnippet.content}
+                onChange={handleInputChange}
+                rows={8}
+                className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
+                required
+                aria-required="true"
+              />
             </div>
-          </div>
-        )}
 
-        {/* Delete Snippet Confirmation Dialog */}
-        {isDeleteDialogOpen && snippetToDelete && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-dialog-title"
-          >
-            <div className="bg-dark-800 rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-end space-x-2">
+              <Button
+                type="button"
+                onClick={closeCreateModal}
+                variant="secondary"
+                className="px-4 py-2"
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" className="px-4 py-2">
+                Save Snippet
+              </Button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Edit Snippet Modal - Using Portal Component */}
+        <Modal
+          isOpen={isEditModalOpen && !!snippetToEdit}
+          onClose={closeEditModal}
+          title="Edit Snippet"
+          titleId="edit-snippet-title"
+        >
+          {snippetToEdit && (
+            <form onSubmit={handleEditSubmit}>
               <div className="mb-4">
-                <h2
-                  id="delete-dialog-title"
-                  className="text-xl font-semibold text-[#F8FAFC]"
+                <label
+                  htmlFor="edit-title"
+                  className="block text-sm font-medium text-[#F8FAFC] mb-1"
                 >
-                  Delete Snippet
-                </h2>
-                <p className="mt-2 text-gray-300">
-                  Are you sure you want to delete "
-                  <span className="font-semibold">{snippetToDelete.title}</span>
-                  "? This action cannot be undone.
-                </p>
+                  Title
+                </label>
+                <input
+                  type="text"
+                  id="edit-title"
+                  name="title"
+                  value={snippetToEdit.title}
+                  onChange={handleEditInputChange}
+                  className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
+                  required
+                  aria-required="true"
+                />
+              </div>
+
+              {/* Category Selector */}
+              {renderCategorySelect(
+                'edit-category',
+                'category',
+                snippetToEdit.category || '',
+                handleEditInputChange
+              )}
+
+              <div className="mb-4">
+                <label
+                  htmlFor="edit-content"
+                  className="block text-sm font-medium text-[#F8FAFC] mb-1"
+                >
+                  Content
+                </label>
+                <textarea
+                  id="edit-content"
+                  name="content"
+                  value={snippetToEdit.content}
+                  onChange={handleEditInputChange}
+                  rows={8}
+                  className="w-full bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-[#F8FAFC]"
+                  required
+                  aria-required="true"
+                />
               </div>
 
               <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  onClick={closeEditModal}
+                  variant="secondary"
+                  className="px-4 py-2"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" className="px-4 py-2">
+                  Save Snippet
+                </Button>
+              </div>
+            </form>
+          )}
+        </Modal>
+
+        {/* Delete Snippet Confirmation Dialog - Using Portal Component */}
+        <Modal
+          isOpen={isDeleteDialogOpen && !!snippetToDelete}
+          onClose={closeDeleteDialog}
+          title="Delete Snippet"
+          titleId="delete-dialog-title"
+          maxWidth="max-w-md"
+        >
+          {snippetToDelete && (
+            <>
+              <p className="mt-2 text-gray-300">
+                Are you sure you want to delete "
+                <span className="font-semibold">{snippetToDelete.title}</span>
+                "? This action cannot be undone.
+              </p>
+              <div className="flex justify-end space-x-2 mt-6">
                 <Button
                   type="button"
                   onClick={closeDeleteDialog}
@@ -763,9 +713,61 @@ const SnippetsFeature = forwardRef(
                 >
                   Delete
                 </Button>
+              </div>{' '}
+            </>
+          )}
+        </Modal>
+
+        {/* Snippet Content Tooltip Portal */}
+        {activeTooltipSnippet && (
+          <TooltipPortal
+            isOpen={!!activeTooltipSnippet}
+            onClose={closeSnippetTooltip}
+            position={tooltipPosition}
+            containerId="tooltip-portal-root"
+          >
+            <div>
+              {/* Font size adjustment controls at top of tooltip */}
+              <div className="flex justify-end mb-2 border-b border-dark-600 pb-1">
+                <button
+                  onClick={decreaseTooltipFontSize}
+                  className="text-gray-400 hover:text-white mr-2"
+                  title="Decrease text size"
+                  aria-label="Decrease snippet text size"
+                >
+                  <Minus size={14} />
+                </button>
+                {/* Display current zoom level as percentage */}
+                <span className="text-gray-400 mx-1 text-xs">
+                  {Math.round((tooltipFontSize / 12) * 100)}%
+                </span>
+                <button
+                  onClick={increaseTooltipFontSize}
+                  className="text-gray-400 hover:text-white ml-2"
+                  title="Increase text size"
+                  aria-label="Increase snippet text size"
+                >
+                  <Plus size={14} />
+                </button>
+                {/* Reset zoom button */}
+                <button
+                  onClick={resetTooltipFontSize}
+                  className="text-gray-400 hover:text-white ml-3"
+                  title="Reset to default text size"
+                  aria-label="Reset to default text size"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              </div>
+              {/* Snippet content with dynamic font size */}
+              <div
+                className="whitespace-pre-wrap break-words"
+                style={{ fontSize: `${tooltipFontSize}px` }}
+              >
+                {activeTooltipSnippet.content}
               </div>
             </div>
-          </div>
+          </TooltipPortal>
         )}
       </div>
     );

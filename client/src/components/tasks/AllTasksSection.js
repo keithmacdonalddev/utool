@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { PlusCircle, Tag, ChevronUp, ChevronDown } from 'lucide-react';
+import { FaSpinner, FaTriangleExclamation } from 'react-icons/fa6'; // Changed from FaExclamationTriangle
 import { updateTask } from '../../features/tasks/taskSlice';
 import TagFilter from './TagFilter'; // Assuming TagFilter is in the same directory
 import { formatDateForDisplay } from '../../utils/dateUtils'; // Assuming this utility exists
@@ -22,28 +23,28 @@ import { isTaskOverdue, isTaskDueToday } from '../../utils/taskUtils'; // Use ut
  * @param {Array<Object>} props.tasks - The full list of tasks (needed for TagFilter to get all tags).
  * @param {Array<Object>} props.filteredTasks - The list of tasks after applying filters.
  * @param {boolean} props.tasksLoading - Loading state for tasks.
- * @param {boolean} props.tasksError - Error state for tasks.
- * @param {string|null} props.tasksMessage - Error message for tasks.
+ * @param {Object|string|null} props.tasksError - Error object or message for tasks. Changed from boolean & removed tasksMessage.
  * @param {Array<string>} props.selectedTags - Currently selected tags for filtering.
  * @param {Function} props.onTaskClick - Callback when a task row is clicked.
  * @param {Function} props.onAddTaskClick - Callback to trigger adding a new task.
  * @param {Function} props.onTagSelect - Callback when a tag is selected in the filter.
  * @param {Function} props.onTagDeselect - Callback when a tag is deselected in the filter.
  * @param {Function} props.onClearAllTags - Callback to clear all tag filters.
+ * @param {Function} props.onRetryTasks - Callback to retry fetching tasks. Added.
  * @param {Object} props.backgroundRefreshState - Background refresh state information.
  */
 const AllTasksSection = ({
   tasks, // Full list needed for TagFilter
   filteredTasks,
   tasksLoading,
-  tasksError,
-  tasksMessage,
+  tasksError, // tasksMessage prop removed
   selectedTags,
   onTaskClick,
   onAddTaskClick,
   onTagSelect,
   onTagDeselect,
   onClearAllTags,
+  onRetryTasks, // Added onRetryTasks
   backgroundRefreshState,
 }) => {
   const dispatch = useDispatch();
@@ -53,6 +54,7 @@ const AllTasksSection = ({
   useEffect(() => {
     setOptimisticTasks(filteredTasks);
   }, [filteredTasks]);
+
   /**
    * Handle task priority change with optimistic UI updates
    *
@@ -68,27 +70,35 @@ const AllTasksSection = ({
     );
 
     // Find the task in the state to get its project ID
-    const task = filteredTasks.find((t) => t._id === taskId);
-    if (!task) return;
-
-    // Get the project ID - handle both object reference and string ID
-    const projectId =
-      task.project && typeof task.project === 'object'
-        ? task.project._id
-        : task.project;
-
-    if (!projectId) {
-      console.error('Could not determine project ID for task', taskId);
+    const taskToUpdate = tasks.find((t) => t._id === taskId); // Use `tasks` (full list) or `filteredTasks`
+    if (!taskToUpdate) {
+      console.error('Task not found for priority update:', taskId);
+      // Optionally revert optimistic update if task isn't found in a consistent source
+      // For now, we assume it should be in `tasks` if it was displayed
+      setOptimisticTasks(filteredTasks); // Revert to original filtered list if unsure
       return;
     }
 
-    // First apply optimistic update via Redux
+    // Get the project ID - handle both object reference and string ID
+    const projectId =
+      taskToUpdate.project && typeof taskToUpdate.project === 'object'
+        ? taskToUpdate.project._id
+        : taskToUpdate.project;
+
+    if (!projectId) {
+      console.error('Could not determine project ID for task', taskId);
+      // Revert optimistic update
+      setOptimisticTasks(filteredTasks);
+      return;
+    }
+
+    // Dispatch optimistic update to Redux store first
     dispatch(
       updateTask({
         projectId,
         taskId,
         updates: { priority: newPriority },
-        optimistic: true,
+        optimistic: true, // Indicate this is an optimistic update
       })
     );
 
@@ -103,16 +113,70 @@ const AllTasksSection = ({
       .unwrap()
       .catch((error) => {
         console.error('Failed to update task priority:', error);
-        // The reducer will handle reverting the optimistic update if needed
+        // Revert optimistic UI if API call fails
+        // The reducer should handle reverting the optimistic update in Redux state.
+        // For local optimisticTasks, we might need to revert here if not relying solely on Redux for the view.
+        setOptimisticTasks(filteredTasks); // Revert local optimistic state
+        // Optionally, show a toast notification for the error
       });
   };
+
+  // Loading state
+  if (tasksLoading) {
+    return (
+      <div className="bg-card rounded-lg p-4 shadow-md relative">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4 sm:gap-0">
+          <h2 className="text-xl font-semibold text-primary">All Tasks</h2>
+          {/* Minimal header during load */}
+        </div>
+        <div className="text-center p-8" role="status" aria-live="polite">
+          <FaSpinner className="animate-spin h-8 w-8 text-primary mx-auto" />
+          <p className="mt-2 text-foreground text-sm">Loading all tasks...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (tasksError && !tasksLoading) {
+    return (
+      <div className="bg-card rounded-lg p-4 shadow-md relative">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4 sm:gap-0">
+          <h2 className="text-xl font-semibold text-primary">All Tasks</h2>
+          {/* Minimal header during error */}
+        </div>
+        <div
+          className="text-center p-8 text-red-400 bg-red-900 bg-opacity-20 rounded-lg"
+          role="alert"
+        >
+          <FaTriangleExclamation className="inline mr-2 mb-1 h-5 w-5" />
+          <p className="inline">
+            Error loading tasks:{' '}
+            {typeof tasksError === 'string'
+              ? tasksError
+              : tasksError.message || 'An unknown error occurred.'}
+          </p>
+          {onRetryTasks && (
+            <button
+              onClick={onRetryTasks}
+              className="mt-3 ml-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium transition-colors"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Determine if tasks exist at all, regardless of filter
   const hasTasks = tasks && tasks.length > 0;
   // Determine if tasks exist AND match the current filter
-  const hasFilteredTasks = filteredTasks && filteredTasks.length > 0;
+  const hasFilteredTasks = optimisticTasks && optimisticTasks.length > 0; // Use optimisticTasks here
+
   return (
     <div className="bg-card rounded-lg p-4 shadow-md relative">
+      {/* ... (header section remains the same) ... */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4 sm:gap-0">
         <div className="flex items-center">
           <h2 className="text-xl font-semibold text-primary">All Tasks</h2>
@@ -132,29 +196,31 @@ const AllTasksSection = ({
         <button
           onClick={onAddTaskClick} // Use the callback prop
           className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-md transition-colors self-start sm:self-auto shadow-sm"
+          disabled={tasksLoading || !!tasksError} // Disable if loading or error
         >
           <PlusCircle size={16} />
           Add Task
         </button>
       </div>
 
-      {/* Tag Filter Component - Pass relevant task data and handlers */}
-      {/* Only render TagFilter if there are any tasks to get tags from */}
+      {/* Tag Filter Component - Only render if there are tasks and not loading/error */}
       {!tasksLoading && !tasksError && hasTasks && (
         <div className="mb-4">
           <TagFilter
             tasks={tasks} // Pass the full task list to extract all tags
             selectedTags={selectedTags}
-            onTagSelect={onTagSelect} // Use callback prop
-            onTagDeselect={onTagDeselect} // Use callback prop
-            onClearAll={onClearAllTags} // Use callback prop
+            onTagSelect={onTagSelect}
+            onTagDeselect={onTagDeselect}
+            onClearAll={onClearAllTags}
+            disabled={tasksLoading || !!tasksError} // Disable filter controls if loading or error
           />
         </div>
       )}
 
-      {/* Regular Task List Table */}
+      {/* Regular Task List Table - Only render if not loading/error and has filtered tasks */}
       {!tasksLoading && !tasksError && hasFilteredTasks && (
         <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700 shadow-sm">
+          {/* ... (table structure remains the same, ensure optimisticTasks is used for mapping) ... */}
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-dark-700">
               <thead>
@@ -166,7 +232,6 @@ const AllTasksSection = ({
                     Title
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700 hidden md:table-cell">
-                    {/* Hide desc on small screens */}
                     Description
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
@@ -185,33 +250,34 @@ const AllTasksSection = ({
               </thead>
               <tbody className="bg-card divide-y divide-dark-700">
                 {optimisticTasks.map((task) => {
-                  // Use utility functions for styling
                   const isOverdue = isTaskOverdue(task);
-                  const isDueToday = isTaskDueToday(task); // Check if it's due *today* even if not strictly overdue yet
+                  const isDueToday = isTaskDueToday(task);
 
                   return (
                     <tr
                       key={task._id}
                       className={`hover:bg-dark-700 transition-colors cursor-pointer ${
                         isOverdue
-                          ? 'bg-red-900 bg-opacity-20' // Red background for overdue
+                          ? 'bg-red-900 bg-opacity-20'
                           : isDueToday
-                          ? 'bg-yellow-900 bg-opacity-20' // Yellow background for due today
-                          : '' // No special background otherwise
+                          ? 'bg-yellow-900 bg-opacity-20'
+                          : ''
                       }`}
                       onClick={(e) => {
+                        // Prevent click if a button inside the row was clicked (e.g., priority change)
+                        if (e.target.closest('button')) return;
                         e.preventDefault();
-                        e.stopPropagation();
-                        onTaskClick(task._id); // Use the callback prop
+                        e.stopPropagation(); // Keep this to prevent internal row clicks from misbehaving
+                        onTaskClick(e, task._id); // Pass the event 'e' as the first argument
                       }}
                     >
                       <td
                         className={`px-6 py-4 whitespace-nowrap text-sm ${
                           isOverdue
-                            ? 'text-red-400 font-medium' // Red text for overdue
+                            ? 'text-red-400 font-medium'
                             : isDueToday
-                            ? 'text-yellow-400 font-medium' // Yellow text for due today
-                            : 'text-[#C7C9D1]' // Default text color otherwise
+                            ? 'text-yellow-400 font-medium'
+                            : 'text-[#C7C9D1]'
                         } text-left`}
                       >
                         {formatDateForDisplay(task.dueDate)}
@@ -229,7 +295,6 @@ const AllTasksSection = ({
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs hidden md:table-cell">
-                        {/* Hide desc on small screens */}
                         <div className="relative group max-w-xs">
                           <span className="block truncate">
                             {task.description}
@@ -242,51 +307,45 @@ const AllTasksSection = ({
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {/* Display assigned member name or 'Unassigned' */}
                         {task.assignedTo
                           ? task.assignedTo.name || 'Assigned'
                           : 'Unassigned'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
                         {task.status}
-                      </td>{' '}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
                         <div className="flex items-center gap-2">
                           <span
-                            className={
+                            className={`font-medium ${
                               task.priority === 'High'
                                 ? 'text-red-400'
                                 : task.priority === 'Medium'
                                 ? 'text-yellow-400'
                                 : 'text-blue-400'
-                            }
+                            }`}
                           >
                             {task.priority}
                           </span>
-
-                          {/* Priority change buttons */}
                           <div className="flex flex-col">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-
-                                // Only allow changing priority if not already at highest
                                 if (task.priority !== 'High') {
                                   const newPriority =
                                     task.priority === 'Low' ? 'Medium' : 'High';
                                   handlePriorityChange(task._id, newPriority);
                                 }
                               }}
-                              className={`text-gray-400 hover:text-white p-0.5 rounded-sm 
-                                ${
-                                  task.priority === 'High'
-                                    ? 'opacity-30 cursor-not-allowed'
-                                    : 'hover:bg-dark-600'
-                                }`}
+                              className={`text-gray-400 hover:text-white p-0.5 rounded-sm ${
+                                task.priority === 'High'
+                                  ? 'opacity-30 cursor-not-allowed'
+                                  : 'hover:bg-dark-600'
+                              }`}
                               disabled={task.priority === 'High'}
                               title={
                                 task.priority === 'High'
-                                  ? 'Already at highest priority'
+                                  ? 'Already highest'
                                   : 'Increase priority'
                               }
                             >
@@ -295,24 +354,21 @@ const AllTasksSection = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-
-                                // Only allow changing priority if not already at lowest
                                 if (task.priority !== 'Low') {
                                   const newPriority =
                                     task.priority === 'High' ? 'Medium' : 'Low';
                                   handlePriorityChange(task._id, newPriority);
                                 }
                               }}
-                              className={`text-gray-400 hover:text-white p-0.5 rounded-sm
-                                ${
-                                  task.priority === 'Low'
-                                    ? 'opacity-30 cursor-not-allowed'
-                                    : 'hover:bg-dark-600'
-                                }`}
+                              className={`text-gray-400 hover:text-white p-0.5 rounded-sm ${
+                                task.priority === 'Low'
+                                  ? 'opacity-30 cursor-not-allowed'
+                                  : 'hover:bg-dark-600'
+                              }`}
                               disabled={task.priority === 'Low'}
                               title={
                                 task.priority === 'Low'
-                                  ? 'Already at lowest priority'
+                                  ? 'Already lowest'
                                   : 'Decrease priority'
                               }
                             >
@@ -347,55 +403,41 @@ const AllTasksSection = ({
         </div>
       )}
 
-      {/* Empty states for tasks */}
+      {/* Empty states for tasks - Only render if not loading/error and no filtered tasks */}
       {!tasksLoading && !tasksError && !hasFilteredTasks && (
         <div className="text-center p-8 border border-dark-700 rounded-lg bg-dark-800">
           {hasTasks ? (
-            // Message if tasks exist but none match the filter
             <div className="text-gray-400 mb-2">
               No tasks match the current filters.
             </div>
           ) : (
-            // Message if no tasks exist at all
             <div className="text-gray-400 mb-2">
-              No tasks for this project yet
+              No tasks for this project yet.
             </div>
           )}
-
-          {/* Show clear filters button only if tasks exist but none match */}
-          {hasTasks && !hasFilteredTasks && (
-            <button
-              onClick={onClearAllTags} // Use callback prop
-              className="text-primary hover:underline text-sm mr-4" // Added mr-4
-            >
-              Clear filters
-            </button>
-          )}
-
-          {/* Show Add task button */}
+          {hasTasks &&
+            !hasFilteredTasks &&
+            selectedTags &&
+            selectedTags.length > 0 && (
+              <button
+                onClick={onClearAllTags}
+                className="text-primary hover:underline text-sm mr-4"
+                disabled={tasksLoading || !!tasksError} // Disable if loading or error
+              >
+                Clear filters
+              </button>
+            )}
           <button
-            onClick={onAddTaskClick} // Use callback prop
+            onClick={onAddTaskClick}
             className="text-primary hover:underline text-sm"
+            disabled={tasksLoading || !!tasksError} // Disable if loading or error
           >
             {hasTasks ? '+ Add a task' : '+ Add your first task'}
           </button>
         </div>
       )}
 
-      {/* Loading state for tasks (could also show combined loading if tasksLoading is global) */}
-      {tasksLoading && (
-        <div className="text-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-foreground text-sm">Loading tasks...</p>
-        </div>
-      )}
-
-      {/* Error state for tasks (could also show combined error if tasksError is global) */}
-      {tasksError && (
-        <div className="text-center p-8 text-red-500">
-          <p>Error loading tasks: {tasksMessage}</p>
-        </div>
-      )}
+      {/* Loading and Error states are now handled at the top of the component */}
     </div>
   );
 };

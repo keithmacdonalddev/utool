@@ -1,5 +1,5 @@
 import React, { memo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
 import ProjectCard from '../components/projects/ProjectCard';
 import { ArrowLeft, Grid, List, AlignJustify } from 'lucide-react';
 import Button from '../components/common/Button';
@@ -17,6 +17,7 @@ import useRecentTasks from '../hooks/useRecentTasks';
  * @returns {JSX.Element} The rendered ProjectListPage component
  */
 const ProjectListPage = memo(() => {
+  const navigate = useNavigate(); // Initialize useNavigate
   // Use our custom hooks with caching instead of direct Redux dispatches
   const {
     projects,
@@ -208,7 +209,15 @@ const ProjectListPage = memo(() => {
       <tr
         key={project._id}
         className="hover:bg-dark-700 transition-colors cursor-pointer"
-        onClick={() => (window.location.href = `/projects/${project._id}`)}
+        onClick={() => navigate(`/projects/${project._id}`)} // Use navigate
+        // Add role and onKeyDown for better accessibility if making entire row clickable
+        role="link"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            navigate(`/projects/${project._id}`);
+          }
+        }}
       >
         <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-[#F8FAFC] text-left">
           {project.name}
@@ -424,7 +433,7 @@ const ProjectListPage = memo(() => {
             variant="primary"
             className="py-2 px-6 text-base font-bold shadow"
             style={{ color: '#F8FAFC' }}
-            onClick={() => (window.location.href = '/projects/new')}
+            onClick={() => navigate('/projects/new')} // Use navigate
           >
             + New Project
           </Button>

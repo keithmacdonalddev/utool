@@ -16,6 +16,7 @@ import 'react-toastify/dist/ReactToastify.css'; // Styles for toast notification
 
 import ProtectedRoute from './components/ProtectedRoute'; // Custom route guard component
 import MainLayout from './components/layout/MainLayout'; // Layout wrapper with sidebar and header
+import ErrorBoundary from './components/ErrorBoundary'; // Import the ErrorBoundary
 import './App.css'; // Global application styles
 
 // Lazy-loaded components using code splitting
@@ -94,119 +95,146 @@ function App() {
     <NotificationProvider>
       {/* Router provides navigation capabilities to the entire app */}
       <Router>
-        <div className="App">
-          {/* ToastContainer handles display of toast notifications */}
-          {/* Configuration options determine appearance and behavior */}
-          <ToastContainer
-            position="top-right" // Location on screen
-            autoClose={5000} // Close after 5 seconds
-            hideProgressBar={false} // Show countdown bar
-            newestOnTop={false} // Stack order
-            closeOnClick // Close when clicked
-            rtl={false} // Left-to-right text
-            pauseOnFocusLoss // Pause countdown when window loses focus
-            draggable // Allow user to drag notifications
-            pauseOnHover // Pause countdown when hovering
-            theme="dark" // Visual theme
-          />
+        {/* Wrap the core application structure with ErrorBoundary */}
+        <ErrorBoundary>
+          <div className="App">
+            {/* ToastContainer handles display of toast notifications */}
+            {/* Configuration options determine appearance and behavior */}
+            <ToastContainer
+              position="top-right" // Location on screen
+              autoClose={5000} // Close after 5 seconds
+              hideProgressBar={false} // Show countdown bar
+              newestOnTop={false} // Stack order
+              closeOnClick // Close when clicked
+              rtl={false} // Left-to-right text
+              pauseOnFocusLoss // Pause countdown when window loses focus
+              draggable // Allow user to drag notifications
+              pauseOnHover // Pause countdown when hovering
+              theme="dark" // Visual theme
+            />
 
-          {/* Suspense shows a fallback UI while lazy-loaded components are loading */}
-          <Suspense fallback={<div>Loading...</div>}>
-            {/* Routes defines all application routes */}
-            <Routes>
-              {/* Public Routes - accessible without authentication */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route
-                path="/verify-email/:token" // Route with URL parameter
-                element={<VerifyEmailPage />}
-              />
+            {/* Suspense shows a fallback UI while lazy-loaded components are loading */}
+            <Suspense
+              fallback={
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    textAlign: 'center',
+                    padding: '20px',
+                    color: 'white',
+                  }}
+                >
+                  Loading page content...
+                </div>
+              }
+            >
+              {/* Routes defines all application routes */}
+              <Routes>
+                {/* Public Routes - accessible without authentication */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route
+                  path="/verify-email/:token" // Route with URL parameter
+                  element={<VerifyEmailPage />}
+                />
 
-              {/* Protected Routes - require authentication */}
-              {/* ProtectedRoute component checks user role before rendering */}
-              <Route
-                element={
-                  <ProtectedRoute
-                    allowedRoles={['Regular User', 'Pro User', 'Admin']} // All authenticated users
-                  />
-                }
-              >
-                {/* MainLayout provides common structure (sidebar, header, etc.) */}
-                <Route element={<MainLayout />}>
-                  {/* Dashboard and main feature routes */}
-                  <Route path="/dashboard" element={<DashboardPage />} />
+                {/* Protected Routes - require authentication */}
+                {/* ProtectedRoute component checks user role before rendering */}
+                <Route
+                  element={
+                    <ProtectedRoute
+                      allowedRoles={['Regular User', 'Pro User', 'Admin']} // All authenticated users
+                    />
+                  }
+                >
+                  {/* MainLayout provides common structure (sidebar, header, etc.) */}
+                  <Route element={<MainLayout />}>
+                    {/* Dashboard and main feature routes */}
+                    <Route path="/dashboard" element={<DashboardPage />} />
 
-                  {/* Project management routes */}
-                  <Route path="/projects/new" element={<ProjectCreatePage />} />
-                  <Route
-                    path="/projects/:id" // Dynamic route with project ID parameter
-                    element={<ProjectDetailsPage />}
-                  />
-                  <Route path="/projects" element={<ProjectListPage />} />
-                  <Route
-                    path="/projects/:id/edit"
-                    element={<ProjectEditPage />}
-                  />
-
-                  {/* Knowledge Base routes */}
-                  <Route path="/kb/new" element={<KbCreatePage />} />
-                  <Route path="/kb" element={<KbListPage />} />
-                  <Route path="/kb/:id" element={<KbDetailsPage />} />
-                  <Route path="/kb/:id/edit" element={<KbEditPage />} />
-                  <Route
-                    path="/kb/:id/versions"
-                    element={<KbVersionHistoryPage />}
-                  />
-                  <Route path="/resources" element={<ResourcesPage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/notes" element={<NotesPage />} />
-                  <Route path="/notes/trash" element={<TrashPage />} />
-                  <Route path="/archive" element={<ArchivePage />} />
-
-                  {/* Standalone task routes removed - tasks are only accessible through projects */}
-                  {/* <Route path="/tasks" element={<TasksPage />} /> */}
-                  {/* <Route path="/tasks/:id" element={<TaskDetailsPage />} /> */}
-
-                  {/* Redirect old favorite-quotes page to resources with quotes tab active */}
-                  <Route path="/favorite-quotes" element={<QuotesRedirect />} />
-                  <Route path="/friends" element={<FriendsPage />} />
-
-                  {/* Admin Only Routes - nested protected route */}
-                  {/* Additional role check for admin-specific functionality */}
-                  <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
+                    {/* Project management routes */}
                     <Route
-                      path="/admin/users"
-                      element={<AdminUserListPage />}
+                      path="/projects/new"
+                      element={<ProjectCreatePage />}
                     />
                     <Route
-                      path="/admin/users/:id/edit"
-                      element={<AdminUserEditPage />}
+                      path="/projects/:id" // Dynamic route with project ID parameter
+                      element={<ProjectDetailsPage />}
                     />
+                    <Route path="/projects" element={<ProjectListPage />} />
                     <Route
-                      path="/admin/audit-logs"
-                      element={<AuditLogsPage />}
+                      path="/projects/:id/edit"
+                      element={<ProjectEditPage />}
                     />
+
+                    {/* Knowledge Base routes */}
+                    <Route path="/kb/new" element={<KbCreatePage />} />
+                    <Route path="/kb" element={<KbListPage />} />
+                    <Route path="/kb/:id" element={<KbDetailsPage />} />
+                    <Route path="/kb/:id/edit" element={<KbEditPage />} />
+                    <Route
+                      path="/kb/:id/versions"
+                      element={<KbVersionHistoryPage />}
+                    />
+                    <Route path="/resources" element={<ResourcesPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/notes" element={<NotesPage />} />
+                    <Route path="/notes/trash" element={<TrashPage />} />
+                    <Route path="/archive" element={<ArchivePage />} />
+
+                    {/* Standalone task routes removed - tasks are only accessible through projects */}
+                    {/* <Route path="/tasks" element={<TasksPage />} /> */}
+                    {/* <Route path="/tasks/:id" element={<TaskDetailsPage />} /> */}
+
+                    {/* Redirect old favorite-quotes page to resources with quotes tab active */}
+                    <Route
+                      path="/favorite-quotes"
+                      element={<QuotesRedirect />}
+                    />
+                    <Route path="/friends" element={<FriendsPage />} />
+
+                    {/* Admin Only Routes - nested protected route */}
+                    {/* Additional role check for admin-specific functionality */}
+                    <Route
+                      element={<ProtectedRoute allowedRoles={['Admin']} />}
+                    >
+                      <Route
+                        path="/admin/users"
+                        element={<AdminUserListPage />}
+                      />
+                      <Route
+                        path="/admin/users/:id/edit"
+                        element={<AdminUserEditPage />}
+                      />
+                      <Route
+                        path="/admin/audit-logs"
+                        element={<AuditLogsPage />}
+                      />
+                    </Route>
                   </Route>
                 </Route>
-              </Route>
 
-              {/* Special routes for handling unauthorized access and redirects */}
-              <Route path="/unauthorized" element={<UnauthorizedPage />} />
+                {/* Special routes for handling unauthorized access and redirects */}
+                <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
-              {/* Root path redirects to dashboard */}
-              <Route path="/" element={<Navigate replace to="/dashboard" />} />
+                {/* Root path redirects to dashboard */}
+                <Route
+                  path="/"
+                  element={<Navigate replace to="/dashboard" />}
+                />
 
-              {/* Redirect standalone task routes to projects */}
-              <Route
-                path="/tasks/*"
-                element={<Navigate replace to="/projects" />}
-              />
-
-              {/* 404 Not Found route - catches all unmatched paths */}
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
-        </div>
+                {/* Redirect standalone task routes to projects */}
+                <Route
+                  path="/tasks/*"
+                  element={<Navigate replace to="/projects" />}
+                />
+                {/* Catch-all route for 404 Not Found pages */}
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </div>
+        </ErrorBoundary>
       </Router>
     </NotificationProvider>
   );

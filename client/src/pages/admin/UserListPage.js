@@ -667,7 +667,7 @@ const UserListPage = () => {
           onSort={requestSort}
           sortable={true}
           emptyMessage="No users found. Try adjusting your filters or add a new user."
-          containerClassName="bg-[#23242B] shadow-md rounded overflow-hidden flex-1 min-h-0"
+          containerClassName="bg-[#23242B] shadow-md rounded overflow-x-auto flex-1 min-h-0"
           tableClassName="min-w-full bg-[#23242B] border border-[#393A41] rounded-xl shadow-2xl"
           headerClassName="bg-[#282A36] sticky top-0 z-10"
           bodyClassName="bg-[#23242B]"

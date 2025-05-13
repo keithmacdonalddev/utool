@@ -46,8 +46,64 @@
   }
 
   /* Form elements */
-  input, textarea, select {
+  input,
+  textarea,
+  select {
     @apply bg-dark-700 border border-dark-600 rounded-md px-3 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors;
+  } /* Portal animations */
+  @keyframes tooltipFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes modalFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Define CSS variables for animations to make them easier to override */
+  :root {
+    --modal-animation: modalFadeIn 0.2s ease-out;
+    --tooltip-animation: tooltipFadeIn 0.2s ease-out;
+  }
+
+  /* Reduced motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --modal-animation: none;
+      --tooltip-animation: none;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001s !important;
+      transition-duration: 0.001s !important;
+      scroll-behavior: auto !important;
+    }
+
+    /* Specific overrides for portal components */
+    .modal-content {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    .tooltip-content {
+      animation: none !important;
+      transition: none !important;
+    }
   }
 
   /* Links */
@@ -64,22 +120,22 @@
 /* Dark mode scrollbars sitewide */
 ::-webkit-scrollbar {
   width: 12px;
-  background: #181A20;
+  background: #181a20;
 }
 ::-webkit-scrollbar-thumb {
-  background: #393A41;
+  background: #393a41;
   border-radius: 8px;
-  border: 2px solid #181A20;
+  border: 2px solid #181a20;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #7C3AED;
+  background: #7c3aed;
 }
 ::-webkit-scrollbar-corner {
-  background: #181A20;
+  background: #181a20;
 }
 
 /* For Firefox */
 html {
-  scrollbar-color: #393A41 #181A20;
+  scrollbar-color: #393a41 #181a20;
   scrollbar-width: thin;
 }

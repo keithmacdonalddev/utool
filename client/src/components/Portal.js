@@ -5,6 +5,8 @@ import ReactDOM from 'react-dom';
  * @typedef {Object} PortalProps
  * @property {React.ReactNode} children - The children to render inside the portal.
  * @property {string} [portalId='submenu-portal-root'] - The ID of the DOM element to render the portal into.
+ * @property {Function} [onError=null] - Optional callback for portal creation errors.
+ * @property {boolean} [renderInPlace=false] - If true, children will be rendered in-place as fallback when portal cannot be created.
  */
 
 /**
@@ -12,56 +14,113 @@ import ReactDOM from 'react-dom';
  * This is useful for rendering elements like modals, tooltips, or submenus that need to overlay other content
  * and avoid being clipped by parent elements with `overflow: hidden` or `transform` properties.
  *
- * The component attempts to find a DOM element with the specified `portalId`. If the element is not found
- * immediately, it will wait for the DOM to be fully loaded before attempting to find it again.
+ * Includes robust error handling, safe rendering, and cleanup:
+ * - Falls back to in-place rendering if the portal root is not found (when renderInPlace=true)
+ * - Provides error callback for error handling at the consumer level
+ * - Safely manages mounting/unmounting
+ * - Handles SSR and delayed rendering scenarios
  *
  * @param {PortalProps} props - The props for the Portal component.
- * @returns {React.Portal|null} A React Portal rendering the children, or null if the portal root element is not found.
+ * @returns {React.Portal|React.ReactNode|null} A React Portal rendering the children, children directly if fallback is enabled, or null.
  */
-const Portal = ({ children, portalId = 'submenu-portal-root' }) => {
+const Portal = ({
+  children,
+  portalId = 'submenu-portal-root',
+  onError = null,
+  renderInPlace = false,
+}) => {
   const [mounted, setMounted] = useState(false);
   const [portalElement, setPortalElement] = useState(null);
-
+  const [hasError, setHasError] = useState(false);
   useEffect(() => {
-    setMounted(true);
-    let element = document.getElementById(portalId);
+    try {
+      setMounted(true);
 
-    if (!element) {
-      // Fallback if the element isn't immediately available (e.g., SSR or delayed rendering)
-      const onDOMContentLoaded = () => {
-        element = document.getElementById(portalId);
-        if (element) {
-          setPortalElement(element);
-        } else {
-          console.error(
-            `Portal: Target element with id '${portalId}' not found in the DOM.`
-          );
-        }
-      };
+      // Sanitize the portalId to prevent potential DOM-based attacks
+      const sanitizedId = portalId.replace(/[^\w-]/g, '');
 
-      if (document.readyState === 'complete') {
-        onDOMContentLoaded();
-      } else {
-        document.addEventListener('DOMContentLoaded', onDOMContentLoaded);
-        return () =>
-          document.removeEventListener('DOMContentLoaded', onDOMContentLoaded);
+      if (sanitizedId !== portalId) {
+        console.warn(
+          `[Portal] Sanitized portalId from "${portalId}" to "${sanitizedId}"`
+        );
       }
-    } else {
-      setPortalElement(element);
-    }
 
-    // Cleanup function for the main useEffect
-    return () => {
-      // If an event listener was added, it's cleaned up above.
-      // No specific cleanup needed for `setMounted` or `setPortalElement` here.
-    };
-  }, [portalId]);
+      let element = document.getElementById(sanitizedId);
+
+      if (!element) {
+        // Fallback if the element isn't immediately available (e.g., SSR or delayed rendering)
+        const onDOMContentLoaded = () => {
+          try {
+            element = document.getElementById(sanitizedId);
+            if (element) {
+              setPortalElement(element);
+            } else {
+              const errorMsg = `[Portal] Target element with id '${sanitizedId}' not found in the DOM.`;
+              console.warn(errorMsg);
+              setHasError(true);
+
+              // Invoke error callback if provided
+              if (onError) {
+                onError(new Error(errorMsg));
+              }
+            }
+          } catch (error) {
+            console.error('Error in Portal DOM content loaded handler:', error);
+            setHasError(true);
+            if (onError) {
+              onError(error);
+            }
+          }
+        };
+
+        if (document.readyState === 'complete') {
+          onDOMContentLoaded();
+        } else {
+          document.addEventListener('DOMContentLoaded', onDOMContentLoaded);
+          return () =>
+            document.removeEventListener(
+              'DOMContentLoaded',
+              onDOMContentLoaded
+            );
+        }
+      } else {
+        setPortalElement(element);
+      }
+
+      // Cleanup function for the main useEffect
+      return () => {
+        // If an event listener was added, it's cleaned up above.
+        setPortalElement(null);
+      };
+    } catch (error) {
+      console.error('Error in Portal component:', error);
+      setHasError(true);
+      if (onError) {
+        onError(error);
+      }
+    }
+  }, [portalId, onError]);
+
+  // Early return if we have an error and should render in-place
+  if (hasError && renderInPlace) {
+    return children;
+  }
 
   if (!mounted || !portalElement) {
     return null;
   }
 
-  return ReactDOM.createPortal(children, portalElement);
+  // Safely create the portal
+  try {
+    return ReactDOM.createPortal(children, portalElement);
+  } catch (error) {
+    console.error('Error creating portal:', error);
+    if (onError) {
+      onError(error);
+    }
+    // Render children in-place as fallback for portal creation errors
+    return renderInPlace ? children : null;
+  }
 };
 
 export default Portal;

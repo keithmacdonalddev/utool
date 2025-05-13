@@ -8,6 +8,15 @@
 import React, { useState } from 'react';
 import { PlusCircle, X } from 'lucide-react';
 import { formatDateForDisplay } from '../../utils/dateUtils'; // Assuming this utility exists and is correct
+import {
+  FaUserPlus,
+  FaUsers,
+  FaEdit,
+  FaTrashAlt,
+  FaTasks,
+  FaPlus,
+} from 'react-icons/fa';
+import { FaSpinner, FaTriangleExclamation } from 'react-icons/fa6';
 
 /**
  * Helper function to determine Tailwind classes for status pills.
@@ -70,6 +79,7 @@ const ProjectDetailsInfo = ({
   friendsError,
   onAddMember,
   backgroundRefreshState,
+  onRetryFriends, // New prop
 }) => {
   // State for the "Add Member" dropdown visibility
   const [showAddMemberDropdown, setShowAddMemberDropdown] = useState(false);
@@ -194,13 +204,26 @@ const ProjectDetailsInfo = ({
                   </div>
                   {/* Conditional Content: Loading, Error, List of Friends, No Friends */}
                   {friendsLoading ? (
-                    <p className="text-xs text-gray-400 text-center">
-                      Loading friends...
-                    </p>
+                    <div className="flex items-center text-gray-400">
+                      <FaSpinner className="animate-spin mr-2" />
+                      <span>Loading friends...</span>
+                    </div>
                   ) : friendsError ? (
-                    <p className="text-xs text-red-400 text-center">
-                      Error loading friends.
-                    </p>
+                    <div className="text-red-500 p-3 bg-red-900 bg-opacity-30 rounded-md">
+                      <FaTriangleExclamation className="inline mr-2" />
+                      Error loading friends:{' '}
+                      {typeof friendsError === 'string'
+                        ? friendsError
+                        : friendsError.message || 'Unknown error'}
+                      {onRetryFriends && (
+                        <button
+                          onClick={onRetryFriends}
+                          className="ml-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
                   ) : availableUsersToAdd.length > 0 ? (
                     <>
                       <select

@@ -333,6 +333,7 @@ export const projectSlice = createSlice({
       state.isSuccess = false;
       state.isError = false;
       state.message = '';
+      state.currentProject = null;
     },
     // Add other specific reducers if needed
   },
@@ -463,85 +464,102 @@ export const projectSlice = createSlice({
         state.message = action.payload;
       }) // Get Single Project Cases
       .addCase(getProject.pending, (state, action) => {
-        // Check if this is a background refresh
         const isBackground = action.meta.arg?.backgroundRefresh;
+        const projectId =
+          typeof action.meta.arg === 'string'
+            ? action.meta.arg
+            : action.meta.arg?.projectId;
 
-        // Only set loading to true for non-background refreshes
         if (!isBackground) {
           state.isLoading = true;
         } else {
-          // Set background refresh flags
           state.backgroundRefreshingSingle = true;
-          state.backgroundRefreshTarget =
-            typeof action.meta.arg === 'string'
-              ? action.meta.arg
-              : action.meta.arg.projectId;
+          state.backgroundRefreshTarget = projectId;
+        }
+        // Clear previous error/success states for a new fetch attempt
+        state.isError = false;
+        state.message = '';
+        state.isSuccess = false; // Reset success state as well
+        // state.currentProject = null; // Keep existing currentProject during background refresh, clear only on non-background pending
+        if (!isBackground) {
+          state.currentProject = null;
         }
       })
       .addCase(getProject.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
+        state.isError = false; // Ensure isError is false on success
+        state.message = ''; // Clear any previous error messages
 
-        if (!action.payload.fromCache) {
-          // For smart refresh, compare with the existing project
-          const existingProject =
-            state.currentProject?._id === action.payload.project._id
-              ? state.currentProject
-              : state.projects.find(
-                  (p) => p._id === action.payload.project._id
-                );
+        const { project, fromCache, timestamp, smartRefresh, projectId } =
+          action.payload;
 
-          let shouldUpdate = true;
+        // If this is not from cache (i.e., it's a fresh fetch or background update)
+        if (!fromCache) {
+          // Apply smart refresh logic if enabled and data is available
+          if (smartRefresh && project) {
+            // Compare with existing currentProject or project in list
+            const existingProject =
+              state.currentProject?._id === project._id
+                ? state.currentProject
+                : state.projects.find((p) => p._id === project._id);
 
-          // Only do comparison if smart refresh is enabled and we have an existing project
-          if (action.payload.smartRefresh && existingProject) {
-            // Deep compare objects to see if there are meaningful changes
-            shouldUpdate = deepCompareObjects(
-              existingProject,
-              action.payload.project
-            );
-
-            if (!shouldUpdate) {
+            if (
+              !existingProject ||
+              deepCompareObjects(existingProject, project)
+            ) {
+              state.currentProject = project;
               console.log(
-                `No meaningful changes for project ${action.payload.project._id}, skipping update`
+                `Project data for ${project._id} updated - meaningful changes detected`
               );
+              // Update the project in the main projects list as well
+              const projectIndex = state.projects.findIndex(
+                (p) => p._id === project._id
+              );
+              if (projectIndex !== -1) {
+                state.projects[projectIndex] = project;
+              } else {
+                // If project was not in the list (e.g. direct fetch by ID), add it
+                state.projects.push(project);
+              }
+            } else {
+              console.log(
+                `No meaningful changes in project data for ${project._id}, skipping update`
+              );
+              // If no changes, but currentProject was null, set it from payload
+              if (!state.currentProject && project) {
+                state.currentProject = project;
+              }
+            }
+          } else if (project) {
+            // Without smart refresh, or if project is null (should not happen on fulfilled), always update
+            state.currentProject = project;
+            // Update the project in the main projects list as well
+            const projectIndex = state.projects.findIndex(
+              (p) => p._id === project._id
+            );
+            if (projectIndex !== -1) {
+              state.projects[projectIndex] = project;
+            } else if (project._id) {
+              // If project was not in the list (e.g. direct fetch by ID), add it
+              state.projects.push(project);
             }
           }
 
-          if (shouldUpdate) {
-            // Update projectCache for this specific project
-            state.projectCache[action.payload.project._id] = {
-              lastFetched: action.payload.timestamp,
+          // Update cache timestamp for this specific project if projectId is available
+          if (projectId && timestamp && project) {
+            state.projectCache[projectId] = {
+              lastFetched: timestamp,
               fromAPI: true,
             };
-
-            // Set the fetched project
-            state.currentProject = action.payload.project;
-
-            console.log(`Updated current project to:`, {
-              id: action.payload.project._id,
-              name: action.payload.project.name,
-            });
-
-            // Also update this project in the projects array if it exists there
-            const index = state.projects.findIndex(
-              (p) => p._id === action.payload.project._id
-            );
-            if (index !== -1) {
-              state.projects[index] = action.payload.project;
-            }
           }
-        } else {
-          // Using cached data, just set currentProject
-          state.currentProject = action.payload.project;
-
-          console.log(`Using cached project:`, {
-            id: action.payload.project._id,
-            name: action.payload.project.name,
-          });
+        } else if (project && !state.currentProject) {
+          // If fromCache is true, but currentProject is null, set it.
+          // This handles the case where ProjectDetailsPage loads and project is in list cache but not currentProject
+          state.currentProject = project;
         }
 
-        // Reset background refresh flags if this was a background refresh
+        // If this was a background refresh, reset the flag
         if (action.payload.backgroundRefreshing) {
           state.backgroundRefreshingSingle = false;
           state.backgroundRefreshTarget = null;
@@ -550,16 +568,16 @@ export const projectSlice = createSlice({
       .addCase(getProject.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload;
+        state.message = action.payload || 'Failed to fetch project';
+        state.currentProject = null; // Ensure currentProject is cleared on error
+        state.isSuccess = false; // Reset success state
 
-        // Only clear current project for non-background refreshes
-        if (!action.meta.arg?.backgroundRefresh) {
-          state.currentProject = null;
+        // If this was a background refresh, reset the flag
+        const isBackground = action.meta.arg?.backgroundRefresh;
+        if (isBackground) {
+          state.backgroundRefreshingSingle = false;
+          state.backgroundRefreshTarget = null;
         }
-
-        // Reset background refresh flags
-        state.backgroundRefreshingSingle = false;
-        state.backgroundRefreshTarget = null;
       })
       // Handle background refresh updates for a single project
       .addCase('projects/backgroundUpdateSingle', (state, action) => {

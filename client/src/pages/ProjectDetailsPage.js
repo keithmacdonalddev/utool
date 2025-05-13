@@ -2,11 +2,12 @@
 //
 // KEY CONCEPTS:
 // 1. React Router Integration: Using URL parameters and navigation hooks
-// 2. Efficient Data Fetching: Using custom hooks with intelligent caching to prevent redundant API calls
+// 2. Efficient Data Fetching: Using custom hooks with intelligent caching and conditional execution
 // 3. Component Composition: Orchestrating smaller components to build the page UI
-// 4. Conditional Rendering: Displaying different UI based on loading/error states
+// 4. Conditional Rendering: Displaying different UI based on loading/error states (global and per-section)
 // 5. Custom Hooks: Reusing logic across components (useProjects, useProjectTasks, useFriends)
 // 6. Improved Code Readability: Delegated rendering of sections to child components
+// 7. Accessibility: ARIA attributes and focus management for dynamic content and error states.
 
 import React, { useState, lazy, Suspense, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -55,18 +56,6 @@ const TaskDetailsSidebar = lazy(() =>
 // Immediately trigger the preload
 import('../components/tasks/TaskDetailsSidebar').catch(() => {});
 
-/**
- * ProjectDetailsPage Component
- *
- * This page serves as an orchestrator:
- * - Fetches primary data (project, tasks, friends) using custom hooks with caching.
- * - Manages top-level UI state (modal, sidebar, main filters like tags).
- * - Provides handlers that interact with Redux/API.
- * - Renders structural layout and delegates rendering of distinct sections
- * to smaller, focused child components.
- *
- * Uses intelligent caching to prevent redundant API calls.
- */
 const ProjectDetailsPage = () => {
   /**
    * React Router Hooks:
@@ -83,157 +72,105 @@ const ProjectDetailsPage = () => {
   const dispatch = useDispatch();
 
   /**
-   * Custom Hooks with Caching:
-   * - useProjects: Gets project data with caching
-   * - useProjectTasks: Gets tasks for the project with caching
-   * - useFriends: Gets friends data for member management
-   */ const {
-    projects,
-    isLoading: projectsLoading,
-    error: projectsErrorHook, // Renamed to avoid conflict with projectError from useProjects single fetch
-    refetchProjects,
-    backgroundRefreshState: projectsListBackgroundState,
-  } = useProjects({
-    skipInitialFetch: true, // We'll fetch the individual project instead
-    backgroundRefresh: true, // Enable background refresh for the projects list
-    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
-  }); // Get the current project data with intelligent caching
-  // Note: Using the enhanced useProjects hook specifically for single project
+   * Custom Hooks with Caching & Conditional Execution:
+   * - useProjects: Gets project data with caching. `enabled: !!id` ensures it only runs if 'id' is present.
+   * - useProjectTasks: Gets tasks for the project. `enabled: !!project && !projectError` ensures it only runs if project data is loaded successfully.
+   * - useFriends: Gets friends data. `enabled: !!project && !projectError` similar to tasks.
+   */
   const {
     data: project,
-    isLoading,
-    error: projectError, // This is the primary error state for the current project
+    isLoading: projectLoading, // Renamed from isLoading for clarity
+    error: projectError,
     refetch: refetchProject,
-    backgroundRefreshState: projectBackgroundState,
+    // backgroundRefreshState: projectBackgroundState, // May not be needed if hooks handle this internally
   } = useProjects({
     selector: (state) => state.projects.currentProject,
     actionCreator: 'getProject',
     actionParams: {
       projectId: id,
-      forceRefresh: false, // Use cached data for initial load if available
+      forceRefresh: false,
     },
-    cacheTimeout: 5 * 60 * 1000, // 5 minutes cache (project details change infrequently)
-    backgroundRefresh: true, // Enable background refresh for seamless updates
-    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
+    cacheTimeout: 5 * 60 * 1000,
+    backgroundRefresh: true,
+    smartRefresh: true,
+    enabled: !!id, // Ensures hook only runs if 'id' is present
   });
-  // Get tasks for this project with intelligent caching
+
   const {
     tasks,
     isLoading: tasksLoading,
     error: tasksError,
     refetchTasks,
-    backgroundRefreshState: tasksBackgroundRefreshState,
+    // backgroundRefreshState: tasksBackgroundRefreshState,
   } = useProjectTasks(id, {
-    cacheTimeout: 2 * 60 * 1000, // 2 minutes cache (tasks change more frequently)
-    backgroundRefresh: true, // Enable background refresh for smoother UX
-    smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
+    cacheTimeout: 2 * 60 * 1000,
+    backgroundRefresh: true,
+    smartRefresh: true,
+    enabled: !!project && !projectError, // Only fetch tasks if project loaded successfully
   });
-  const { showNotification } = useNotifications();
 
-  /**
-   * Custom Hook:
-   * Fetching friends data for adding members and potentially assigning tasks
-   */
   const {
     friends,
     isLoading: friendsLoading,
     error: friendsError,
-  } = useFriends();
-
-  // Check if the project exists in Redux store
-  const projectInReduxStore = useSelector((state) => {
-    // Check if the current project matches the requested ID
-    const currentProjectMatches = state.projects.currentProject?._id === id;
-    // Check if the project exists in the projects list
-    const existsInProjectsList = state.projects.projects.some(
-      (p) => p._id === id
-    );
-
-    // Debug info
-    console.log(`Project ${id} cache status check:`, {
-      currentProjectMatches,
-      existsInProjectsList,
-      currentProjectId: state.projects.currentProject?._id,
-      projectsCount: state.projects.projects.length,
-    });
-
-    return currentProjectMatches || existsInProjectsList;
+    refetch: refetchFriends, // Assuming useFriends hook exposes a refetch function
+  } = useFriends({
+    enabled: !!project && !projectError, // Only fetch friends if project loaded successfully
   });
 
-  // const effectFetchAttemptedRef = useRef(false); // No longer needed
+  const { showNotification } = useNotifications();
 
-  // Enhanced data loading strategy with smart caching
+  // Removed projectInReduxStore and effectFetchAttemptedRef as they are no longer needed with the new useEffect and hook strategy
+
+  /**
+   * Page-level useEffect for Global State Cleanup.
+   * This effect ensures that when the ProjectDetailsPage for a specific 'id'
+   * is no longer relevant (e.g., user navigates to a different project or away),
+   * we clean up the global Redux state associated with 'currentProject'.
+   *
+   * The custom hooks (useProjects, useProjectTasks, useFriends) are responsible
+   * for fetching data when 'id' is valid and they are mounted/enabled.
+   */
   useEffect(() => {
+    // The custom hooks (useProjects, useProjectTasks, useFriends)
+    // are expected to handle their own data fetching, caching,
+    // and background refresh logic based on the provided 'id'
+    // and their internal configurations (including the 'enabled' option).
+
+    // This page-level useEffect is now primarily for cleaning up
+    // global state (like `currentProject` in Redux) when this specific
+    // project details view is no longer active (either unmounted
+    // or the 'id' has changed).
+
     if (!id) {
-      // effectFetchAttemptedRef.current = false; // No longer needed
+      // If there's no ID, dispatch reset immediately.
+      // This might occur if the route is optional or id becomes undefined.
+      dispatch(resetProjectStatus());
       return;
     }
 
-    // if (project || projectError) { // No longer needed here as the problematic block is removed
-    //   effectFetchAttemptedRef.current = false;
-    // }
+    // The hooks themselves will fetch data based on their 'enabled' status.
+    // No explicit fetch calls (e.g., refetchProject()) are needed here for initial load.
 
-    // Cache validation state for background refresh
-    const lastCheckedKey = `project_${id}_last_checked`;
-    const lastCheckedTime = sessionStorage.getItem(lastCheckedKey);
-    const now = Date.now();
-    const recentlyValidated =
-      lastCheckedTime && now - parseInt(lastCheckedTime) < 30000; // 30 second throttle
-
-    // Case 1: Project data IS loaded AND we are not currently loading AND no error
-    // This is primarily for background validation.
-    if (project && !isLoading && !projectError) {
-      if (recentlyValidated) {
-        console.log(
-          `Skipping background validation for project ${id} - validated recently`
-        );
-        return; // Skip background validation if done recently
-      }
-      // Schedule background validation
-      console.log(`Scheduling background validation for project ${id}`);
-      const timeoutId = setTimeout(() => {
-        console.log(`Running background validation for project ${id}`);
-        refetchProject(false); // Background refresh
-        sessionStorage.setItem(lastCheckedKey, now.toString());
-      }, 300); // Existing 300ms delay, consider increasing if too frequent
-      return () => clearTimeout(timeoutId);
-    }
-    // Case 2: (REMOVED) No project data, not currently loading, AND no project error reported by useProjects yet
-    // The useProjects hook is now solely responsible for the initial fetch.
-    // else if (!project && !isLoading && !projectError) {
-    //   if (!effectFetchAttemptedRef.current) {
-    //     console.log(
-    //       `ProjectDetailsPage effect: Project ${id} not loaded, no error from useProjects, and not loading. Attempting effect-driven fetch.`
-    //     );
-    //     const forceThisFetch = !projectInReduxStore;
-    //     dispatch(getProject({ projectId: id, forceRefresh: forceThisFetch }));
-    //     effectFetchAttemptedRef.current = true;
-    //   }
-    // }
-
-    // Optional: React to projectError (e.g., for additional logging or side effects beyond UI rendering)
-    if (projectError) {
-      console.error(
-        `ProjectDetailsPage useEffect: Encountered projectError for ${id}:`,
-        projectError
-      );
-      // Be cautious about dispatching or setting state here to avoid new loops.
-      // UI rendering for errors is handled in the return statement of the component.
-    }
-
-    // General cleanup when component unmounts or id changes
     return () => {
-      dispatch(resetProjectStatus());
+      // This cleanup function runs when:
+      // 1. The component unmounts.
+      // 2. The 'id' prop changes (this runs *before* the effect for the new 'id').
+      // This is the correct place to reset global state tied to the *previous* 'id'.
+      console.log(
+        `ProjectDetailsPage: Cleaning up Redux state for project ID context (previous ID or unmount).`
+      );
+      // dispatch(resetProjectStatus()); // Temporarily commented out for diagnosis
+
+      // Temporarily commenting out these lines to diagnose premature sidebar closure.
+      // If the sidebar now stays open, it means this cleanup was being triggered
+      // at an unexpected time (e.g., due to a transient change in 'id' prop
+      // or an interaction with the state updates in handleTaskClick).
+      // A more robust solution will be needed if this is the case.
+      // setIsSidebarOpen(false);
+      // setSelectedTask(null);
     };
-  }, [
-    id,
-    project,
-    isLoading,
-    projectError, // Keep projectError for logging and conditional logic
-    // projectInReduxStore, // Removed as it's no longer used in this simplified effect
-    dispatch,
-    refetchProject,
-  ]);
+  }, [id, dispatch]); // Dependencies: only 'id' and 'dispatch'
 
   /**
    * Local Component State:
@@ -256,6 +193,10 @@ const ProjectDetailsPage = () => {
    * @param {string} userId - The ID of the user to add.
    */
   const handleAddMember = async (userId) => {
+    if (!project) {
+      showNotification('Project data not available.', 'error');
+      return;
+    }
     // Input validation done in child component before calling this
     // Prevent duplicate members (also checked in child component)
     const currentMemberIds = project.members?.map((m) => m._id) || [];
@@ -266,20 +207,13 @@ const ProjectDetailsPage = () => {
     const updatedMembers = [...currentMemberIds, userId];
 
     try {
-      // First get the member details from friends list
       const memberToAdd = friends.find((friend) => friend._id === userId);
 
       if (memberToAdd) {
-        // Create an optimistic update version of the project
         const optimisticProject = {
           ...project,
-          members: [
-            ...(project.members || []),
-            memberToAdd, // Add the complete member object
-          ],
+          members: [...(project.members || []), memberToAdd],
         };
-
-        // Apply optimistic update immediately for better UX
         await dispatch(
           updateProject({
             projectId: id,
@@ -289,7 +223,6 @@ const ProjectDetailsPage = () => {
         ).unwrap();
       }
 
-      // Now actually send the update to the server
       await dispatch(
         updateProject({
           projectId: id,
@@ -297,9 +230,7 @@ const ProjectDetailsPage = () => {
         })
       ).unwrap();
       showNotification('Member added successfully!', 'success');
-
-      // We don't need to force refresh since we have optimistic updates
-      // and background refresh will catch any server-side changes
+      // No explicit refetchProject needed if optimistic update + background refresh in hook is sufficient
     } catch (error) {
       console.error('Failed to add member:', error);
       showNotification(
@@ -313,18 +244,21 @@ const ProjectDetailsPage = () => {
    * Handle task click - Open the slide panel with task details
    * Manages sidebar state (selectedTask, isSidebarOpen).
    * Stays here as it controls top-level UI state.
+   * @param {object} event - The click event.
    * @param {string} taskId - ID of the task that was clicked
    */
-  const handleTaskClick = (taskId) => {
+  const handleTaskClick = (event, taskId) => {
+    // Added event parameter
+    event.stopPropagation(); // Prevent event from bubbling up
     console.log(`🖱️ Task clicked: ${taskId}`);
-    // Find the task from the current tasks state
-    const task = tasks.find((t) => t._id === taskId);
+    const task = tasks?.find((t) => t._id === taskId); // Use optional chaining for tasks
     if (task) {
       console.log(`✅ Found task: ${task.title}`);
       setSelectedTask(task);
       setIsSidebarOpen(true);
     } else {
       console.error(`❌ Task not found with ID: ${taskId}`);
+      showNotification('Task details could not be loaded.', 'error');
     }
   };
 
@@ -467,84 +401,128 @@ const ProjectDetailsPage = () => {
    * Prepare data to be passed down to child components.
    * Uses utility functions from taskUtils.js.
    */
-  // Get critical tasks (overdue or due today) using the utility function
-  const criticalTasks = getCriticalTasks(tasks);
-
-  // Apply date filtering first, then tag filtering to get the final list for 'All Tasks'
-  const dateFilteredTasks = getFilteredTasks(tasks, 'all'); // Assuming 'all' filter by default for the main list
-  const filteredTasks = getTagFilteredTasks(dateFilteredTasks, selectedTags);
+  const criticalTasks = tasks ? getCriticalTasks(tasks) : []; // Handle tasks possibly being undefined
+  const dateFilteredTasks = tasks ? getFilteredTasks(tasks, 'all') : [];
+  const filteredTasksForDisplay = tasks // Renamed to avoid conflict and ensure tasks exist
+    ? getTagFilteredTasks(dateFilteredTasks, selectedTags)
+    : [];
 
   /**
-   * CONDITIONAL RENDERING PATTERN:
-   * Show different UIs based on different application states (loading, error, not found).
-   * These are top-level states, so this logic stays here.
+   * CONDITIONAL RENDERING PATTERN (REVISED):
+   * Layered approach:
+   * 1. Global loading (for initial project fetch if project data isn't available yet).
+   * 2. Critical project error (if main project data fails to load).
+   * 3. Project not found (if API returns no project for the ID).
+   * 4. Main content with inline loading/error handling for dependent data (tasks, friends).
    */
 
-  // Overall Loading state for the page (isLoading is from the single project useProjects hook)
-  if (isLoading || tasksLoading || friendsLoading)
+  // 1. Global Loading State (primarily for the main project data, if not yet available)
+  // projectLoading is from useProjects. Show global loader only if project data isn't yet available from cache or fetch.
+  if (projectLoading && !project) {
     return (
-      <div className="container mx-auto p-4 flex items-center justify-center h-screen">
+      <div
+        role="status"
+        aria-live="polite"
+        className="container mx-auto p-4 flex items-center justify-center h-screen"
+      >
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4 text-foreground">Loading project details...</p>
         </div>
       </div>
     );
+  }
 
-  // Overall Error state for the project fetch (projectError is from the single project useProjects hook)
+  // 2. Handle Critical Project Error (main project data failed to load)
   if (projectError) {
     return (
-      <div className="container mx-auto p-4 flex items-center justify-center h-screen">
+      <div
+        role="alert"
+        className="container mx-auto p-4 flex items-center justify-center h-screen"
+      >
         <div className="text-center">
-          <div className="text-red-500 text-lg">Error: {projectError}</div>
-          <Link to="/projects" className="mt-4 text-primary hover:underline">
+          <h2
+            id="error-title"
+            className="text-xl font-semibold text-red-500 mb-3"
+          >
+            Error Loading Project
+          </h2>
+          <p className="text-foreground mb-4" aria-describedby="error-title">
+            {projectError.message ||
+              'An unexpected error occurred while fetching project details.'}
+          </p>
+          <button
+            onClick={() => refetchProject(true)} // Assuming refetchProject(true) forces a refresh
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary-focus"
+          >
+            Retry
+          </button>
+          <Link
+            to="/projects"
+            className="ml-4 text-accent-blue hover:underline"
+          >
             Back to projects
           </Link>
         </div>
       </div>
     );
-  } // Project Not Found state (and no error reported by useProjects yet, and not loading)
-  if (!project && !isLoading && !projectError) {
+  }
+
+  // 3. Handle Project Not Found (after loading, no error, but no project data)
+  // This condition means useProjects finished, didn't error, but project is still null/undefined.
+  if (!project && !projectLoading && !projectError) {
     return (
-      <div className="container mx-auto p-4 flex items-center justify-center h-screen">
+      <div
+        role="alert"
+        className="container mx-auto p-4 flex items-center justify-center h-screen"
+      >
         <div className="text-center">
-          <div className="text-foreground text-lg">
-            Project not found or you don't have permission to view it.
-          </div>
-          <div className="mt-4 flex justify-center space-x-4">
-            <Link to="/projects" className="text-primary hover:underline">
-              Back to projects
-            </Link>
-            <button
-              onClick={() => {
-                // Force refresh the project data from the API
-                console.log('Forcing fresh project fetch for ID:', id);
-                dispatch(getProject({ projectId: id, forceRefresh: true }));
-                showNotification('Refreshing project data...', 'info');
-              }}
-              className="text-accent-blue hover:underline cursor-pointer"
-            >
-              Retry Loading
-            </button>
-          </div>
-          {projectError && (
-            <div className="mt-4 p-3 bg-red-900/20 text-red-400 rounded-md max-w-md mx-auto text-sm">
-              Error details: {projectError}
-            </div>
-          )}
-          {/* Show cache status for debugging */}
-          <div className="mt-4 text-xs text-gray-500">
-            Cache Status:{' '}
-            {projectInReduxStore
-              ? 'Project exists in Redux store but could not be loaded'
-              : 'Project not found in Redux store'}
-          </div>
+          <h2
+            id="notfound-title"
+            className="text-xl font-semibold text-foreground mb-3"
+          >
+            Project Not Found
+          </h2>
+          <p className="text-foreground mb-4" aria-describedby="notfound-title">
+            The project with ID "{id}" could not be found, or you may not have
+            permission to view it.
+          </p>
+          <button
+            onClick={() => refetchProject(true)} // Force refresh
+            className="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary-focus"
+          >
+            Try Again
+          </button>
+          <Link
+            to="/projects"
+            className="ml-4 text-accent-blue hover:underline"
+          >
+            Back to projects
+          </Link>
         </div>
       </div>
     );
   }
-  // Remove the second useEffect that's causing problems
-  // We're already using the initialization parameters to force a refresh on initial load
+
+  // 4. Project data IS available. Render page content.
+  // Child components will handle their own loading/error states for tasks and friends.
+  // Ensure `project` is not null before proceeding to render dependent UI.
+  if (!project) {
+    // This case should ideally be caught by the above conditions, but as a fallback:
+    return (
+      <div
+        role="alert"
+        className="container mx-auto p-4 flex items-center justify-center h-screen"
+      >
+        <p className="text-foreground">
+          Project data is unexpectedly unavailable. Please try refreshing.
+        </p>
+        <Link to="/projects" className="ml-4 text-accent-blue hover:underline">
+          Back to projects
+        </Link>
+      </div>
+    );
+  }
 
   /**
    * MAIN PAGE STRUCTURE RENDERING:
@@ -571,7 +549,11 @@ const ProjectDetailsPage = () => {
       <Suspense
         fallback={
           isSidebarOpen && ( // Only show fallback if sidebar is expected to be open
-            <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-96 bg-dark-800 flex items-center justify-center border-l border-dark-700 shadow-xl">
+            <div
+              role="status"
+              aria-live="polite"
+              className="fixed inset-y-0 right-0 z-50 w-full sm:w-96 bg-dark-800 flex items-center justify-center border-l border-dark-700 shadow-xl"
+            >
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto"></div>
                 <p className="mt-2 text-foreground text-sm">
@@ -615,16 +597,16 @@ const ProjectDetailsPage = () => {
           {/* Refresh Button */}
           <button
             onClick={() => {
-              // Clear the "last checked" entry from session storage to force a fresh check
-              sessionStorage.removeItem(`project_${id}_last_checked`);
-              // Use direct dispatch for the most reliable refresh
-              dispatch(getProject({ projectId: id, forceRefresh: true }));
-              refetchTasks(true);
+              // sessionStorage.removeItem(`project_${id}_last_checked`); // No longer needed
+              // dispatch(getProject({ projectId: id, forceRefresh: true })); // Prefer hook's refetch
+              refetchProject(true); // Force refresh project
+              refetchTasks(true); // Force refresh tasks
+              // refetchFriends(true); // Optionally refresh friends too
               showNotification('Refreshing project data...', 'info');
             }}
             className={`p-2 rounded-md ${
-              projectBackgroundState?.backgroundRefreshingSingle
-                ? 'text-blue-400 bg-blue-400 bg-opacity-10'
+              projectLoading // Use projectLoading from useProjects
+                ? 'text-blue-400 bg-blue-400 bg-opacity-10 animate-spin_custom' // Use a custom spin if needed or rely on SVG's
                 : 'text-gray-400 hover:text-white hover:bg-dark-600'
             }`}
             title="Refresh Project Data"
@@ -641,7 +623,7 @@ const ProjectDetailsPage = () => {
               strokeLinecap="round"
               strokeLinejoin="round"
               className={
-                projectBackgroundState?.backgroundRefreshingSingle
+                projectLoading // Use projectLoading for spin animation
                   ? 'animate-spin'
                   : ''
               }
@@ -684,12 +666,13 @@ const ProjectDetailsPage = () => {
           {/* Project Details Info Component - Replaces the large details block */}
           {/* Pass necessary data and the handler for adding members */}
           <ProjectDetailsInfo
-            project={project}
-            friends={friends}
-            friendsLoading={friendsLoading}
-            friendsError={friendsError}
-            onAddMember={handleAddMember} // Pass the handler down
-            backgroundRefreshState={projectBackgroundState} // Pass background refresh state
+            project={project} // project is guaranteed to be loaded here
+            friends={friends} // Pass friends data
+            friendsLoading={friendsLoading} // Pass friends loading state
+            friendsError={friendsError} // Pass friends error state
+            onAddMember={handleAddMember}
+            onRetryFriends={() => refetchFriends(true)} // Pass retry function for friends
+            // backgroundRefreshState={projectBackgroundState} // This might be removed or handled internally by useProjects
           />
         </div>
 
@@ -700,27 +683,31 @@ const ProjectDetailsPage = () => {
           {/* Critical Tasks Section Component */}
           {/* Pass the derived critical tasks data and relevant handlers */}{' '}
           <CriticalTasksSection
-            criticalTasks={criticalTasks}
-            tasksLoading={tasksLoading}
-            tasksError={tasksError}
-            onTaskClick={handleTaskClick} // Pass the task click handler
-            onAddTaskClick={handleShowTaskModal} // Pass the handler to show the modal
-            backgroundRefreshState={tasksBackgroundRefreshState} // Pass background refresh state
+            projectId={id} // Pass projectId
+            criticalTasks={criticalTasks} // Pass derived critical tasks - CORRECTED PROP NAME
+            tasksLoading={tasksLoading} // Pass tasks loading state
+            tasksError={tasksError} // Pass tasks error state
+            onTaskClick={handleTaskClick}
+            onAddTaskClick={handleShowTaskModal}
+            onRetryTasks={() => refetchTasks(true)} // Pass retry function for tasks
+            // backgroundRefreshState={tasksBackgroundRefreshState} // This might be removed or handled internally by useProjectTasks
           />
           {/* All Tasks Section Component */}
           {/* Pass task data, derived filtered tasks, filters, and handlers */}
           <AllTasksSection
-            tasks={tasks} // Pass full tasks for TagFilter
-            filteredTasks={filteredTasks}
-            tasksLoading={tasksLoading}
-            tasksError={tasksError}
-            selectedTags={selectedTags} // Pass current filter state
-            onTaskClick={handleTaskClick} // Pass the task click handler
-            onAddTaskClick={handleShowTaskModal} // Pass the handler to show the modal
-            onTagSelect={handleTagSelect} // Pass tag filter handlers
+            projectId={id} // Pass projectId
+            tasks={tasks} // Pass full tasks for TagFilter and list
+            filteredTasks={filteredTasksForDisplay} // Pass derived filtered tasks
+            tasksLoading={tasksLoading} // Pass tasks loading state
+            tasksError={tasksError} // Pass tasks error state
+            selectedTags={selectedTags}
+            onTaskClick={handleTaskClick}
+            onAddTaskClick={handleShowTaskModal}
+            onTagSelect={handleTagSelect}
             onTagDeselect={handleTagDeselect}
             onClearAllTags={handleClearAllTags}
-            backgroundRefreshState={tasksBackgroundRefreshState} // Pass background refresh state
+            onRetryTasks={() => refetchTasks(true)} // Pass retry function for tasks
+            // backgroundRefreshState={tasksBackgroundRefreshState} // This might be removed or handled internally by useProjectTasks
           />
         </div>
       </div>

@@ -14,6 +14,7 @@ import FormCheckbox from '../common/FormCheckbox';
 import Button from '../common/Button';
 import Card from '../common/Card';
 import { X } from 'lucide-react';
+import Portal from '../common/Portal'; // Import the Portal component
 
 const COLORS = [
   '',
@@ -137,191 +138,197 @@ const NoteEditorModal = ({ onClose }) => {
   const isTrashed = !!(selectedNote && selectedNote.deletedAt);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-      <Card className="w-full max-w-lg p-6 relative border-2 border-dark-700">
-        <button
-          className="absolute top-4 right-4 text-text-muted hover:text-text focus:outline-none"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          <X size={24} />
-        </button>
+    <Portal>
+      {' '}
+      {/* Wrap the modal content with Portal */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+        <Card className="w-full max-w-lg p-6 relative border-2 border-dark-700">
+          <button
+            className="absolute top-4 right-4 text-text-muted hover:text-text focus:outline-none"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={24} />
+          </button>
 
-        <h2 className="text-2xl font-bold mb-6 text-text flex items-center gap-2">
-          {selectedNote ? (
-            <>
-              <span>Edit Note</span>
-              {isTrashed && (
-                <span className="inline-block bg-red-100 text-red-700 text-xs font-semibold px-2 py-1 rounded animate-pulse">
-                  In Trash
-                </span>
-              )}
-            </>
-          ) : (
-            'New Note'
-          )}
-        </h2>
-
-        <form onSubmit={handleSubmit}>
-          <FormInput
-            id="title"
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            maxLength={120}
-            disabled={isTrashed}
-            placeholder="Note title"
-          />
-
-          <FormTextarea
-            id="content"
-            label="Content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            disabled={isTrashed}
-            rows={4}
-            placeholder="Note content"
-          />
-
-          <div className="mb-4">
-            <label className="block text-text text-sm font-bold mb-2">
-              Tags
-            </label>
-            <div className="flex gap-2 mb-2 flex-wrap">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="bg-dark-800 border border-dark-600 text-text px-2 py-0.5 rounded-full text-xs flex items-center"
-                >
-                  #{tag}
-                  <button
-                    type="button"
-                    className="ml-1 text-xs text-red-500 hover:text-red-700"
-                    onClick={() => handleTagRemove(tag)}
-                    aria-label={`Remove tag ${tag}`}
-                    disabled={isTrashed}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <FormInput
-                value={tagInput}
-                onChange={(e) =>
-                  setTagInput(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))
-                }
-                placeholder="Add tag"
-                maxLength={20}
-                disabled={isTrashed}
-                className="mb-0 flex-grow"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleTagAdd}
-                disabled={!tagInput || isTrashed}
-                className="flex-shrink-0"
-              >
-                Add
-              </Button>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-text text-sm font-bold mb-2">
-              Color
-            </label>
-            <div className="flex gap-2">
-              {COLORS.map((c, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className={`w-8 h-8 rounded-full border-2 transition-all duration-150 ${
-                    color === c
-                      ? 'border-accent-purple scale-110 ring-2 ring-accent-purple/40'
-                      : 'border-dark-600'
-                  }`}
-                  style={
-                    c ? { backgroundColor: c } : { backgroundColor: '#23242B' }
-                  }
-                  onClick={() => setColor(c)}
-                  aria-label={c ? `Set color ${c}` : 'No color'}
-                  disabled={isTrashed}
-                />
-              ))}
-            </div>
-          </div>
-
-          <FormInput
-            id="reminder"
-            label="Reminder"
-            type="datetime-local"
-            value={reminder}
-            onChange={(e) => setReminder(e.target.value)}
-            disabled={isTrashed}
-          />
-
-          <div className="grid grid-cols-3 gap-2 mb-6">
-            <FormCheckbox
-              id="pinned"
-              label="📌 Pin"
-              checked={pinned}
-              onChange={() => setPinned((v) => !v)}
-              disabled={isTrashed}
-              labelClassName="text-yellow-500"
-            />
-
-            <FormCheckbox
-              id="favorite"
-              label="★ Favorite"
-              checked={favorite}
-              onChange={() => setFavorite((v) => !v)}
-              disabled={isTrashed}
-              labelClassName="text-pink-500"
-            />
-
-            <FormCheckbox
-              id="archived"
-              label="🗄️ Archive"
-              checked={archived}
-              onChange={() => setArchived((v) => !v)}
-              disabled={isTrashed}
-              labelClassName="text-gray-500"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 mt-6">
-            {isTrashed ? (
+          <h2 className="text-2xl font-bold mb-6 text-text flex items-center gap-2">
+            {selectedNote ? (
               <>
+                <span>Edit Note</span>
+                {isTrashed && (
+                  <span className="inline-block bg-red-100 text-red-700 text-xs font-semibold px-2 py-1 rounded animate-pulse">
+                    In Trash
+                  </span>
+                )}
+              </>
+            ) : (
+              'New Note'
+            )}
+          </h2>
+
+          <form onSubmit={handleSubmit}>
+            <FormInput
+              id="title"
+              label="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              maxLength={120}
+              disabled={isTrashed}
+              placeholder="Note title"
+            />
+
+            <FormTextarea
+              id="content"
+              label="Content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              disabled={isTrashed}
+              rows={4}
+              placeholder="Note content"
+            />
+
+            <div className="mb-4">
+              <label className="block text-text text-sm font-bold mb-2">
+                Tags
+              </label>
+              <div className="flex gap-2 mb-2 flex-wrap">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="bg-dark-800 border border-dark-600 text-text px-2 py-0.5 rounded-full text-xs flex items-center"
+                  >
+                    #{tag}
+                    <button
+                      type="button"
+                      className="ml-1 text-xs text-red-500 hover:text-red-700"
+                      onClick={() => handleTagRemove(tag)}
+                      aria-label={`Remove tag ${tag}`}
+                      disabled={isTrashed}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <FormInput
+                  value={tagInput}
+                  onChange={(e) =>
+                    setTagInput(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))
+                  }
+                  placeholder="Add tag"
+                  maxLength={20}
+                  disabled={isTrashed}
+                  className="mb-0 flex-grow"
+                />
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={handleRestore}
-                  disabled={isLoading}
+                  onClick={handleTagAdd}
+                  disabled={!tagInput || isTrashed}
+                  className="flex-shrink-0"
                 >
-                  <span className="mr-1">♻️</span> Restore
+                  Add
                 </Button>
-                <Button
-                  type="button"
-                  variant="danger"
-                  onClick={handlePermanentDelete}
-                  disabled={isLoading}
-                >
-                  <span className="mr-1">🗑️</span> Delete Permanently
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-text text-sm font-bold mb-2">
+                Color
+              </label>
+              <div className="flex gap-2">
+                {COLORS.map((c, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`w-8 h-8 rounded-full border-2 transition-all duration-150 ${
+                      color === c
+                        ? 'border-accent-purple scale-110 ring-2 ring-accent-purple/40'
+                        : 'border-dark-600'
+                    }`}
+                    style={
+                      c
+                        ? { backgroundColor: c }
+                        : { backgroundColor: '#23242B' }
+                    }
+                    onClick={() => setColor(c)}
+                    aria-label={c ? `Set color ${c}` : 'No color'}
+                    disabled={isTrashed}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <FormInput
+              id="reminder"
+              label="Reminder"
+              type="datetime-local"
+              value={reminder}
+              onChange={(e) => setReminder(e.target.value)}
+              disabled={isTrashed}
+            />
+
+            <div className="grid grid-cols-3 gap-2 mb-6">
+              <FormCheckbox
+                id="pinned"
+                label="📌 Pin"
+                checked={pinned}
+                onChange={() => setPinned((v) => !v)}
+                disabled={isTrashed}
+                labelClassName="text-yellow-500"
+              />
+
+              <FormCheckbox
+                id="favorite"
+                label="★ Favorite"
+                checked={favorite}
+                onChange={() => setFavorite((v) => !v)}
+                disabled={isTrashed}
+                labelClassName="text-pink-500"
+              />
+
+              <FormCheckbox
+                id="archived"
+                label="🗄️ Archive"
+                checked={archived}
+                onChange={() => setArchived((v) => !v)}
+                disabled={isTrashed}
+                labelClassName="text-gray-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              {isTrashed ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleRestore}
+                    disabled={isLoading}
+                  >
+                    <span className="mr-1">♻️</span> Restore
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={handlePermanentDelete}
+                    disabled={isLoading}
+                  >
+                    <span className="mr-1">🗑️</span> Delete Permanently
+                  </Button>
+                </>
+              ) : (
+                <Button type="submit" variant="primary" disabled={isLoading}>
+                  {selectedNote ? 'Save Changes' : 'Create Note'}
                 </Button>
-              </>
-            ) : (
-              <Button type="submit" variant="primary" disabled={isLoading}>
-                {selectedNote ? 'Save Changes' : 'Create Note'}
-              </Button>
-            )}
-          </div>
-        </form>
-      </Card>
-    </div>
+              )}
+            </div>
+          </form>
+        </Card>
+      </div>
+    </Portal>
   );
 };
 

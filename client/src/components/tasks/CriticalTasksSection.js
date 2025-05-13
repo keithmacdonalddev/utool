@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { PlusCircle, Tag } from 'lucide-react';
+import { FaSpinner, FaTriangleExclamation } from 'react-icons/fa6'; // Changed from FaExclamationTriangle
 import { formatDateForDisplay } from '../../utils/dateUtils'; // Assuming this utility exists
 import { isTaskOverdue, isTaskDueToday } from '../../utils/taskUtils'; // Use the utility functions
 
@@ -17,23 +18,76 @@ import { isTaskOverdue, isTaskDueToday } from '../../utils/taskUtils'; // Use th
  * @param {Object} props - Component props.
  * @param {Array<Object>} props.criticalTasks - List of critical tasks to display.
  * @param {boolean} props.tasksLoading - Loading state for tasks.
- * @param {boolean} props.tasksError - Error state for tasks.
- * @param {string|null} props.tasksMessage - Error message for tasks.
+ * @param {Object|string|null} props.tasksError - Error object or message for tasks. Changed from boolean & removed tasksMessage.
  * @param {Function} props.onTaskClick - Callback when a task row is clicked.
  * @param {Function} props.onAddTaskClick - Callback to trigger adding a new task.
+ * @param {Function} props.onRetryTasks - Callback to retry fetching tasks. Added.
  * @param {Object} props.backgroundRefreshState - Background refresh state information.
  */
 const CriticalTasksSection = ({
   criticalTasks,
   tasksLoading,
-  tasksError,
-  tasksMessage,
+  tasksError, // tasksMessage prop removed
   onTaskClick,
   onAddTaskClick,
+  onRetryTasks, // Added onRetryTasks
   backgroundRefreshState,
 }) => {
-  // Calculate count for display message
+  // Loading state for tasks
+  if (tasksLoading) {
+    return (
+      <div className="bg-card rounded-lg p-4 shadow-md relative">
+        {/* Section Header and Add Task Button - Minimal version for loading state */}
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-primary">Critical Tasks</h2>
+          {/* Optionally, keep the add task button visible but disabled, or hide it */}
+        </div>
+        <div className="text-center p-8" role="status" aria-live="polite">
+          <FaSpinner className="animate-spin h-8 w-8 text-primary mx-auto" />
+          <p className="mt-2 text-foreground text-sm">
+            Loading critical tasks...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state for tasks
+  if (tasksError && !tasksLoading) {
+    return (
+      <div className="bg-card rounded-lg p-4 shadow-md relative">
+        {/* Section Header and Add Task Button - Minimal version for error state */}
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-primary">Critical Tasks</h2>
+          {/* Optionally, keep the add task button visible but disabled, or hide it */}
+        </div>
+        <div
+          className="text-center p-8 text-red-400 bg-red-900 bg-opacity-20 rounded-lg"
+          role="alert"
+        >
+          <FaTriangleExclamation className="inline mr-2 mb-1 h-5 w-5" />
+          <p className="inline">
+            Error loading critical tasks:{' '}
+            {typeof tasksError === 'string'
+              ? tasksError
+              : tasksError.message || 'An unknown error occurred.'}
+          </p>
+          {onRetryTasks && (
+            <button
+              onClick={onRetryTasks}
+              className="mt-3 ml-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium transition-colors"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate count for display message - moved here as criticalTasks is needed
   const criticalTaskCount = criticalTasks ? criticalTasks.length : 0;
+
   return (
     <div className="bg-card rounded-lg p-4 shadow-md relative">
       {/* Section Header and Add Task Button */}
@@ -66,173 +120,173 @@ const CriticalTasksSection = ({
       </div>
 
       {/* Critical Task List Table */}
-      {!tasksLoading && !tasksError && criticalTasks.length > 0 && (
-        <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700 shadow-sm">
-          <div className="overflow-y-auto" style={{ maxHeight: '18rem' }}>
-            {/* Adjusted max height slightly */}
-            <table className="min-w-full divide-y divide-dark-700">
-              <thead className="sticky top-0 bg-dark-800 bg-opacity-95 z-20 shadow-md backdrop-filter backdrop-blur-sm">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Due Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Title
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700 hidden md:table-cell">
-                    {/* Hide desc on small screens */}
-                    Description
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Assigned
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Priority
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
-                    Tags
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-card divide-y divide-dark-700">
-                {criticalTasks.map((task) => {
-                  // Use the utility functions for date checks
-                  const isOverdue = isTaskOverdue(task);
-                  const isDueToday = isTaskDueToday(task);
+      {!tasksLoading &&
+        !tasksError &&
+        criticalTasks &&
+        criticalTasks.length > 0 && (
+          <div className="overflow-hidden bg-dark-800 rounded-lg border border-dark-700 shadow-sm">
+            <div className="overflow-y-auto" style={{ maxHeight: '18rem' }}>
+              {/* Adjusted max height slightly */}
+              <table className="min-w-full divide-y divide-dark-700">
+                <thead className="sticky top-0 bg-dark-800 bg-opacity-95 z-20 shadow-md backdrop-filter backdrop-blur-sm">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Due Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Title
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700 hidden md:table-cell">
+                      {/* Hide desc on small screens */}
+                      Description
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Assigned
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Priority
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-[#F8FAFC] uppercase tracking-wider border-b border-dark-700">
+                      Tags
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-card divide-y divide-dark-700">
+                  {criticalTasks.map((task) => {
+                    // Use the utility functions for date checks
+                    const isOverdue = isTaskOverdue(task);
+                    const isDueToday = isTaskDueToday(task);
 
-                  return (
-                    <tr
-                      key={task._id}
-                      className={`hover:bg-dark-700 transition-colors cursor-pointer ${
-                        isOverdue
-                          ? 'bg-red-900 bg-opacity-20'
-                          : isDueToday
-                          ? 'bg-yellow-900 bg-opacity-20' // Highlight tasks due today
-                          : ''
-                      }`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onTaskClick(task._id); // Use the callback prop
-                      }}
-                    >
-                      <td
-                        className={`px-6 py-4 whitespace-nowrap text-sm ${
+                    return (
+                      <tr
+                        key={task._id}
+                        className={`hover:bg-dark-700 transition-colors cursor-pointer ${
                           isOverdue
-                            ? 'text-red-400 font-medium' // Red text for overdue
+                            ? 'bg-red-900 bg-opacity-20'
                             : isDueToday
-                            ? 'text-yellow-400 font-medium' // Yellow text for due today
-                            : 'text-[#C7C9D1]' // Default text color otherwise
-                        } text-left`}
+                            ? 'bg-yellow-900 bg-opacity-20' // Highlight tasks due today
+                            : ''
+                        }`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation(); // Keep this to prevent internal row clicks from misbehaving if any were added
+                          onTaskClick(e, task._id); // Pass the event 'e' as the first argument
+                        }}
                       >
-                        {formatDateForDisplay(task.dueDate)}{' '}
-                        {/* Display formatted date */}
-                        {isDueToday && (
-                          <span className="ml-2 text-xs text-yellow-400 font-medium">
-                            (today)
-                          </span>
-                        )}
-                        {isOverdue && (
-                          <span className="ml-2 text-xs text-red-400 font-medium">
-                            (overdue)
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
-                        <div className="relative group">
-                          <div className="w-[170px] overflow-hidden">
-                            <span className="block truncate">{task.title}</span>
-                          </div>
-                          {task.title && (
-                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-64 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
-                              {task.title}
-                            </div>
+                        <td
+                          className={`px-6 py-4 whitespace-nowrap text-sm ${
+                            isOverdue
+                              ? 'text-red-400 font-medium' // Red text for overdue
+                              : isDueToday
+                              ? 'text-yellow-400 font-medium' // Yellow text for due today
+                              : 'text-[#C7C9D1]' // Default text color otherwise
+                          } text-left`}
+                        >
+                          {formatDateForDisplay(task.dueDate)}{' '}
+                          {/* Display formatted date */}
+                          {isDueToday && (
+                            <span className="ml-2 text-xs text-yellow-400 font-medium">
+                              (today)
+                            </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs hidden md:table-cell">
-                        {/* Hide desc on small screens */}
-                        <div className="relative group max-w-xs">
-                          <span className="block truncate">
-                            {task.description}
-                          </span>
-                          {task.description && (
-                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
-                              {task.description}
-                            </div>
+                          {isOverdue && (
+                            <span className="ml-2 text-xs text-red-400 font-medium">
+                              (overdue)
+                            </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {/* Display assigned member name or 'Unassigned' */}
-                        {task.assignedTo
-                          ? task.assignedTo.name || 'Assigned'
-                          : 'Unassigned'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {task.status}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {task.priority}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
-                        {task.tags && task.tags.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {task.tags.map((tag, index) => (
-                              <span
-                                key={index}
-                                className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full flex items-center"
-                              >
-                                <Tag size={10} className="mr-1" />
-                                {tag}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-[#F8FAFC] text-left">
+                          <div className="relative group">
+                            <div className="w-[170px] overflow-hidden">
+                              <span className="block truncate">
+                                {task.title}
                               </span>
-                            ))}
+                            </div>
+                            {task.title && (
+                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-64 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                                {task.title}
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <span className="text-gray-500 italic">No tags</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[#C7C9D1] max-w-xs hidden md:table-cell">
+                          {/* Hide desc on small screens */}
+                          <div className="relative group max-w-xs">
+                            <span className="block truncate">
+                              {task.description}
+                            </span>
+                            {task.description && (
+                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block z-50 w-48 bg-dark-700 text-white text-xs p-2 rounded shadow-lg whitespace-normal break-words">
+                                {task.description}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                          {/* Display assigned member name or 'Unassigned' */}
+                          {task.assignedTo
+                            ? task.assignedTo.name || 'Assigned'
+                            : 'Unassigned'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                          {task.status}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                          {task.priority}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-[#C7C9D1] text-left">
+                          {task.tags && task.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {task.tags.map((tag, index) => (
+                                <span
+                                  key={index}
+                                  className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full flex items-center"
+                                >
+                                  <Tag size={10} className="mr-1" />
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 italic">
+                              No tags
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Empty state for when there are no critical tasks */}
-      {!tasksLoading && !tasksError && criticalTasks.length === 0 && (
-        <div className="text-center p-8 border border-dark-700 rounded-lg bg-dark-800">
-          <div className="text-gray-400 mb-2">
-            No critical tasks - you're all caught up!
+      {!tasksLoading &&
+        !tasksError &&
+        (!criticalTasks || criticalTasks.length === 0) && (
+          <div className="text-center p-8 border border-dark-700 rounded-lg bg-dark-800">
+            <div className="text-gray-400 mb-2">
+              No critical tasks - you're all caught up!
+            </div>
+            <button
+              onClick={onAddTaskClick} // Use the callback prop
+              className="text-primary hover:underline text-sm"
+            >
+              + Add a task
+            </button>
           </div>
-          <button
-            onClick={onAddTaskClick} // Use the callback prop
-            className="text-primary hover:underline text-sm"
-          >
-            + Add a task
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* Loading state for tasks */}
-      {tasksLoading && (
-        <div className="text-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-foreground text-sm">Loading tasks...</p>
-        </div>
-      )}
+      {/* Loading state for tasks - Handled above */}
+      {/* tasksLoading && ( ... ) */}
 
-      {/* Error state for tasks */}
-      {tasksError && (
-        <div className="text-center p-8 text-red-500">
-          <p>Error loading tasks: {tasksMessage}</p>
-        </div>
-      )}
+      {/* Error state for tasks - Handled above */}
+      {/* tasksError && !tasksLoading && ( ... ) */}
     </div>
   );
 };

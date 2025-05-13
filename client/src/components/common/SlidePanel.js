@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import PropTypes from 'prop-types';
+import Portal from './Portal'; // Import Portal
+import FocusTrap from 'focus-trap-react'; // Import focus-trap-react
 
 /**
  * SlidePanel Component
@@ -32,34 +34,26 @@ const SlidePanel = ({
 }) => {
   // Reference to track panel element for focus management
   const panelRef = useRef(null);
+  const previousFocusRef = useRef(null); // To store focus before panel opens
+  const closeButtonRef = useRef(null); // Ref for the close button
 
-  // Handle escape key press to close the panel
   useEffect(() => {
-    const handleEscapeKey = (e) => {
-      if (isOpen && e.key === 'Escape') {
-        onClose();
-      }
-    };
-
     if (isOpen) {
-      document.addEventListener('keydown', handleEscapeKey);
-      // Prevent scrolling on the body when panel is open
+      previousFocusRef.current = document.activeElement; // Save focus before panel opens
       document.body.style.overflow = 'hidden';
-
-      // Focus trap - move focus into the panel when it opens
-      if (panelRef.current) {
-        panelRef.current.focus();
-      }
+    } else {
+      // Ensure body scroll is restored if panel is closed by other means than unmounting
+      document.body.style.overflow = '';
     }
 
-    // Cleanup event listeners and restore body scrolling when panel closes
+    // Cleanup event listeners and restore body scrolling when panel closes or unmounts
     return () => {
-      document.removeEventListener('keydown', handleEscapeKey);
-      if (isOpen) {
-        document.body.style.overflow = '';
-      }
+      // Only restore overflow if no other modal/panel is open (more complex state needed for that)
+      // For now, assume this is the only one or it's handled globally.
+      document.body.style.overflow = '';
+      // Focus restoration will be handled by FocusTrap's onDeactivate
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]); // Removed onClose from dependencies as it's called by FocusTrap
 
   // Handle overlay click
   const handleOverlayClick = (e) => {
@@ -72,46 +66,98 @@ const SlidePanel = ({
   if (!isOpen) return null;
 
   return (
-    // Full screen overlay with semi-transparent background
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end"
-      onClick={handleOverlayClick}
-      aria-modal="true"
-      role="dialog"
-      aria-labelledby="slide-panel-title"
-    >
-      {/* Panel container */}
+    <Portal containerId="modal-portal-root">
+      {/* Full screen overlay with semi-transparent background */}
       <div
-        ref={panelRef}
-        className={`bg-dark-800 border-l border-dark-700 shadow-xl h-full overflow-y-auto focus:outline-none transition-transform duration-300 ease-in-out ${panelClassName}`}
-        style={{
-          width,
-          maxWidth,
-          transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-        }}
-        tabIndex="-1"
+        className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-end"
+        onClick={handleOverlayClick}
       >
-        {/* Header */}
-        <div className="sticky top-0 bg-dark-800 border-b border-dark-700 p-4 flex justify-between items-center z-10">
-          <h2
-            id="slide-panel-title"
-            className="text-lg font-semibold text-white"
+        <FocusTrap
+          active={isOpen}
+          focusTrapOptions={{
+            onActivate: () => {
+              // Add console log
+              console.log(
+                'SlidePanel FocusTrap ACTIVATED. Target:',
+                closeButtonRef.current || panelRef.current
+              );
+              console.log(
+                'SlidePanel Current activeElement:',
+                document.activeElement
+              );
+              // Try to focus the close button first, then the panel itself
+              if (closeButtonRef.current) {
+                closeButtonRef.current.focus();
+              } else if (panelRef.current) {
+                panelRef.current.focus();
+              }
+            },
+            onDeactivate: () => {
+              // Add console log
+              console.log(
+                'SlidePanel FocusTrap DEACTIVATED. Would normally call onClose here.'
+              );
+              if (
+                previousFocusRef.current &&
+                typeof previousFocusRef.current.focus === 'function'
+              ) {
+                setTimeout(() => {
+                  // Ensure focus restoration happens after trap is fully deactivated
+                  if (
+                    previousFocusRef.current &&
+                    typeof previousFocusRef.current.focus === 'function'
+                  ) {
+                    previousFocusRef.current.focus({ preventScroll: true });
+                  }
+                }, 0);
+              }
+              // onClose(); // Temporarily commented out for diagnosis
+            },
+            escapeDeactivates: true,
+            clickOutsideDeactivates: false, // We handle this with `handleOverlayClick`
+            initialFocus: () => closeButtonRef.current || panelRef.current, // Attempt close button, then panel
+            fallbackFocus: () => panelRef.current, // Fallback to the panel itself
+            allowOutsideClick: () => true, // Let our own overlay click handler work
+          }}
+        >
+          {/* Panel container */}
+          <div
+            ref={panelRef}
+            className={`bg-dark-800 border-l border-dark-700 shadow-xl h-full overflow-y-auto focus:outline-none transition-transform duration-300 ease-in-out ${panelClassName}`}
+            style={{
+              width,
+              maxWidth,
+              transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+            }}
+            tabIndex="-1" // Make the panel itself focusable for fallback
+            role="dialog" // Add ARIA role here
+            aria-modal="true" // Add ARIA modal state here
+            aria-labelledby="slide-panel-title" // Ensure this ID exists on the title element
           >
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-full hover:bg-dark-700 transition-colors"
-            aria-label="Close panel"
-          >
-            <X size={20} className="text-gray-400" />
-          </button>
-        </div>
+            {/* Header */}
+            <div className="sticky top-0 bg-dark-800 border-b border-dark-700 p-4 flex justify-between items-center z-10">
+              <h2
+                id="slide-panel-title"
+                className="text-lg font-semibold text-white"
+              >
+                {title}
+              </h2>
+              <button
+                ref={closeButtonRef} // Add ref to the close button
+                onClick={onClose}
+                className="p-1 rounded-full hover:bg-dark-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                aria-label="Close panel"
+              >
+                <X size={20} className="text-gray-400" />
+              </button>
+            </div>
 
-        {/* Content */}
-        <div className="p-4">{children}</div>
+            {/* Content */}
+            <div className="p-4">{children}</div>
+          </div>
+        </FocusTrap>
       </div>
-    </div>
+    </Portal>
   );
 };
 
