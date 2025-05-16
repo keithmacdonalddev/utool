@@ -7,10 +7,14 @@
  *
  * Enhanced with smart data comparison and background refresh capabilities for
  * optimal UI performance and reduced unnecessary updates.
+ *
+ * Updated to support guest users by returning data from the guest sandbox when the user is a guest.
  */
 
 import { useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import { getProjects, getProject } from '../features/projects/projectSlice';
+import { selectGuestItemsByType } from '../features/guestSandbox/guestSandboxSlice';
 import useDataFetching from './useDataFetching';
 
 /**
@@ -37,6 +41,49 @@ const useProjects = (options = {}) => {
     actionCreator = 'getProjects',
     actionParams = {},
   } = options;
+
+  // Get auth state to check if user is a guest
+  const { isGuest } = useSelector((state) => state.auth);
+
+  // Get guest project data directly if the user is a guest
+  const guestProjects = useSelector((state) =>
+    isGuest ? selectGuestItemsByType(state, 'projects') : []
+  );
+
+  // Format guest projects to match API structure
+  const formattedGuestProjects = useMemo(() => {
+    if (!isGuest) return [];
+
+    // For a specific project
+    if (actionCreator === 'getProject') {
+      const projectId =
+        typeof actionParams === 'string'
+          ? actionParams
+          : actionParams.projectId;
+
+      const project = guestProjects.find((p) => p.id === projectId);
+
+      if (project) {
+        return {
+          ...project.data,
+          _id: project.id,
+          id: project.id,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+        };
+      }
+      return null;
+    }
+
+    // For all projects
+    return guestProjects.map((project) => ({
+      ...project.data,
+      _id: project.id,
+      id: project.id,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    }));
+  }, [isGuest, guestProjects, actionCreator, actionParams]);
 
   // Determine which action function to use based on actionCreator
   const fetchAction = useMemo(() => {

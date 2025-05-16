@@ -4,10 +4,14 @@
  * This hook leverages our generic useDataFetching hook to provide a simple interface
  * for components that need to load recent tasks from multiple projects. It prevents
  * redundant API calls by using the caching system in Redux.
+ *
+ * Enhanced to support guest users by returning data from the guest sandbox when the user is a guest.
  */
 
 import { useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import { getRecentTasks } from '../features/tasks/taskSlice';
+import { selectGuestItemsByType } from '../features/guestSandbox/guestSandboxSlice';
 import useDataFetching from './useDataFetching';
 
 /**
@@ -29,6 +33,32 @@ const useRecentTasks = (options = {}) => {
     smartRefresh = true,
   } = options;
 
+  // Get auth state to check if user is a guest
+  const { isGuest } = useSelector((state) => state.auth);
+
+  // Get guest task data directly if the user is a guest
+  const guestTasks = useSelector((state) =>
+    isGuest ? selectGuestItemsByType(state, 'tasks') : []
+  );
+
+  // Format guest tasks to match API structure
+  const formattedGuestTasks = useMemo(() => {
+    if (!isGuest) return [];
+    return (
+      guestTasks
+        .map((task) => ({
+          ...task.data,
+          _id: task.id,
+          id: task.id,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+        }))
+        // Sort by creation date, most recent first (for "recent tasks")
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        // Take most recent 10 items
+        .slice(0, 10)
+    );
+  }, [isGuest, guestTasks]);
   // Selector functions for the useDataFetching hook
   const selectTasks = useMemo(() => (state) => state.tasks.tasks, []);
 
@@ -44,12 +74,15 @@ const useRecentTasks = (options = {}) => {
     []
   );
 
+  // Skip API fetch if user is a guest - we'll use the guest tasks directly
+  const shouldSkipFetch = isGuest || skipInitialFetch;
   // Use our generic hook with task-specific selectors
   const {
-    data: tasks,
+    data: regularTasks,
     isLoading,
     error,
     refetch: refetchTasks,
+    backgroundRefreshState,
   } = useDataFetching({
     fetchAction: getRecentTasks,
     selectData: selectTasks,
@@ -59,13 +92,22 @@ const useRecentTasks = (options = {}) => {
     dependencies: [], // Only re-fetch on explicit refetch or cache timeout
     fetchParams: {}, // No specific params needed for recent tasks
     cacheTimeout,
-    skipInitialFetch,
-    backgroundRefresh,
+    skipInitialFetch: shouldSkipFetch, // Skip if guest user
+    backgroundRefresh: isGuest ? false : backgroundRefresh, // No background refresh for guests
     smartRefresh,
     idField: '_id', // Use _id as the identification field for comparison
   });
 
-  return { tasks, isLoading, error, refetchTasks };
+  // Combine the results - for guests, use formattedGuestTasks; for regular users, use the API data
+  const tasks = isGuest ? formattedGuestTasks : regularTasks;
+
+  return {
+    tasks,
+    isLoading: isGuest ? false : isLoading, // No loading state for guests
+    error,
+    refetchTasks,
+    backgroundRefreshState,
+  };
 };
 
 export default useRecentTasks;

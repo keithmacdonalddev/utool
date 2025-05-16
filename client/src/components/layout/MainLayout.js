@@ -13,10 +13,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { logoutUser, resetAuthStatus } from '../../features/auth/authSlice';
+import {
+  logoutUser,
+  resetAuthStatus,
+  clearGuestUser,
+} from '../../features/auth/authSlice'; // Added clearGuestUser
 import Sidebar from './Sidebar';
 import NavbarClockStockWeather from './NavbarClockStockWeather';
 import NotificationBell from './NotificationBell';
+import GuestNotificationBanner from '../ui/GuestNotificationBanner'; // Import guest banner
 import { Menu, X, LogOut } from 'lucide-react'; // Lucide provides icon components
 
 /**
@@ -37,26 +42,31 @@ const MainLayout = () => {
   const dispatch = useDispatch(); // Used to dispatch actions to the Redux store
   const navigate = useNavigate(); // Used for programmatic navigation
 
-  // Extract the current user from the Redux authentication state
-  const { user } = useSelector((state) => state.auth);
+  // Extract the current user and guest status from the Redux authentication state
+  const { user, isGuest } = useSelector((state) => state.auth); // Added isGuest
 
   // Create a reference to the user menu dropdown for detecting outside clicks
   const userMenuRef = useRef(null);
 
   /**
-   * Handles user logout process
+   * Handles user logout or guest session exit
    *
    * This function:
-   * 1. Dispatches the logoutUser action to the Redux store to clear authentication
-   * 2. Resets the auth status in the Redux store
-   * 3. Navigates the user to the login page
-   * 4. Closes the user menu dropdown
+   * 1. If guest, dispatches clearGuestUser to clear guest session data.
+   * 2. If authenticated user, dispatches logoutUser action.
+   * 3. Resets the auth status in the Redux store.
+   * 4. Navigates the user to the login page.
+   * 5. Closes the user menu dropdown.
    */
   const onLogout = () => {
-    dispatch(logoutUser()); // Clear user authentication data in Redux
-    dispatch(resetAuthStatus()); // Reset any login/logout status messages
-    navigate('/login'); // Redirect to login page
-    setIsUserMenuOpen(false); // Close the dropdown menu
+    if (isGuest) {
+      dispatch(clearGuestUser());
+    } else {
+      dispatch(logoutUser());
+    }
+    dispatch(resetAuthStatus());
+    navigate('/login');
+    setIsUserMenuOpen(false);
   };
 
   /**
@@ -121,12 +131,14 @@ const MainLayout = () => {
           - isMinimized: controls sidebar width on desktop
           - toggleSidebar: function to open/close sidebar
           - toggleMinimize: function to expand/contract sidebar
+          - isGuest: indicates if the user is a guest
       */}
       <Sidebar
         isOpen={isSidebarOpen}
         isMinimized={isSidebarMinimized}
         toggleSidebar={toggleSidebar}
         toggleMinimize={toggleMinimizeSidebar}
+        isGuest={isGuest} // Pass isGuest to Sidebar
       />
 
       {/* Main Content Area - Takes remaining space with flex-1 */}
@@ -150,6 +162,11 @@ const MainLayout = () => {
               {user && user.name
                 ? `Hello, ${user.name.split(' ')[0]}`
                 : 'Hello'}
+              {isGuest && (
+                <span className="ml-2 text-sm font-normal bg-accent-warning text-text-primary px-2 py-1 rounded">
+                  Guest Mode
+                </span>
+              )}
             </div>
 
             {/* Right side of navbar with weather, notifications and user menu */}
@@ -186,23 +203,26 @@ const MainLayout = () => {
                   {isUserMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-card text-text rounded-md shadow-xl z-50 border border-dark-700">
                       <div className="py-1">
-                        {/* Profile Link */}
-                        <Link
-                          to="/profile"
-                          onClick={() => setIsUserMenuOpen(false)} // Close menu after clicking
-                          className="block px-4 py-2 text-sm text-[#F8FAFC] hover:bg-dark-700"
-                        >
-                          Profile
-                        </Link>
-                        <hr /> {/* Visual separator line */}
-                        {/* Logout Button */}
+                        {/* Profile Link - Hidden for guest users */}
+                        {!isGuest && (
+                          <>
+                            <Link
+                              to="/profile"
+                              onClick={() => setIsUserMenuOpen(false)} // Close menu after clicking
+                              className="block px-4 py-2 text-sm text-[#F8FAFC] hover:bg-dark-700"
+                            >
+                              Profile
+                            </Link>
+                            <hr /> {/* Visual separator line */}
+                          </>
+                        )}
+                        {/* Logout/Exit Guest Mode Button */}
                         <button
                           onClick={onLogout}
                           className="w-full text-left px-4 py-2 text-sm text-[#F8FAFC] hover:bg-red-700 flex items-center"
                         >
                           <LogOut size={16} className="mr-2" />{' '}
-                          {/* Logout icon */}
-                          Logout
+                          {isGuest ? 'Exit Guest Mode' : 'Logout'}
                         </button>
                       </div>
                     </div>
@@ -210,8 +230,11 @@ const MainLayout = () => {
                 </div>
               )}
             </div>
-          </div>
+          </div>{' '}
         </header>
+
+        {/* Guest Notification Banner */}
+        <GuestNotificationBanner />
 
         {/* Main Content Area */}
         <main className="flex-grow p-2 md:p-4 lg:p-6 overflow-auto bg-app-page">

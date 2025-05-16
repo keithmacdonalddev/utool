@@ -1,17 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getFriends } from '../features/friends/friendSlice';
+import { selectGuestItemsByType } from '../features/guestSandbox/guestSandboxSlice';
+import { formatGuestItemsArray } from '../utils/guestDataFormatters';
 
 /**
  * Custom hook to fetch and manage the friends list
  * Returns friends list and loading/error states
+ * Includes support for guest users by handling data from the guest sandbox
  */
 export function useFriends() {
   const dispatch = useDispatch();
   const { friends, isLoading } = useSelector((state) => state.friends);
   const [error, setError] = useState(null);
 
+  // Get auth state to check if user is a guest
+  const { isGuest } = useSelector((state) => state.auth);
+
+  // Get guest friends data directly if the user is a guest
+  const guestFriends = useSelector((state) =>
+    isGuest ? selectGuestItemsByType(state, 'friends') : []
+  );
+  // Format guest friends to match API structure
+  const formattedGuestFriends = useMemo(() => {
+    if (!isGuest) return [];
+
+    // Use the utility function to format guest friends
+    return formatGuestItemsArray(guestFriends);
+  }, [isGuest, guestFriends]);
+
   useEffect(() => {
+    // Skip API call for guest users - data comes from Redux state directly
+    if (isGuest) return;
+
     const loadFriends = async () => {
       try {
         await dispatch(getFriends()).unwrap();
@@ -23,9 +44,14 @@ export function useFriends() {
     };
 
     loadFriends();
-  }, [dispatch]);
+  }, [dispatch, isGuest]);
 
-  return { friends, isLoading, error };
+  // Return guest data if in guest mode, or API data for regular users
+  return {
+    friends: isGuest ? formattedGuestFriends : friends,
+    isLoading: isGuest ? false : isLoading, // Never loading for guest users
+    error,
+  };
 }
 
 export default useFriends;

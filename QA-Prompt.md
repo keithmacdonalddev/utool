@@ -19,7 +19,7 @@ Example Workflow:
    - Option B (If unsure or Option A fails):
      1. Use `file_search(query="client/src/components/common/Modal.js")`.
      2. `file_search` returns a result like `vsls:/client/src/components/common/Modal.js`.
-     3. Use `read_file(filePath="vsls:/client/src/components/common/Modal.js", ...)`.
+     3. Use `read_file(filePath="vsls:/client/src/components/common/Modal.js", ...).
 
 By following these steps, you should be able to reliably access files within this workspace.
 
@@ -53,7 +53,17 @@ Adopt a critical, detail-oriented, and preventative mindset. Think like a human 
 Output Format:
 Present your findings in a structured and clear manner. Use formats like:
 Bulleted lists for multiple findings.Code blocks to highlight specific problematic code snippets or suggest corrected versions.Clear headings for different categories of issues (e.g., "Security Findings," "Performance Suggestions," "Code Style Violations").Always state the relevant file(s) or component(s).
-** Very Important: provide your entire response in Markdown format and must be in the QA-Response.md file in the root. If there is any text in there, remove it all before your response. The main code agent will not get your review if its not in the QA-Response.md file **
+
+**Very Important: Managing the QA-Response.md File**
+
+1.  **Check for Existing File:** Before writing your report, you **MUST** first check if `QA-Response.md` already exists in the root directory.
+    - Use the `file_search` tool with the query `QA-Response.md` to verify its existence.
+2.  **Handling `QA-Response.md`:**
+    - **If `QA-Response.md` exists AND contains content:** You **MUST** clear all existing content from `QA-Response.md` before writing your new report. Use the `insert_edit_into_file` tool with an empty string as the `code` argument for `vsls:/QA-Response.md` to achieve this.
+    - **If `QA-Response.md` exists but is empty:** You can proceed to write your report to it using the `insert_edit_into_file` tool.
+    - **If `QA-Response.md` does NOT exist:** You **MUST** create the file `QA-Response.md` in the root directory and then write your report to it. Use the `create_file` tool for this.
+3.  **Report Format:** Provide your entire response in Markdown format within this `QA-Response.md` file.
+4.  **Critical for Review:** The main code agent will **ONLY** retrieve your review from `QA-Response.md`. Failure to correctly populate this file will mean your review is missed.
 
 Collaboration Guideline:
 Address your feedback to the relevant agent responsible for the code you are reviewing (e.g., "Feedback for Frontend Agent:", "Issue for Backend Agent:"). Maintain a constructive and helpful tone in your suggestions.
@@ -68,7 +78,16 @@ Confirm that you understand this role and are ready to function as the QA Expert
 
 In your response, remind the main agent to remove the text in the QA-Response.md file when they are finished with it. They can even ask the user if it is ok to remove the text before doing so.
 
-** Very Important: provide your entire response in Markdown format. Your report output must be in the /QA-Response.md file in the root. If there is any text in there, remove it all before your response **
+**Very Important: Managing the QA-Response.md File**
+
+1.  **Check for Existing File:** Before writing your report, you **MUST** first check if `QA-Response.md` already exists in the root directory.
+    - Use the `file_search` tool with the query `QA-Response.md` to verify its existence.
+2.  **Handling `QA-Response.md`:**
+    - **If `QA-Response.md` exists AND contains content:** You **MUST** clear all existing content from `QA-Response.md` before writing your new report. Use the `insert_edit_into_file` tool with an empty string as the `code` argument for `vsls:/QA-Response.md` to achieve this.
+    - **If `QA-Response.md` exists but is empty:** You can proceed to write your report to it using the `insert_edit_into_file` tool.
+    - **If `QA-Response.md` does NOT exist:** You **MUST** create the file `QA-Response.md` in the root directory and then write your report to it. Use the `create_file` tool for this.
+3.  **Report Format:** Provide your entire response in Markdown format within this `QA-Response.md` file.
+4.  **Critical for Review:** The main code agent will **ONLY** retrieve your review from `QA-Response.md`. Failure to correctly populate this file will mean your review is missed.
 
 You must clean up the text under the comments below when you are done your task.
 When you are finished with your QA-Response.md, clear the QA review infomation below the comments below. Ask the user before removing the text.
@@ -76,80 +95,82 @@ When you are finished with your QA-Response.md, clear the QA review infomation b
 <!-- ----------------------------------------------------------------- -->
 <!-- START QA REVIEW INFORMATION FOR THE QA EXPERT AGENT BELOW -->
 
-## QA Review Information: Focus Management Refactor for Modals and SlidePanels
+# QA Review Information: Guest Mode Sample Data Enhancement
 
-**Task Summary:** Refactored `Modal.js` and `SlidePanel.js` to use the `focus-trap-react` library for robust keyboard focus management, addressing a key accessibility concern raised in a previous QA review.
+## Task Summary
 
-**Type of Change:** Code Update/Modification (Accessibility Improvement)
+Enhanced the guest user experience by implementing comprehensive sample data for all major features (tasks, projects, notes, bookmarks, comments, friends) when a user logs in as a guest. This allows guest users to explore and interact with the full functionality of the application without needing to create an account.
 
-**Files Reviewed to Gather Context:**
+## Type of Change
 
-- `client/package.json` (to confirm `focus-trap-react` dependency)
-- `client/src/components/common/Modal.js` (original state)
-- `client/src/components/common/SlidePanel.js` (original state)
-- `client/src/components/common/FocusTrap.js` (existing custom focus trap, now superseded by the library for these components)
-- `QA-Response.md` (for the initial feedback that prompted this change)
+Feature Enhancement / User Experience Improvement
 
-**Scope of Changes:**
+## Files Reviewed for Context
 
-- **Primary Files Modified:**
-  - `client/src/components/common/Modal.js`
-  - `client/src/components/common/SlidePanel.js`
-- **Key Libraries/Dependencies Utilized:**
-  - `focus-trap-react` (existing project dependency)
+- `client/src/features/auth/authSlice.js` - Guest login functionality
+- `client/src/features/guestSandbox/guestSandboxSlice.js` - Guest data storage structure
+- `client/src/utils/guestDataFormatters.js` - Existing utility for formatting guest data
+- `client/src/utils/testGuestMode.js` - Test utility for guest functionality
+- `client/src/hooks/useFriends.js` - Support for guest mode in hooks
+- `client/src/hooks/useRecentTasks.js` - Reference for guest data handling
+- `client/src/hooks/useNotes.js` - Reference for guest data handling
+- `client/src/hooks/useBookmarks.js` - Reference for guest data handling
+- `client/src/hooks/useProjects.js` - Reference for guest data handling
 
-**Detailed Changes Overview:**
+## Scope of Changes
 
-- **`client/src/components/common/Modal.js`:**
+- `client/src/utils/guestSampleData.js` (New file)
+- `client/src/features/auth/authSlice.js`
+- `client/src/utils/testGuestMode.js`
 
-  - Replaced the custom `FocusTrap.js` component usage with `FocusTrap` from the `focus-trap-react` library.
-  - Configured `focusTrapOptions` to manage activation, deactivation (including calling `onClose` and restoring focus to the previously focused element), initial focus (close button), fallback focus, and Escape key handling.
-  - Ensured ARIA attributes (`role="dialog"`, `aria-modal="true"`) are correctly placed on the modal content `div` now wrapped by the library's `FocusTrap`.
-  - Maintained existing logic for saving the previously focused element and managing body scroll overflow.
+## Detailed Changes Overview
 
-- **`client/src/components/common/SlidePanel.js`:**
-  - Integrated `FocusTrap` from the `focus-trap-react` library.
-  - Added logic to save the previously focused element before the panel opens.
-  - Configured `focusTrapOptions` similarly to `Modal.js` for activation, deactivation (calling `onClose` and restoring focus), initial focus (close button or panel itself), fallback focus, and Escape key handling.
-  - Placed ARIA attributes (`role="dialog"`, `aria-modal="true"`) on the panel content `div`.
-  - Maintained existing logic for managing body scroll overflow and overlay clicks.
+1. Created a new utility file `guestSampleData.js` with:
 
-**Relevant Requirements/User Stories (If applicable):**
+   - Data generators for each entity type (tasks, projects, notes, bookmarks, comments, friends)
+   - Realistic sample data that demonstrates app features
+   - Proper data relationships (tasks link to projects, comments reference tasks/projects)
+   - Error handling and documentation on data relationships
 
-- Addresses the critical accessibility requirement for robust focus trapping and return-focus-on-close logic in modal dialogs and slide panels, as highlighted in the QA review of the previous Portal refactor (dated May 12, 2025).
+2. Updated `authSlice.js` to:
 
-**Potential Areas of Note/Risk:**
+   - Import the sample data generator
+   - Initialize all sample data types when a user logs in as guest
+   - Add error handling during sample data loading
 
-- **Focus Restoration Timing:** Both components use a `setTimeout` of 0ms when restoring focus in the `onDeactivate` callback. This is a common practice to ensure the trap is fully deactivated and the DOM is stable before attempting to shift focus. This should be robust but is a point of attention if any focus race conditions are observed.
-- **Initial Focus Element:** Both components attempt to set initial focus on their respective close buttons, falling back to the main component `div` if the close button isn't available or immediately focusable. Testing various content scenarios within these components would be beneficial.
-- **Interactions with Other Focus-Managing Elements:** If these components are ever nested within other focus traps or complex focus-managing UIs, thorough testing of those specific scenarios would be needed. For their standard standalone use, the current implementation should be sound.
+3. Enhanced `testGuestMode.js` to:
+   - Use the new sample data generators
+   - Add utility functions for each entity type
+   - Add a convenience function to initialize all sample data at once
 
-**Dependency Changes:**
+## Relevant Requirements
 
-- None. `focus-trap-react` was an existing dependency.
+The guest user experience should showcase the application's capabilities to potential users and provide a seamless demo experience without requiring account creation.
 
-**Verification Instructions (Optional but helpful):**
+## Potential Areas of Note/Risk
 
-1.  **Modal Verification:**
-    - Open any modal in the application (e.g., Task Create Modal, Note Editor Modal, Project Delete Confirmation).
-    - Verify that focus goes to the "Close" (X) button.
-    - Press Tab: Focus should cycle within the modal's focusable elements (e.g., form fields, buttons) and not escape to the browser's UI or the underlying page.
-    - Press Shift+Tab: Focus should cycle backward within the modal.
-    - Press Escape: The modal should close, and focus should return to the element that triggered the modal (e.g., the "Create Task" button).
-    - Click the backdrop: The modal should close, and focus should return to the trigger element.
-    - Click the "Close" (X) button: The modal should close, and focus should return to the trigger element.
-2.  **SlidePanel Verification:**
-    - Open any slide panel in the application.
-    - Verify that focus goes to the "Close" (X) button or the panel itself.
-    - Press Tab: Focus should cycle within the panel's focusable elements.
-    - Press Shift+Tab: Focus should cycle backward.
-    - Press Escape: The panel should close, and focus should return to the element that triggered it.
-    - Click the overlay: The panel should close, and focus should return to the trigger element.
-    - Click the "Close" (X) button: The panel should close, and focus should return to the trigger element.
+1. **Data Relationships**: Verify that relationships between entities are maintained correctly (e.g., tasks reference valid project IDs)
+2. **Performance**: The sample data is comprehensive - if it becomes too large, it might affect initial load time for guest users
+3. **Error Handling**: We've added error handling to prevent guest login failures if sample data generation fails, but it should be tested thoroughly
+4. **Sample Data Quality**: The sample data should realistically represent actual usage patterns and demonstrate feature capabilities
 
-**Additional Notes for QA (Optional):**
+## Dependency Changes
 
-- The primary goal was to leverage the battle-tested `focus-trap-react` library to replace/implement focus management, enhancing accessibility and reducing the maintenance burden of custom logic.
-- Please verify that the `aria-labelledby` attributes in both components correctly point to their respective title elements.
+No new external dependencies were added.
 
-<!-- Please remove the text above this line after your review. You can ask the user if it's okay to remove it. -->
+## Verification Instructions
+
+1. Log in as a guest from the login page
+2. Verify that sample data appears for all major features:
+   - Tasks list should show varied tasks with different statuses and priorities
+   - Projects should be populated with sample projects
+   - Notes should contain formatted sample notes
+   - Bookmarks should contain sample bookmarks
+   - Friends list should show sample contacts
+3. Verify task-project relationships by opening a project and checking that its tasks appear correctly
+
+## Additional Notes for QA
+
+- Please verify that the sample data is of sufficient quality and realism for a good demo experience
+- Check that all sample data properly follows the application's data models and validation rules
+- Consider whether the amount of sample data is appropriate (not too little, not overwhelming)

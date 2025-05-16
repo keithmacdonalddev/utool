@@ -81,6 +81,7 @@ import bookmarkFolderReducer from '../features/bookmarks/bookmarkFolderSlice';
 import snippetReducer from '../features/snippets/snippetSlice';
 import snippetCategoryReducer from '../features/snippets/snippetCategorySlice';
 import quoteReducer from '../features/quotes/quoteSlice';
+import guestSandboxReducer from '../features/guestSandbox/guestSandboxSlice'; // Added import for guest sandbox
 
 /**
  * STORE CONFIGURATION
@@ -115,6 +116,7 @@ export const store = configureStore({
     snippets: snippetReducer, // Code/text snippets state
     snippetCategories: snippetCategoryReducer, // Snippet categories state
     quotes: quoteReducer, // Favorite quotes state
+    guestSandbox: guestSandboxReducer, // Added guest sandbox reducer
   },
 
   /**

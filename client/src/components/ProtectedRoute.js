@@ -3,9 +3,15 @@ import { useSelector } from 'react-redux';
 import { Navigate, Outlet } from 'react-router-dom';
 
 const ProtectedRoute = ({ allowedRoles }) => {
-  const { user, token, isLoading } = useSelector((state) => state.auth);
+  const { user, token, isLoading, isGuest } = useSelector(
+    (state) => state.auth
+  );
 
-  const isAuthenticated = user && token;
+  // Allow access if:
+  // - user and token are present (regular/pro user)
+  // - OR user is a guest (role === 'Guest' and isGuest === true)
+  const isAuthenticated =
+    (user && token) || (user && user.role === 'Guest' && isGuest);
   const userRole = user?.role; // Assuming user object has a 'role' property
 
   if (isLoading) {

@@ -44,6 +44,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import helmet from 'helmet'; // Security middleware for HTTP headers
 import rateLimit from 'express-rate-limit'; // API rate limiting
+import schedule from 'node-schedule'; // For scheduled tasks
 dotenv.config();
 
 /**
@@ -111,6 +112,16 @@ function validateEnvironmentVariables(logger) {
       name: 'OPENWEATHER_API_KEY_PRIMARY',
       reason: 'Weather functionality will be disabled if not configured',
     },
+    {
+      name: 'IP_HASH_SALT',
+      reason: 'Required for secure guest analytics in production',
+      productionOnly: true,
+    },
+    {
+      name: 'IP_HASH_SALT',
+      reason: 'Required for secure guest analytics in production',
+      productionOnly: true,
+    },
   ];
 
   // Check critical variables
@@ -142,11 +153,15 @@ function validateEnvironmentVariables(logger) {
     // Exit with error code
     process.exit(1);
   }
-
   // Check recommended variables
   let missingRecommendedVars = [];
 
   recommendedVariables.forEach((variable) => {
+    // Skip if this is a production-only variable and we're not in production
+    if (variable.productionOnly && process.env.NODE_ENV !== 'production') {
+      return;
+    }
+
     if (!process.env[variable.name]) {
       const message = variable.defaultValue
         ? `${variable.name}: ${variable.reason} (Will use default: ${variable.defaultValue})`
@@ -154,6 +169,25 @@ function validateEnvironmentVariables(logger) {
       missingRecommendedVars.push(message);
     }
   });
+
+  // Production-specific checks for sensitive variables
+  if (process.env.NODE_ENV === 'production') {
+    // Check for IP_HASH_SALT specifically in production
+    if (!process.env.IP_HASH_SALT) {
+      logger.warn(
+        '╔═══════════════════════════════════════════════════════════════════╗'
+      );
+      logger.warn(
+        '║ SECURITY WARNING: IP_HASH_SALT IS NOT SET IN PRODUCTION           ║'
+      );
+      logger.warn(
+        '║ Guest IP addresses will not be properly anonymized for analytics   ║'
+      );
+      logger.warn(
+        '╚═══════════════════════════════════════════════════════════════════╝'
+      );
+    }
+  }
 
   // Warn about missing recommended variables
   if (missingRecommendedVars.length > 0) {
@@ -185,6 +219,7 @@ import { isShuttingDown, setShuttingDown } from './utils/serverState.js';
 import { authenticateSocket, handleConnection } from './utils/socketManager.js';
 import { logoutPriorityMiddleware } from './middleware/logoutPriorityMiddleware.js';
 import { enhancedLogging } from './middleware/enhancedLogging.js';
+import { trackGuestActivity } from './middleware/analyticsMiddleware.js';
 import { initializeLogManagement } from './utils/logRotation.js';
 
 // ESM __dirname workaround
@@ -273,6 +308,7 @@ import projectRoutes from './routes/projects.js';
 import userRoutes from './routes/users.js';
 import weatherRoutes from './routes/weather.js';
 import auditLogRoutes from './routes/auditLogs.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
 import {
   articleCommentsRouter,
   commentActionsRouter,
@@ -287,6 +323,8 @@ import bookmarkFolderRoutes from './routes/bookmarkFolders.js';
 import snippetRoutes from './routes/snippets.js';
 import snippetCategoryRoutes from './routes/snippetCategories.js';
 import archiveRoutes from './routes/archive.js';
+import adminSettingsRoutes from './routes/adminSettingsRoutes.js'; // Added for admin settings
+import publicSettingsRoutes from './routes/publicSettingsRoutes.js'; // Added for public settings
 
 // Middleware Section
 // Middleware functions process requests before they reach route handlers
@@ -344,6 +382,9 @@ initializeLogManagement();
 app.use(express.json({ limit: '1mb' }));
 // Parse URL-encoded request bodies with size limit
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Add guest analytics tracking middleware
+app.use(trackGuestActivity);
 
 // Add a global request logger to debug routing issues (using structured logger instead of console)
 app.use((req, res, next) => {
@@ -470,13 +511,25 @@ app.get('/api/v1/status', (req, res) => {
 });
 
 // Mount Routers
-// Each router handles a group of related endpoints
-app.use('/api/v1/auth', authRoutes);
+// Define base path for API version 1
+const API_V1_BASE_PATH = '/api/v1';
 
-// No standalone task routes - tasks must be accessed through projects
-// app.use('/api/v1/tasks', taskRoutes); // REMOVED: All task operations must go through projects
+// Public settings route - does not require authentication by default
+// This should be mounted before any global 'protect' middleware if it's truly public.
+// However, individual routes can still use 'protect' if needed for specific endpoints.
+app.use(`${API_V1_BASE_PATH}/settings`, publicSettingsRoutes);
 
-app.use('/api/v1/notes', personalNotesRouter);
+// Authentication and User routes
+app.use(`${API_V1_BASE_PATH}/auth`, authRoutes);
+app.use(`${API_V1_BASE_PATH}/users`, userRoutes);
+
+// Admin specific routes
+// These routes are typically protected and authorized for admin users.
+// The adminSettingsRoutes.js file already includes 'protect' and 'authorize' middleware.
+app.use(`${API_V1_BASE_PATH}/admin/settings`, adminSettingsRoutes);
+
+// Feature-specific routes
+app.use(`${API_V1_BASE_PATH}/notes`, personalNotesRouter);
 
 // Admin Notes (admin only, GET /)
 // Updated to follow the consistent /api/v1/... pattern
@@ -491,7 +544,6 @@ app.use('/api/v1/admin/notes', async (req, res, next) => {
 
 app.use('/api/v1/kb', kbArticleRoutes);
 app.use('/api/v1/projects', projectRoutes);
-app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/weather', weatherRoutes);
 app.use('/api/v1/audit-logs', auditLogRoutes);
 app.use('/api/v1/comments', commentActionsRouter);
@@ -505,6 +557,7 @@ app.use('/api/v1/bookmark-folders', bookmarkFolderRoutes);
 app.use('/api/v1/snippets/categories', snippetCategoryRoutes);
 app.use('/api/v1/snippets', snippetRoutes);
 app.use('/api/v1/archive', archiveRoutes);
+app.use('/api/v1/analytics', analyticsRoutes);
 
 // Basic Route with logging
 app.get('/', (req, res) => {
@@ -528,7 +581,7 @@ app.all('/api/v1/tasks/*any', (req, res) => {
 
 // Error handling middleware with enhanced logging
 // This catches errors thrown in routes and middleware
-app.use((err, req, res, next) => {
+app.use(async (err, req, res, next) => {
   // Log the error with stack trace and request details
   logger.error(
     `Error processing ${req.method} ${req.originalUrl}: ${err.message}`,
@@ -540,8 +593,25 @@ app.use((err, req, res, next) => {
       params: req.params,
       query: req.query,
     }
-  ); // Send appropriate response
+  );
 
+  // Track errors for guest users in analytics
+  if (req.user && req.user.isGuest) {
+    try {
+      const { logGuestError } = await import(
+        './middleware/analyticsMiddleware.js'
+      );
+      await logGuestError(req, err, err.statusCode || 500);
+    } catch (analyticsError) {
+      logger.error('Failed to log guest error to analytics', {
+        analyticsError,
+        originalError: err.message,
+      });
+      // Continue processing the original error even if analytics logging fails
+    }
+  }
+
+  // Send appropriate response
   const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
     success: false,
@@ -596,10 +666,47 @@ async function connectToDatabase() {
 
     logger.info('Starting scheduled note reminders');
     scheduleNoteReminders();
-
     logger.info('Starting notification processor');
-    scheduleNotificationProcessor(io); // Pass io to notification processor // Start server only after DB connection // This prevents the server from accepting requests before DB is ready
+    scheduleNotificationProcessor(io); // Pass io to notification processor
 
+    // Schedule analytics data cleanup to run daily at 2 AM
+    try {
+      const { cleanupOldAnalytics } = await import(
+        './controllers/analyticsController.js'
+      );
+      logger.info('Starting scheduled analytics data cleanup');
+
+      // Schedule to run at 2 AM every day
+      // This time is chosen to minimize impact on active users
+      schedule.scheduleJob('0 2 * * *', async () => {
+        try {
+          // Default retention period is 90 days, configurable via environment variable
+          const retentionDays = parseInt(
+            process.env.ANALYTICS_RETENTION_DAYS || '90',
+            10
+          );
+          logger.info(
+            `Running scheduled analytics cleanup (retention: ${retentionDays} days)`
+          );
+          const result = await cleanupOldAnalytics(retentionDays);
+
+          if (result.deleted > 0) {
+            logger.info(
+              `Analytics cleanup: Successfully deleted ${result.deleted} old guest sessions`
+            );
+          } else {
+            logger.debug('Analytics cleanup: No old guest sessions to delete');
+          }
+        } catch (error) {
+          logger.error('Scheduled analytics cleanup failed:', error);
+        }
+      });
+    } catch (error) {
+      logger.warn('Failed to schedule analytics cleanup:', error);
+      // Non-critical feature, continue server startup
+    }
+
+    // Start server only after DB connection // This prevents the server from accepting requests before DB is ready
     server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`API available at http://localhost:${PORT}/api/v1`);

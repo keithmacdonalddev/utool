@@ -3,6 +3,9 @@
 
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'; // Redux Toolkit utilities
 import api from '../../utils/api'; // Preconfigured axios instance with baseURL and interceptors
+import { resetGuestSandbox, setItems } from '../guestSandbox/guestSandboxSlice'; // Import the actions
+import { createGuestItem } from '../../utils/guestDataFormatters'; // Import utility for guest items
+import { generateAllSampleData } from '../../utils/guestSampleData'; // Import sample data generator
 
 // API endpoint paths (relative to baseURL defined in api.js)
 // Using a constant makes it easier to update all endpoint paths if they change
@@ -14,24 +17,165 @@ const AUTH_URL = '/auth/';
 const user = JSON.parse(localStorage.getItem('user'));
 const token = localStorage.getItem('token'); // Token is stored as a plain string
 
+// === ADDED FOR GUEST ACCESS ===
+// Check for guest user state in localStorage
+// Initialize guestUser from localStorage. If it doesn't exist or is invalid JSON, default to null.
+let guestUser = null;
+const guestUserString = localStorage.getItem('guestUser');
+if (guestUserString) {
+  try {
+    guestUser = JSON.parse(guestUserString);
+  } catch (e) {
+    console.error('Failed to parse guestUser from localStorage:', e);
+    localStorage.removeItem('guestUser'); // Clear invalid entry
+  }
+}
+const guestAccessEnabled =
+  localStorage.getItem('guestAccessFeatureEnabled') === 'true';
+
 // === INITIAL STATE DEFINITION ===
 // Define the initial state structure for authentication
 // This object structure is what will be available as state.auth in components
 const initialState = {
   // Core auth data
-  user: user ? user : null, // User data: null when logged out, object when logged in
+  user: user ? user : guestUser ? guestUser : null, // Prioritize logged-in user, then guest, then null
   token: token ? token : null, // JWT token for API requests
+  isGuest: guestUser ? true : false, // Flag to indicate if the current user is a guest
+  guestAccessFeatureEnabled: guestAccessEnabled, // Tracks if the guest access feature is enabled globally by admin
 
   // UI state flags
   isError: false, // True when an operation results in an error
   isSuccess: false, // True when an operation completes successfully
   isLoading: false, // True when an async operation is in progress
+  isLoggingInUser: false, // True when specifically logging in a regular user
+  isLoggingInGuest: false, // True when specifically logging in as a guest
   message: '', // Success/error message to display to the user
 };
 
 // === ASYNC THUNKS ===
 // Async thunks handle side effects (API calls) and update the Redux store
 // They are the recommended way to handle async logic in Redux Toolkit
+
+/**
+ * Fetches the current guest access status from the server.
+ * This is used to determine if the "Continue as Guest" option should be shown,
+ * and to keep the client-side flag in sync with the server.
+ */
+export const fetchGuestAccessStatus = createAsyncThunk(
+  'auth/fetchGuestAccessStatus',
+  async (_, thunkAPI) => {
+    try {
+      const response = await api.get('/settings/guest-access-status'); // Public endpoint
+
+      // More defensive checks for nested properties
+      if (
+        response?.data?.data &&
+        typeof response.data.data.guestAccessEnabled === 'boolean'
+      ) {
+        localStorage.setItem(
+          'guestAccessFeatureEnabled',
+          response.data.data.guestAccessEnabled.toString()
+        );
+        return response.data.data.guestAccessEnabled;
+      } else {
+        // If the response structure is not as expected, log and throw a detailed error
+        console.warn('Unexpected response format:', response);
+        throw new Error('Invalid response format from server');
+      }
+    } catch (error) {
+      const message =
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
+        error.message ||
+        error.toString() ||
+        'Unknown error';
+
+      // It's important not to block app load if this fails, default to false
+      console.error('Failed to fetch guest access status:', message);
+      localStorage.setItem('guestAccessFeatureEnabled', 'false'); // Default to false on error
+
+      // We still want to inform the application about the failure, so reject with detailed message
+      return thunkAPI.rejectWithValue(
+        `Failed to fetch guest access status: ${message}`
+      );
+    }
+  }
+);
+
+/**
+ * Logs in the user as a guest.
+ * This does not involve a backend call for authentication but sets up a guest session locally.
+ * It relies on the guestAccessFeatureEnabled flag being true.
+ */
+export const loginAsGuest = createAsyncThunk(
+  'auth/loginAsGuest',
+  async (_, thunkAPI) => {
+    try {
+      // Ensure guest access is actually enabled by checking the flag from the state
+      const guestAccessAllowed =
+        thunkAPI.getState().auth.guestAccessFeatureEnabled;
+      if (!guestAccessAllowed) {
+        return thunkAPI.rejectWithValue(
+          'Guest access is currently disabled by the site administrator.'
+        );
+      }
+
+      // Clear any existing authenticated user session first to avoid conflicts.
+      // This ensures that if a real user was logged in, their session is ended before guest mode starts.
+      localStorage.removeItem('user');
+      localStorage.removeItem('token'); // Create a guest user object. This object structure should be consistent with
+      // what an authenticated user object might look like, at least for common fields like _id, name, role.
+      const guestUserData = {
+        _id: `guest_client_${Date.now()}_${
+          crypto.randomUUID
+            ? crypto.randomUUID()
+            : Math.random().toString(36).substring(2, 15)
+        }`,
+        name: 'Guest User',
+        role: 'Guest',
+        // Add any other default properties a guest user might need for the UI or client-side logic.
+        // For example, default preferences or an indicator that data is not saved.
+        isTemporary: true,
+      }; // Persist the guest user object in localStorage so that guest sessions can survive page refreshes.      localStorage.setItem('guestUser', JSON.stringify(guestUserData));
+      // Guests do not have a JWT token.
+
+      try {
+        // Generate all sample data for various entity types
+        const sampleData = generateAllSampleData();
+
+        // Add each type of sample data to the guest sandbox
+        Object.entries(sampleData).forEach(([entityType, items]) => {
+          if (items && items.length > 0) {
+            thunkAPI.dispatch(
+              setItems({
+                entityType,
+                items,
+              })
+            );
+            console.log(
+              `Added sample ${entityType} data for guest user:`,
+              items.length,
+              'items'
+            );
+          }
+        });
+      } catch (error) {
+        // If sample data loading fails, log the error but don't fail the login
+        console.error('Error loading sample data for guest user:', error);
+      }
+
+      return guestUserData; // This will be the action.payload in the fulfilled reducer.
+    } catch (error) {
+      // Catch any unexpected errors during the guest login process.
+      const message = error.message || error.toString();
+      console.error('Error during loginAsGuest:', message);
+      return thunkAPI.rejectWithValue(
+        'Could not start guest session. Please try again.'
+      );
+    }
+  }
+);
 
 /**
  * Register a new user
@@ -118,14 +262,30 @@ export const logoutUser = createAsyncThunk(
   'auth/logout',
   async (_, thunkAPI) => {
     try {
+      // Check if the current user is a guest
+      const { auth } = thunkAPI.getState();
+
+      // If this is a guest user, end their session in analytics
+      if (auth.isGuest && auth.user && auth.user._id) {
+        try {
+          await api.put(`/api/v1/analytics/guest-session/${auth.user._id}/end`);
+        } catch (error) {
+          console.error('Error ending guest session:', error);
+          // Continue with logout even if analytics fails
+        }
+      }
+
       // Import the secure logout utility
       const { executeSecureLogout } = await import('../../utils/authState');
 
-      // First, make the API call to the server to log the action
-      await api.post(AUTH_URL + 'logout');
+      // For authenticated users, make the API call to the server to log the action
+      if (!auth.isGuest) {
+        await api.post(AUTH_URL + 'logout');
+      }
 
       // Then use our secure logout mechanism that prevents additional requests
       executeSecureLogout();
+      thunkAPI.dispatch(resetGuestSandbox()); // Dispatch reset action here
 
       // Return true to indicate success
       return true;
@@ -142,6 +302,7 @@ export const logoutUser = createAsyncThunk(
       // Still execute secure logout on error
       const { executeSecureLogout } = await import('../../utils/authState');
       executeSecureLogout();
+      thunkAPI.dispatch(resetGuestSandbox()); // Also dispatch reset on error before clearing local auth state
 
       // Return false instead of rejecting
       return false;
@@ -194,9 +355,21 @@ export const authSlice = createSlice({
     // Reset UI status flags (typically after showing success/error messages)
     resetAuthStatus: (state) => {
       state.isLoading = false;
+      state.isLoggingInUser = false;
+      state.isLoggingInGuest = false;
       state.isSuccess = false;
       state.isError = false;
       state.message = '';
+    },
+    // Action to clear guest user data. This can be dispatched when a guest explicitly exits guest mode,
+    // or when a real user logs in, or if guest access is disabled while a guest is active.
+    clearGuestUser: (state) => {
+      state.user = null; // Clear the user from Redux state.
+      state.isGuest = false; // Set the guest flag to false.
+      localStorage.removeItem('guestUser'); // Remove guest data from localStorage.
+      // We don't clear guestAccessFeatureEnabled from Redux state or localStorage here,
+      // as it reflects a global setting fetched from the server, not session state.
+      // If a message is needed, it should be set by the calling action/thunk.
     },
 
     // Update user data in state (e.g., after profile update)
@@ -221,6 +394,12 @@ export const authSlice = createSlice({
       // The pending case is when the API call starts
       .addCase(registerUser.pending, (state) => {
         state.isLoading = true; // Show loading indicator
+        // If a guest was active, clear them out upon registration attempt to prevent state conflicts.
+        if (state.isGuest) {
+          state.user = null;
+          state.isGuest = false;
+          localStorage.removeItem('guestUser');
+        }
       })
       // The fulfilled case is when the API call succeeds
       .addCase(registerUser.fulfilled, (state, action) => {
@@ -238,21 +417,31 @@ export const authSlice = createSlice({
         state.message = action.payload; // Error message from rejectWithValue
         state.user = null; // Ensure user is null
         state.token = null; // Ensure token is null
-      })
-
-      // === LOGIN USER CASES ===
+      }) // === LOGIN USER CASES ===
       .addCase(loginUser.pending, (state) => {
         state.isLoading = true; // Show loading indicator
+        state.isLoggingInUser = true; // Specific flag for user login
+        // If a guest was active, clear them out upon real login attempt.
+        if (state.isGuest) {
+          state.user = null;
+          state.isGuest = false;
+          localStorage.removeItem('guestUser');
+        }
       })
       .addCase(loginUser.fulfilled, (state, action) => {
         state.isLoading = false; // Hide loading indicator
+        state.isLoggingInUser = false; // Reset specific flag
         state.isSuccess = true; // Show success message/UI
-        state.user = action.payload.user; // Store user data
-        state.token = action.payload.token; // Store token
+        state.user = action.payload.user; // Store authenticated user data
+        state.token = action.payload.token; // Store JWT token
+        state.isGuest = false; // Ensure guest flag is explicitly false for an authenticated user.
         state.message = ''; // Clear any previous messages
+        // Ensure any residual guest data from a previous session is cleared from localStorage.
+        localStorage.removeItem('guestUser');
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.isLoading = false; // Hide loading indicator
+        state.isLoggingInUser = false; // Reset specific flag
         state.isError = true; // Show error message/UI
         state.message = action.payload; // Error message from rejectWithValue
         state.user = null; // Ensure user is null
@@ -261,9 +450,10 @@ export const authSlice = createSlice({
 
       // === LOGOUT USER CASES ===
       .addCase(logoutUser.fulfilled, (state) => {
-        // Reset state to logged-out values
+        // Reset state to logged-out values for an authenticated user.
         state.user = null;
         state.token = null;
+        state.isGuest = false; // Ensure guest flag is false on logout of an authenticated user.
         state.isSuccess = false;
         state.message = '';
         // Note: localStorage is cleared in the thunk itself
@@ -273,10 +463,10 @@ export const authSlice = createSlice({
       })
       .addCase(logoutUser.rejected, (state, action) => {
         state.isLoading = false;
-        // Still log out frontend state even if backend call fails
-        // This ensures users aren't stuck logged in
+        // Still log out frontend state even if backend call fails for an authenticated user.
         state.user = null;
         state.token = null;
+        state.isGuest = false; // Ensure guest flag is false.
         state.isError = true;
         state.message = action.payload || 'Logout failed on server.';
         // Ensure localStorage is cleared even if backend call fails
@@ -293,18 +483,97 @@ export const authSlice = createSlice({
         state.isSuccess = true; // Show success message/UI
         state.user = null; // Clear user data
         state.token = null; // Clear token
+        state.isGuest = false; // Ensure guest flag is false after account deletion.
         state.message = 'User account deleted successfully.';
       })
       .addCase(deleteUser.rejected, (state, action) => {
         state.isLoading = false; // Hide loading indicator
         state.isError = true; // Show error message/UI
         state.message = action.payload; // Error message
+      })
+
+      // === FETCH GUEST ACCESS STATUS CASES ===
+      .addCase(fetchGuestAccessStatus.pending, (state) => {
+        state.isLoading = true; // Indicate loading while fetching status.
+        state.isError = false; // Reset error state for this specific action
+        state.message = ''; // Clear previous messages
+      })
+      .addCase(fetchGuestAccessStatus.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.guestAccessFeatureEnabled = action.payload; // Update the global flag based on server response.
+        // If guest access has just been disabled by an admin AND a guest user is currently active,
+        // we need to log out the guest user to enforce the new setting immediately.
+        if (!action.payload && state.isGuest) {
+          state.user = null; // Clear guest user from state
+          state.isGuest = false; // Set guest flag to false
+          localStorage.removeItem('guestUser'); // Remove guest data from localStorage
+          state.message =
+            'Guest access has been disabled by an administrator. You have been logged out from guest mode.';
+          state.isSuccess = true; // Indicate a change occurred, message explains it.
+        }
+      })
+      .addCase(fetchGuestAccessStatus.rejected, (state, action) => {
+        state.isLoading = false;
+        state.guestAccessFeatureEnabled = false; // Default to false on error to be safe.
+        state.isError = true;
+        state.message =
+          action.payload ||
+          'Could not verify guest access status from the server.';
+        // If a guest user is currently active and we failed to confirm guest access status,
+        // it's safer to log out the guest to prevent unintended access.
+        if (state.isGuest) {
+          state.user = null;
+          state.isGuest = false;
+          localStorage.removeItem('guestUser');
+          state.message +=
+            ' You have been logged out from guest mode as a precaution.';
+        }
+      }) // === LOGIN AS GUEST CASES ===
+      .addCase(loginAsGuest.pending, (state) => {
+        state.isLoading = true;
+        state.isLoggingInGuest = true; // Specific flag for guest login
+        // Before logging in as guest, ensure any existing authenticated user state is cleared.
+        state.user = null;
+        state.token = null;
+        state.isGuest = false; // Set to false initially, will be true on success.
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        // Also clear any previous guestUser from localStorage to start fresh.
+        localStorage.removeItem('guestUser');
+        console.log('loginAsGuest.pending: Clearing user and token state');
+      })
+      .addCase(loginAsGuest.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isLoggingInGuest = false; // Reset specific flag
+        state.isSuccess = true;
+        state.user = action.payload; // Set user to the guest user object from the thunk.
+        state.token = null; // Guests do not have JWT tokens.
+        state.isGuest = true; // Explicitly set the guest flag to true.
+        state.message =
+          'Successfully logged in as Guest. Your changes will not be saved.';
+        console.log(
+          'loginAsGuest.fulfilled: Setting guest user state:',
+          action.payload
+        );
+      })
+      .addCase(loginAsGuest.rejected, (state, action) => {
+        state.isLoading = false;
+        state.isError = true;
+        state.message = action.payload; // Error message from thunk (e.g., "Guest access is currently disabled").
+        state.user = null; // Ensure no user is set.
+        state.token = null;
+        state.isGuest = false; // Ensure guest flag is false.
+        console.log(
+          'loginAsGuest.rejected: Error during guest login:',
+          action.payload
+        );
       });
   },
 });
 
 // Export the regular actions created by createSlice
-export const { resetAuthStatus, updateUserInState } = authSlice.actions;
+export const { resetAuthStatus, updateUserInState, clearGuestUser } =
+  authSlice.actions;
 
 // Export the reducer for use in the Redux store
 export default authSlice.reducer;

@@ -3,6 +3,7 @@ import Task from '../models/Task.js';
 import User from '../models/User.js';
 import { logger } from '../utils/logger.js';
 import mongoose from 'mongoose';
+import { logGuestWriteAttempt } from '../middleware/analyticsMiddleware.js';
 
 // @desc    Get projects for logged-in user (member or owner)
 // @route   GET /api/v1/projects
@@ -155,6 +156,24 @@ export const getProjects = async (req, res, next) => {
 // @route   POST /api/v1/projects
 // @access  Private
 export const createProject = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to create project', {
+      userId: req.user._id, // Guest ID
+      action: 'create_project_denied_guest',
+    });
+
+    // Log this write attempt in analytics for tracking guest behavior
+    await logGuestWriteAttempt(req, 'project_creation');
+
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to create projects. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     logger.info(`Attempting to create new project`, {
       userId: req.user.id,
@@ -342,6 +361,25 @@ export const getProject = async (req, res, next) => {
 // @route   PUT /api/v1/projects/:id
 // @access  Private
 export const updateProject = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to update project', {
+      userId: req.user._id, // Guest ID
+      projectId: req.params.id,
+      action: 'update_project_denied_guest',
+    });
+
+    // Log this write attempt in analytics for tracking guest behavior
+    await logGuestWriteAttempt(req, 'project_update');
+
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to update projects. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     logger.info(`Attempting to update project with ID: ${req.params.id}`, {
       userId: req.user.id,
@@ -536,6 +574,21 @@ export const updateProject = async (req, res, next) => {
 // @route   DELETE /api/v1/projects/:id
 // @access  Private
 export const deleteProject = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to delete project', {
+      userId: req.user._id, // Guest ID
+      projectId: req.params.id,
+      action: 'delete_project_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete projects. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     logger.info(`Attempting to delete project with ID: ${req.params.id}`, {
       userId: req.user.id,

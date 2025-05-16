@@ -16,31 +16,46 @@ const permissions = {
     projects: ACCESS_LEVELS.FULL,
     tasks: ACCESS_LEVELS.FULL,
     auditLogs: ACCESS_LEVELS.FULL,
+    siteSettings: ACCESS_LEVELS.FULL, // Added: Admin has full control over site settings
+    analytics: ACCESS_LEVELS.FULL, // Added: Admin has full control over analytics
   },
   'Pro User': {
     userManagement: ACCESS_LEVELS.NONE,
-    blogPosts: ACCESS_LEVELS.OWN, // Requirement: Create/Edit Own -> Maps to 'own'
-    knowledgeBase: ACCESS_LEVELS.READ, // Changed from CREATE_EDIT to READ - only admin can create/edit KB articles
-    projects: ACCESS_LEVELS.FULL, // Requirement: Full -> Maps to 'full'
-    tasks: ACCESS_LEVELS.FULL, // Requirement: Full -> Maps to 'full'
+    blogPosts: ACCESS_LEVELS.OWN,
+    knowledgeBase: ACCESS_LEVELS.READ,
+    projects: ACCESS_LEVELS.FULL,
+    tasks: ACCESS_LEVELS.FULL,
+    siteSettings: ACCESS_LEVELS.NONE, // Added: Pro Users cannot change site settings
   },
   'Regular User': {
     userManagement: ACCESS_LEVELS.NONE,
-    blogPosts: ACCESS_LEVELS.READ, // Requirement: Read -> Maps to 'read'
-    knowledgeBase: ACCESS_LEVELS.READ, // Requirement: Read -> Maps to 'read'
-    projects: ACCESS_LEVELS.OWN, // Requirement: Own Projects -> Maps to 'own'
-    tasks: ACCESS_LEVELS.OWN, // Requirement: Own Tasks -> Maps to 'own'
+    blogPosts: ACCESS_LEVELS.READ,
+    knowledgeBase: ACCESS_LEVELS.READ,
+    projects: ACCESS_LEVELS.OWN,
+    tasks: ACCESS_LEVELS.OWN,
+    siteSettings: ACCESS_LEVELS.NONE, // Added: Regular Users cannot change site settings
+  },
+  Guest: {
+    // Added: Guest User role
+    userManagement: ACCESS_LEVELS.NONE,
+    blogPosts: ACCESS_LEVELS.READ,
+    knowledgeBase: ACCESS_LEVELS.READ,
+    projects: ACCESS_LEVELS.READ,
+    tasks: ACCESS_LEVELS.READ,
+    auditLogs: ACCESS_LEVELS.NONE,
+    siteSettings: ACCESS_LEVELS.NONE, // Guests cannot change site settings
   },
 };
 
 // Feature flags might still be useful for globally enabling/disabling entire modules
 const featureFlags = {
   knowledgeBase: true,
-  blogPosts: true, // Assuming blog posts are a feature to be implemented
+  blogPosts: true,
   projects: true,
   tasks: true,
-  userManagement: true, // Keep this aligned with Admin having access
+  userManagement: true,
   auditLogs: true,
+  siteSettings: true, // Added: Feature flag for site settings
 };
 
 // Helper function (optional) to check if a user has *at least* a certain level of access

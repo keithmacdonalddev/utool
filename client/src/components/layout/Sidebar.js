@@ -19,6 +19,7 @@ import {
   Bookmark, // Add Bookmark for Resources
   Archive, // Added for Archive page
   ChevronRight, // For submenu indicator
+  BarChart2, // Added for Analytics
   // ChevronDown, // For submenu indicator // Removed as it's not used for Resources fly-out
 } from 'lucide-react'; // Removed UserGroup import which isn't available
 
@@ -34,9 +35,17 @@ import {
  * @param {boolean} props.isMinimized - Controls whether the sidebar is minimized or expanded on desktop.
  * @param {function} props.toggleSidebar - Function to toggle the sidebar's open/closed state on mobile.
  * @param {function} props.toggleMinimize - Function to toggle the sidebar's minimized/expanded state on desktop.
+ * @param {boolean} props.isGuest - Indicates if the current user is a guest.
  * @returns {JSX.Element} The rendered sidebar component.
  */
-const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
+const Sidebar = ({
+  isOpen,
+  isMinimized,
+  toggleSidebar,
+  toggleMinimize,
+  isGuest,
+}) => {
+  // Added isGuest to props destructuring
   /**
    * @state
    * @description Retrieves the authenticated user's data from the Redux store.
@@ -438,8 +447,39 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
           >
             <Library size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Knowledge Base</span>
+          </NavLink>{' '}
+          {/* Added Notes Link */}
+          <NavLink
+            to="/notes"
+            className={({ isActive }) =>
+              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
+                isActive ? activeLinkClasses : inactiveLinkClasses
+              }`
+            }
+            onClick={() => {
+              if (isOpen && window.innerWidth < 768) toggleSidebar();
+            }}
+            title="Notes"
+          >
+            <StickyNote size={20} className="flex-shrink-0" />
+            <span className={linkTextClasses}>Notes</span>
           </NavLink>
-
+          {/* Friends Link */}
+          <NavLink
+            to="/friends"
+            className={({ isActive }) =>
+              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
+                isActive ? activeLinkClasses : inactiveLinkClasses
+              }`
+            }
+            onClick={() => {
+              if (isOpen && window.innerWidth < 768) toggleSidebar();
+            }}
+            title="Friends"
+          >
+            <Users size={20} className="flex-shrink-0" />
+            <span className={linkTextClasses}>Friends</span>
+          </NavLink>
           {/* Resources Link with Fly-out Submenu */}
           <div
             ref={resourcesButtonRef} // Ref for positioning and click-outside detection
@@ -536,7 +576,7 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
                     onKeyDown={(e) => handleResourcesKeyboardNav(e, 'item', 1)}
                   >
                     Snippets
-                  </NavLink>
+                  </NavLink>{' '}
                   <NavLink
                     to="/resources"
                     state={{ activeTab: 'quotes' }}
@@ -553,26 +593,12 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
                   >
                     Favorite Quotes
                   </NavLink>
+                  {/* Add other resource links here as needed, adjusting keyboard nav indices */}
                 </div>
               </Portal>
             )}
-          </div>
-
-          <NavLink
-            to="/notes"
-            className={({ isActive }) =>
-              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
-                isActive ? activeLinkClasses : inactiveLinkClasses
-              }`
-            }
-            onClick={() => {
-              if (isOpen && window.innerWidth < 768) toggleSidebar();
-            }}
-            title="Notes"
-          >
-            <StickyNote size={20} className="flex-shrink-0" />
-            <span className={linkTextClasses}>Notes</span>
-          </NavLink>
+          </div>{' '}
+          {/* Archive Link */}
           <NavLink
             to="/archive"
             className={({ isActive }) =>
@@ -588,76 +614,94 @@ const Sidebar = ({ isOpen, isMinimized, toggleSidebar, toggleMinimize }) => {
             <Archive size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Archive</span>
           </NavLink>
-          <NavLink
-            to="/friends"
-            className={({ isActive }) =>
-              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
-                isActive ? activeLinkClasses : inactiveLinkClasses
-              }`
-            }
-            onClick={() => {
-              if (isOpen && window.innerWidth < 768) toggleSidebar();
-            }}
-            title="Friends"
-          >
-            <Users size={20} className="flex-shrink-0" />
-            <span className={linkTextClasses}>Friends</span>
-          </NavLink>
-
           {/* Admin Specific Links: Rendered only if user has 'Admin' role */}
-          {user?.role === 'Admin' && (
-            <>
-              <NavLink
-                to="/admin/users"
-                className={({ isActive }) =>
-                  `${linkItemClasses} ${
-                    isMinimized ? 'md:justify-center' : ''
-                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
-                }
-                onClick={() => {
-                  if (isOpen && window.innerWidth < 768) toggleSidebar();
-                }}
-                title="User Management"
-              >
-                <Users size={20} className="flex-shrink-0" />
-                <span className={linkTextClasses}>User Management</span>
-              </NavLink>
-              <NavLink
-                to="/admin/audit-logs"
-                className={({ isActive }) =>
-                  `${linkItemClasses} ${
-                    isMinimized ? 'md:justify-center' : ''
-                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
-                }
-                onClick={() => {
-                  if (isOpen && window.innerWidth < 768) toggleSidebar();
-                }}
-                title="Audit Logs"
-              >
-                <History size={20} className="flex-shrink-0" />
-                <span className={linkTextClasses}>Audit Logs</span>
-              </NavLink>
-            </>
-          )}
+          {user?.role === 'Admin' &&
+            !isGuest && ( // Also check !isGuest, though Admin role implies not a guest
+              <>
+                <NavLink
+                  to="/admin/users"
+                  className={({ isActive }) =>
+                    `${linkItemClasses} ${
+                      isMinimized ? 'md:justify-center' : ''
+                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                  }
+                  onClick={() => {
+                    if (isOpen && window.innerWidth < 768) toggleSidebar();
+                  }}
+                  title="User Management"
+                >
+                  <Users size={20} className="flex-shrink-0" />
+                  <span className={linkTextClasses}>User Management</span>
+                </NavLink>{' '}
+                <NavLink
+                  to="/admin/audit-logs"
+                  className={({ isActive }) =>
+                    `${linkItemClasses} ${
+                      isMinimized ? 'md:justify-center' : ''
+                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                  }
+                  onClick={() => {
+                    if (isOpen && window.innerWidth < 768) toggleSidebar();
+                  }}
+                  title="Audit Logs"
+                >
+                  <History size={20} className="flex-shrink-0" />
+                  <span className={linkTextClasses}>Audit Logs</span>
+                </NavLink>
+                <NavLink
+                  to="/admin/settings"
+                  className={({ isActive }) =>
+                    `${linkItemClasses} ${
+                      isMinimized ? 'md:justify-center' : ''
+                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                  }
+                  onClick={() => {
+                    if (isOpen && window.innerWidth < 768) toggleSidebar();
+                  }}
+                  title="Admin Settings"
+                >
+                  {' '}
+                  <Settings size={20} className="flex-shrink-0" />
+                  <span className={linkTextClasses}>Admin Settings</span>
+                </NavLink>
+                <NavLink
+                  to="/admin/analytics/guest"
+                  className={({ isActive }) =>
+                    `${linkItemClasses} ${
+                      isMinimized ? 'md:justify-center' : ''
+                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                  }
+                  onClick={() => {
+                    if (isOpen && window.innerWidth < 768) toggleSidebar();
+                  }}
+                  title="Guest Analytics"
+                >
+                  <BarChart2 size={20} className="flex-shrink-0" />
+                  <span className={linkTextClasses}>Guest Analytics</span>
+                </NavLink>
+              </>
+            )}
         </nav>
 
         {/* Footer Links Area: Profile, Settings (optional), Logout */}
         <div className="mt-auto border-t border-gray-700 pt-4">
-          <NavLink
-            to="/profile"
-            className={({ isActive }) =>
-              `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
-                isActive ? activeLinkClasses : inactiveLinkClasses
-              }`
-            }
-            onClick={() => {
-              if (isOpen && window.innerWidth < 768) toggleSidebar();
-            }}
-            title="Profile"
-          >
-            <User size={20} className="flex-shrink-0" />
-            <span className={linkTextClasses}>Profile</span>
-          </NavLink>
+          {!isGuest && ( // Conditionally render Profile link if not a guest
+            <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
+                  isActive ? activeLinkClasses : inactiveLinkClasses
+                }`
+              }
+              onClick={() => {
+                if (isOpen && window.innerWidth < 768) toggleSidebar();
+              }}
+              title="Profile"
+            >
+              <User size={20} className="flex-shrink-0" />
+              <span className={linkTextClasses}>Profile</span>
+            </NavLink>
+          )}
           {/* Example of an optional Settings link, currently commented out
           <NavLink
             to="/settings"

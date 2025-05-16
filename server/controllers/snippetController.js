@@ -46,6 +46,16 @@ export const getSnippet = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/snippets
 // @access  Private
 export const createSnippet = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to create snippets. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   // Add user ID to snippet data
   req.body.user = req.user.id;
 
@@ -61,6 +71,16 @@ export const createSnippet = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/snippets/:id
 // @access  Private
 export const updateSnippet = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to update snippets. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   let snippet = await Snippet.findById(req.params.id);
 
   if (!snippet) {
@@ -91,6 +111,16 @@ export const updateSnippet = asyncHandler(async (req, res, next) => {
 // @route   DELETE /api/v1/snippets/:id
 // @access  Private
 export const deleteSnippet = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete snippets. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const snippet = await Snippet.findById(req.params.id);
 
   if (!snippet) {

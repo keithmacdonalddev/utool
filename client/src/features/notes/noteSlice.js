@@ -1,5 +1,12 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../utils/api';
+// Import actions from guestSandboxSlice for guest user support
+import {
+  addItem,
+  updateItem,
+  deleteItem,
+  setItems,
+} from '../guestSandbox/guestSandboxSlice';
 
 const NOTE_URL = '/notes';
 
@@ -29,6 +36,28 @@ const initialState = {
 export const fetchNotes = createAsyncThunk(
   'notes/fetchNotes',
   async (params = {}, thunkAPI) => {
+    // Get state and check if user is a guest
+    const state = thunkAPI.getState();
+    const { auth } = state;
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // For guest users, get notes from guest sandbox
+      const guestNotes = state.guestSandbox.notes.map((note) => ({
+        ...note.data,
+        _id: note.id,
+        id: note.id,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
+      }));
+
+      return {
+        data: guestNotes,
+        useCache: true,
+        isGuestData: true,
+      };
+    }
+
     try {
       // Track the current filter configuration
       const state = thunkAPI.getState();
@@ -82,6 +111,31 @@ export const fetchNotes = createAsyncThunk(
 export const createNote = createAsyncThunk(
   'notes/createNote',
   async (noteData, thunkAPI) => {
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // Guest user: Add to sandbox, no API call
+      const guestNoteData = {
+        ...noteData,
+        // Add any additional fields needed for consistency with API structure
+      };
+
+      // Dispatch to add item to guest sandbox
+      dispatch(
+        addItem({ entityType: 'notes', itemData: { data: guestNoteData } })
+      );
+
+      // Return data structure that matches the API response
+      return {
+        ...guestNoteData,
+        _id: 'guest-' + Date.now(), // Temporary ID for immediate feedback
+        _isGuestCreation: true,
+      };
+    }
+
+    // Regular user: Proceed with API call
     try {
       const response = await api.post(NOTE_URL, noteData);
       return response.data.data;
@@ -101,6 +155,32 @@ export const createNote = createAsyncThunk(
 export const fetchNote = createAsyncThunk(
   'notes/fetchNote',
   async (id, thunkAPI) => {
+    const { getState } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // For guest users, get note from guest sandbox
+      const guestNotes = getState().guestSandbox.notes;
+      const guestNote = guestNotes.find((n) => n.id === id);
+
+      if (guestNote) {
+        // Return formatted guest note with API-compatible structure
+        return {
+          ...guestNote.data,
+          _id: guestNote.id,
+          id: guestNote.id,
+          createdAt: guestNote.createdAt,
+          updatedAt: guestNote.updatedAt,
+          _isGuestData: true,
+        };
+      }
+
+      // If guest note not found, return error
+      return thunkAPI.rejectWithValue('Note not found in guest session');
+    }
+
+    // Regular user: Proceed with API call
     try {
       const response = await api.get(`${NOTE_URL}/${id}`);
       return response.data.data;
@@ -120,6 +200,30 @@ export const fetchNote = createAsyncThunk(
 export const updateNote = createAsyncThunk(
   'notes/updateNote',
   async ({ id, updates }, thunkAPI) => {
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // Guest user: Update item in sandbox, no API call
+      dispatch(
+        updateItem({
+          entityType: 'notes',
+          itemId: id,
+          updates: { data: updates },
+        })
+      );
+
+      // Return a response that matches API structure but with guest data
+      return {
+        ...updates,
+        _id: id,
+        id: id,
+        _isGuestUpdate: true,
+      };
+    }
+
+    // Regular user: Proceed with API call
     try {
       const response = await api.put(`${NOTE_URL}/${id}`, updates);
       return response.data.data;
@@ -139,6 +243,24 @@ export const updateNote = createAsyncThunk(
 export const softDeleteNote = createAsyncThunk(
   'notes/softDeleteNote',
   async (id, thunkAPI) => {
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // Guest user: Delete item from sandbox, no API call
+      dispatch(
+        deleteItem({
+          entityType: 'notes',
+          itemId: id,
+        })
+      );
+
+      // Return the ID for the reducer to handle correctly
+      return { _id: id, _isGuestDeletion: true };
+    }
+
+    // Regular user: Proceed with API call
     try {
       const response = await api.delete(`${NOTE_URL}/${id}`);
       console.log('Soft delete response:', response.data);

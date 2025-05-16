@@ -14,6 +14,13 @@ import {
   hasCollectionChanged,
   deepCompareObjects,
 } from '../../utils/objectUtils';
+// Import actions from guestSandboxSlice
+import {
+  addItem as addGuestItem,
+  updateItem as updateGuestItem,
+  deleteItem as deleteGuestItem,
+  setItems as setGuestItems,
+} from '../guestSandbox/guestSandboxSlice';
 
 // Default cache timeout (5 minutes in milliseconds)
 const CACHE_TIMEOUT = 5 * 60 * 1000;
@@ -64,37 +71,63 @@ const initialState = {
 export const createTask = createAsyncThunk(
   'tasks/create',
   async (
-    { title, projectId, description, status, priority, dueDate, tags },
+    taskData, // Combined taskData object
     thunkAPI
   ) => {
-    try {
-      // Validate required project ID
-      if (!projectId) {
-        return thunkAPI.rejectWithValue(
-          'Project ID is required for task creation'
-        );
-      }
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+    const { projectId, title, description, status, priority, dueDate, tags } =
+      taskData;
 
-      // Make API request with all task fields to the project-scoped endpoint
-      const response = await api.post(`/projects/${projectId}/tasks`, {
+    if (auth.user && auth.isGuest) {
+      // Guest user: Add to sandbox, no API call
+      // The guestSandboxSlice.addItem reducer handles ID generation.
+      // Ensure the data passed matches what addItem expects, particularly the 'data' sub-object.
+      const guestTaskData = {
         title,
+        projectId,
         description,
         status,
         priority,
         dueDate,
-        tags, // Include tags in the API call
-      });
-      return response.data.data; // Return the newly created task data
-    } catch (error) {
-      // ERROR HANDLING PATTERN: Extract message from various error response structures
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      // Use rejectWithValue to send error message to the rejected case
-      return thunkAPI.rejectWithValue(message);
+        tags,
+      };
+      dispatch(
+        addGuestItem({ entityType: 'tasks', itemData: { data: guestTaskData } })
+      );
+      // Return a consistent structure, including a temporary ID if possible, or mark as guest creation.
+      // The actual item with ID will be in the guestSandbox state.
+      return {
+        ...guestTaskData,
+        _isGuestCreation: true,
+        id: 'guest-' + Date.now(),
+      }; // Placeholder ID for immediate feedback if needed
+    } else {
+      // Regular user: Proceed with API call
+      try {
+        if (!projectId) {
+          return thunkAPI.rejectWithValue(
+            'Project ID is required for task creation'
+          );
+        }
+        const response = await api.post(`/projects/${projectId}/tasks`, {
+          title,
+          description,
+          status,
+          priority,
+          dueDate,
+          tags,
+        });
+        return response.data.data; // Return the newly created task data
+      } catch (error) {
+        const message =
+          (error.response &&
+            error.response.data &&
+            error.response.data.message) ||
+          error.message ||
+          error.toString();
+        return thunkAPI.rejectWithValue(message);
+      }
     }
   }
 );
@@ -113,18 +146,43 @@ export const createTask = createAsyncThunk(
 export const getTasksForProject = createAsyncThunk(
   'tasks/getForProject',
   async (payload, thunkAPI) => {
-    // Handle both string projectId and object payload formats for backward compatibility
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle both string projectId and object payload formats
     const projectId = typeof payload === 'string' ? payload : payload.projectId;
     const options = typeof payload === 'object' ? payload : {};
     const { forceRefresh = false, cacheTimeout = CACHE_TIMEOUT } = options;
 
-    // VALIDATION PATTERN: Early return for invalid input
+    if (auth.user && auth.isGuest) {
+      // Guest user: Simulate fetch from sandbox. Guests always see their current sandbox state.
+      // The actual items are already in state.guestSandbox.tasks.
+      // We can dispatch setItems with the current guest tasks for this project if needed,
+      // or rely on selectors to pick them up. For simplicity, returning an empty array
+      // or the filtered items directly from guestSandbox state if the thunk is expected to return data.
+      // For now, let's assume components will select directly.
+      // If a thunk MUST return something, select from guestSandbox here.
+      const guestTasksForProject = getState().guestSandbox.tasks.filter(
+        (task) => task.data.projectId === projectId
+      );
+      return {
+        tasks: guestTasksForProject.map((gt) => ({
+          ...gt.data,
+          id: gt.id,
+          _id: gt.id,
+        })), // Transform to match expected task structure
+        projectId,
+        fromCache: true, // Indicate it's from guest sandbox, effectively a cache
+        isGuestFetch: true,
+      };
+    }
+
+    // Regular user: Proceed with API call and caching logic
     if (!projectId) {
       return thunkAPI.rejectWithValue('Project ID is required to fetch tasks');
     }
 
-    // Check if we have valid cached data for this project
-    const state = thunkAPI.getState().tasks;
+    const state = getState().tasks;
     const now = Date.now();
     const projectTimestamp = state.projectTasksTimestamps[projectId];
     const cachedTasks = state.tasksByProject[projectId];
@@ -134,9 +192,7 @@ export const getTasksForProject = createAsyncThunk(
       cachedTasks &&
       cachedTasks.length > 0;
 
-    // Use cached data if available and not forcing refresh
     if (cacheIsValid && !forceRefresh) {
-      console.log(`Using cached tasks for project ${projectId}`);
       return {
         tasks: cachedTasks,
         projectId,
@@ -145,9 +201,6 @@ export const getTasksForProject = createAsyncThunk(
     }
 
     try {
-      console.log(`Fetching fresh tasks for project ${projectId} from API`);
-      // Use the project-specific task route
-      // API PATTERN: RESTful nested resource URL
       const response = await api.get(`/projects/${projectId}/tasks`);
       return {
         tasks: response.data.data,
@@ -185,71 +238,83 @@ export const getTasksForProject = createAsyncThunk(
 export const updateTask = createAsyncThunk(
   'tasks/update',
   async ({ projectId, taskId, updates, optimistic = false }, thunkAPI) => {
-    // Validate required fields
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    if (auth.user && auth.isGuest) {
+      // Guest user: Update in sandbox
+      dispatch(updateGuestItem({ entityType: 'tasks', id: taskId, updates }));
+      // Return the updated data structure expected by the reducer/component
+      // We need to select the item from the sandbox to return it
+      // This is a bit tricky as the state updates after dispatch returns.
+      // For optimistic-like behavior, we can construct the expected shape.
+      const guestTask = getState().guestSandbox.tasks.find(
+        (t) => t.id === taskId
+      );
+      return {
+        ...(guestTask ? guestTask.data : {}),
+        ...updates,
+        id: taskId,
+        _id: taskId,
+        project: projectId,
+        _isGuestUpdate: true,
+      };
+    }
+
+    // Regular user: Proceed with API call
     if (!projectId || !taskId) {
       return thunkAPI.rejectWithValue(
         'Project ID and Task ID are required to update a task'
       );
     }
 
-    // For optimistic updates, return early with the data for immediate UI update
     if (optimistic) {
-      // Get the current task from state
-      const state = thunkAPI.getState();
-      const existingTask = state.tasks.tasks.find((t) => t._id === taskId);
+      const state = getState();
+      // Ensure state.tasks.tasks exists and is an array before calling find
+      const existingTask =
+        state.tasks.tasks && Array.isArray(state.tasks.tasks)
+          ? state.tasks.tasks.find((t) => t._id === taskId)
+          : null;
 
       if (!existingTask) {
         return thunkAPI.rejectWithValue(
           'Cannot apply optimistic update - task not found in state'
         );
       }
-
       return {
         ...existingTask,
         ...updates,
         _id: taskId,
         project: projectId,
-        optimistic: true, // Flag to identify optimistic updates
+        optimistic: true,
       };
     }
 
-    // Check if we're marking a task as complete - this will be handled specially
     const isCompletingTask = updates.status === 'Completed';
 
     try {
-      // URL PATTERN: Project-scoped task URL
       const response = await api.put(
         `/projects/${projectId}/tasks/${taskId}`,
         updates
       );
-
-      // For task completion, return special payload that indicates it was completed and should be removed
       if (isCompletingTask) {
         return {
           taskId,
           projectId,
-          wasCompleted: true, // Flag to indicate this task was completed and archived
-          originalData: response.data.data || { _id: taskId }, // Fallback with at least the ID
+          wasCompleted: true,
+          originalData: response.data.data || { _id: taskId },
         };
       }
-
       return response.data.data;
     } catch (error) {
-      // If we're completing a task and get a 500 error, it's likely because
-      // the task was archived and deleted - handle this specially
       if (isCompletingTask && error.response && error.response.status === 500) {
-        console.log(
-          'Task was completed and archived - removing from state',
-          taskId
-        );
         return {
           taskId,
           projectId,
           wasCompleted: true,
-          originalData: { _id: taskId }, // Minimal data since original is gone
+          originalData: { _id: taskId },
         };
       }
-
       const message =
         (error.response &&
           error.response.data &&
@@ -275,7 +340,16 @@ export const updateTask = createAsyncThunk(
 export const deleteTask = createAsyncThunk(
   'tasks/delete',
   async ({ projectId, taskId }, thunkAPI) => {
-    // Validate required fields
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    if (auth.user && auth.isGuest) {
+      // Guest user: Delete from sandbox
+      dispatch(deleteGuestItem({ entityType: 'tasks', id: taskId }));
+      return { taskId, projectId, _isGuestDelete: true }; // Include projectId for potential UI updates
+    }
+
+    // Regular user: Proceed with API call
     if (!projectId || !taskId) {
       return thunkAPI.rejectWithValue(
         'Project ID and Task ID are required to delete a task'
@@ -284,8 +358,7 @@ export const deleteTask = createAsyncThunk(
 
     try {
       await api.delete(`/projects/${projectId}/tasks/${taskId}`);
-      // Return the ID so we can filter it from state
-      return { taskId };
+      return { taskId, projectId }; // Include projectId for consistency and potential cache updates
     } catch (error) {
       const message =
         (error.response &&

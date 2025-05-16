@@ -4,6 +4,13 @@ import {
   deepCompareObjects,
   hasCollectionChanged,
 } from '../../utils/objectUtils';
+// Import actions from guestSandboxSlice for guest user support
+import {
+  addItem,
+  updateItem,
+  deleteItem,
+  setItems,
+} from '../guestSandbox/guestSandboxSlice';
 
 const PROJECT_URL = '/projects/'; // Relative to base URL in api.js
 
@@ -49,9 +56,31 @@ export const getProjects = createAsyncThunk(
       cacheTimeout = CACHE_TIMEOUT,
       backgroundRefresh = false,
       smartRefresh = true,
-    } = options;
+    } = options; // Get state and check if user is a guest
     const state = thunkAPI.getState().projects;
+    const { auth } = thunkAPI.getState();
 
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // For guest users, get projects from guest sandbox
+      const guestProjects = thunkAPI
+        .getState()
+        .guestSandbox.projects.map((project) => ({
+          ...project.data,
+          _id: project.id,
+          id: project.id,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+        }));
+
+      return {
+        projects: guestProjects,
+        fromCache: true,
+        isGuestData: true,
+      };
+    }
+
+    // For regular users, continue with normal flow
     // Check if we have recent data in the cache
     const now = Date.now();
     const cacheIsValid =
@@ -117,6 +146,35 @@ export const getProjects = createAsyncThunk(
 export const createProject = createAsyncThunk(
   'projects/create',
   async (projectData, thunkAPI) => {
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // Guest user: Add to sandbox, no API call
+      const guestProjectData = {
+        ...projectData,
+        // Add any additional fields needed for consistency with API structure
+      };
+
+      // Dispatch to add item to guest sandbox
+      dispatch(
+        addItem({
+          entityType: 'projects',
+          itemData: { data: guestProjectData },
+        })
+      );
+
+      // Return data structure that matches the API response
+      // The actual item with ID will be in the guestSandbox state.
+      return {
+        ...guestProjectData,
+        _id: 'guest-' + Date.now(), // Temporary ID for immediate feedback
+        _isGuestCreation: true,
+      };
+    }
+
+    // Regular user: Proceed with API call
     try {
       const response = await api.post(PROJECT_URL, projectData);
       return response.data.data;
@@ -154,13 +212,39 @@ export const getProject = createAsyncThunk(
       cacheTimeout = projectIdOrOptions.cacheTimeout || CACHE_TIMEOUT;
       backgroundRefresh = projectIdOrOptions.backgroundRefresh || false;
       smartRefresh = projectIdOrOptions.smartRefresh !== false; // Default to true
-    }
-
-    // Validate project ID
+    } // Validate project ID
     if (!projectId) {
       return thunkAPI.rejectWithValue('Project ID is required');
     }
 
+    // Check if user is a guest
+    const { auth } = thunkAPI.getState();
+    if (auth.user && auth.isGuest) {
+      // For guest users, get project data from guest sandbox
+      const guestProjects = thunkAPI.getState().guestSandbox.projects;
+      const guestProject = guestProjects.find((p) => p.id === projectId);
+
+      if (guestProject) {
+        // Return formatted guest project with API-compatible structure
+        return {
+          project: {
+            ...guestProject.data,
+            _id: guestProject.id,
+            id: guestProject.id,
+            createdAt: guestProject.createdAt,
+            updatedAt: guestProject.updatedAt,
+          },
+          fromCache: true,
+          isGuestProject: true,
+        };
+      }
+
+      // If guest project not found, return empty project
+      // This can happen if trying to access a project that doesn't exist in guest sandbox
+      return thunkAPI.rejectWithValue('Project not found in guest session');
+    }
+
+    // For regular users, continue with normal flow
     const state = thunkAPI.getState().projects;
     const now = Date.now(); // Check if this specific project is in cache and if cache is still valid
     const projectCache = state.projectCache[projectId];
@@ -284,6 +368,29 @@ export const getProject = createAsyncThunk(
 export const updateProject = createAsyncThunk(
   'projects/update',
   async ({ projectId, projectData, optimistic = false }, thunkAPI) => {
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // Guest user: Update item in sandbox, no API call
+      dispatch(
+        updateItem({
+          entityType: 'projects',
+          itemId: projectId,
+          updates: { data: projectData },
+        })
+      );
+
+      // Return a response that matches API structure but with guest data
+      return {
+        ...projectData,
+        _id: projectId,
+        id: projectId,
+        _isGuestUpdate: true,
+      };
+    }
+
     // If optimistic update is enabled, return early with the data for immediate UI update
     if (optimistic) {
       return {
@@ -312,6 +419,24 @@ export const updateProject = createAsyncThunk(
 export const deleteProject = createAsyncThunk(
   'projects/delete',
   async (projectId, thunkAPI) => {
+    const { getState, dispatch } = thunkAPI;
+    const { auth } = getState();
+
+    // Handle guest user
+    if (auth.user && auth.isGuest) {
+      // Guest user: Delete item from sandbox, no API call
+      dispatch(
+        deleteItem({
+          entityType: 'projects',
+          itemId: projectId,
+        })
+      );
+
+      // Return the ID for the reducer to remove from state
+      return projectId;
+    }
+
+    // Regular user: Proceed with API call
     try {
       await api.delete(PROJECT_URL + projectId);
       return projectId; // Return the ID of the deleted project for removal from state

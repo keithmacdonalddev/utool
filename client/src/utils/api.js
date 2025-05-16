@@ -121,14 +121,13 @@ api.interceptors.request.use(
      * It uses the Redux store directly to access the current auth state,
      * demonstrating how to integrate Redux with API requests.
      */
-    const token = store.getState().auth.token;
-
-    // If we're making an authenticated request (to a protected endpoint)
+    const token = store.getState().auth.token; // If we're making an authenticated request (to a protected endpoint)
     // but we don't have a token, reject the request immediately
     const isProtectedEndpoint =
       !config.url.includes('/auth/login') &&
       !config.url.includes('/auth/register') &&
-      !config.url.includes('/auth/verify-email');
+      !config.url.includes('/auth/verify-email') &&
+      !config.url.includes('/settings/guest-access-status'); // Add guest access status endpoint as public
 
     if (isProtectedEndpoint && !token) {
       // Create a canceled request error

@@ -4,11 +4,15 @@
  * This hook leverages the useDataFetching hook to efficiently retrieve and cache notes data.
  * It ensures that notes are only fetched when needed and prevents redundant API calls,
  * which was causing multiple identical requests on dashboard load.
+ *
+ * Updated to support guest users by returning data from the guest sandbox when the user is a guest.
  */
 
+import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
 import useDataFetching from './useDataFetching';
 import { fetchNotes } from '../features/notes/noteSlice';
+import { selectGuestItemsByType } from '../features/guestSandbox/guestSandboxSlice';
 
 /**
  * Hook for efficient notes data fetching with caching
@@ -37,9 +41,29 @@ const useNotes = ({
 
   // Get the current filter from Redux if needed for dependency tracking
   const notesFilter = useSelector((state) => state.notes.filter);
-  // Use the enhanced data fetching hook
+
+  // Get auth state to check if user is a guest
+  const { isGuest } = useSelector((state) => state.auth);
+
+  // Get guest note data directly if the user is a guest
+  const guestNotes = useSelector((state) =>
+    isGuest ? selectGuestItemsByType(state, 'notes') : []
+  );
+
+  // Format guest notes to match API structure
+  const formattedGuestNotes = useMemo(() => {
+    if (!isGuest) return [];
+
+    return guestNotes.map((note) => ({
+      ...note.data,
+      _id: note.id,
+      id: note.id,
+      createdAt: note.createdAt,
+      updatedAt: note.updatedAt,
+    }));
+  }, [isGuest, guestNotes]); // Use the enhanced data fetching hook
   const {
-    data: notes,
+    data: apiNotes,
     isLoading,
     error,
     refetch: refetchNotes,
@@ -52,15 +76,18 @@ const useNotes = ({
     dependencies: [JSON.stringify(queryParams), notesFilter], // Re-fetch if query params change
     fetchParams: queryParams,
     cacheTimeout,
-    skipInitialFetch,
-    backgroundRefresh,
+    skipInitialFetch: skipInitialFetch || isGuest, // Skip fetch for guest users
+    backgroundRefresh: backgroundRefresh && !isGuest, // No background refresh for guest users
     smartRefresh,
     idField: '_id', // Use _id for comparing note objects
   });
 
+  // For guest users, use the formatted guest notes
+  const notes = isGuest ? formattedGuestNotes : apiNotes;
+
   return {
     notes,
-    isLoading,
+    isLoading: isGuest ? false : isLoading, // Never loading for guest users
     error,
     refetchNotes,
   };

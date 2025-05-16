@@ -49,6 +49,10 @@ const ArchivePage = lazy(() => import('./pages/ArchivePage')); // <-- Add Archiv
 // Admin Pages
 const AdminUserListPage = lazy(() => import('./pages/admin/UserListPage'));
 const AdminUserEditPage = lazy(() => import('./pages/admin/UserEditPage'));
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
+const GuestAnalyticsPage = lazy(() =>
+  import('./pages/admin/GuestAnalyticsPage')
+);
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -144,7 +148,12 @@ function App() {
                 <Route
                   element={
                     <ProtectedRoute
-                      allowedRoles={['Regular User', 'Pro User', 'Admin']} // All authenticated users
+                      allowedRoles={[
+                        'Regular User',
+                        'Pro User',
+                        'Admin',
+                        'Guest',
+                      ]} // Allow guests to access dashboard
                     />
                   }
                 >
@@ -152,7 +161,6 @@ function App() {
                   <Route element={<MainLayout />}>
                     {/* Dashboard and main feature routes */}
                     <Route path="/dashboard" element={<DashboardPage />} />
-
                     {/* Project management routes */}
                     <Route
                       path="/projects/new"
@@ -167,7 +175,6 @@ function App() {
                       path="/projects/:id/edit"
                       element={<ProjectEditPage />}
                     />
-
                     {/* Knowledge Base routes */}
                     <Route path="/kb/new" element={<KbCreatePage />} />
                     <Route path="/kb" element={<KbListPage />} />
@@ -182,20 +189,17 @@ function App() {
                     <Route path="/notes" element={<NotesPage />} />
                     <Route path="/notes/trash" element={<TrashPage />} />
                     <Route path="/archive" element={<ArchivePage />} />
-
                     {/* Standalone task routes removed - tasks are only accessible through projects */}
                     {/* <Route path="/tasks" element={<TasksPage />} /> */}
                     {/* <Route path="/tasks/:id" element={<TaskDetailsPage />} /> */}
-
                     {/* Redirect old favorite-quotes page to resources with quotes tab active */}
                     <Route
                       path="/favorite-quotes"
                       element={<QuotesRedirect />}
                     />
                     <Route path="/friends" element={<FriendsPage />} />
-
                     {/* Admin Only Routes - nested protected route */}
-                    {/* Additional role check for admin-specific functionality */}
+                    {/* Additional role check for admin-specific functionality */}{' '}
                     <Route
                       element={<ProtectedRoute allowedRoles={['Admin']} />}
                     >
@@ -210,6 +214,14 @@ function App() {
                       <Route
                         path="/admin/audit-logs"
                         element={<AuditLogsPage />}
+                      />{' '}
+                      <Route
+                        path="/admin/settings"
+                        element={<AdminSettingsPage />}
+                      />
+                      <Route
+                        path="/admin/analytics/guest"
+                        element={<GuestAnalyticsPage />}
                       />
                     </Route>
                   </Route>

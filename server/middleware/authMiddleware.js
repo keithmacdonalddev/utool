@@ -4,6 +4,8 @@ import asyncHandler from './async.js';
 import ErrorResponse from '../utils/errorResponse.js';
 import User from '../models/User.js';
 import { isTokenBlacklisted } from '../utils/tokenBlacklist.js'; // Import blacklist checker
+import AppSettings from '../models/AppSettings.js'; // Import AppSettings
+import { randomUUID } from 'crypto'; // Import for secure ID generation
 import {
   permissions,
   featureFlags,
@@ -40,8 +42,8 @@ import {
 └─────────────────────────────────────────────────────────────┘
 */
 
-// Protect routes - verify user is authenticated with valid JWT
-export const protect = async (req, res, next) => {
+// Protect routes - verify user is authenticated with valid JWT or is a guest
+export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
   // Check for token in Authorization header (Bearer token)
@@ -56,24 +58,55 @@ export const protect = async (req, res, next) => {
   //     token = req.cookies.token;
   // }
 
-  // Make sure token exists
+  // Make sure token exists or guest access is enabled
   if (!token) {
-    return res
-      .status(401)
-      .json({ success: false, message: 'Not authorized, no token' });
+    try {
+      const settings = await AppSettings.getSettings();
+      if (settings.guestAccessEnabled) {
+        // If guest access is enabled and no token, treat as guest
+        req.user = {
+          _id: `guest_${randomUUID()}`, // Cryptographically secure UUID
+          name: 'Guest User',
+          role: 'Guest', // Standardized role name
+          isGuest: true, // Explicit flag for guest identification
+          // Add any other default properties expected by downstream logic,
+          // e.g., permissions object indicating no write access.
+          // For now, isGuest: true will be the primary check.
+        };
+        // console.log('Guest user session initiated:', req.user); // Optional: for debugging
+        return next(); // Proceed as guest
+      } else {
+        // No token and guest access is disabled
+        // console.log('Access denied: No token and guest access disabled.'); // Optional: for debugging
+        return res.status(401).json({
+          success: false,
+          message: 'Not authorized. Please log in.', // User-friendly message
+        });
+      }
+    } catch (error) {
+      console.error(
+        'Error checking guest access settings in protect middleware:',
+        error.message,
+        error.stack
+      );
+      return res.status(500).json({
+        success: false,
+        message: 'Server error during authentication check.', // User-friendly message
+      });
+    }
   }
 
-  // Check if token is blacklisted (logged out)
-  if (isTokenBlacklisted(token)) {
-    return res
-      .status(401)
-      .json({
+  // If a token exists, proceed with token verification
+  try {
+    // Check if token is blacklisted (logged out)
+    if (isTokenBlacklisted(token)) {
+      console.warn('Access attempt with blacklisted token', { token });
+      return res.status(401).json({
         success: false,
         message: 'Token has been invalidated, please log in again',
       });
-  }
+    }
 
-  try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -96,16 +129,19 @@ export const protect = async (req, res, next) => {
       .status(401)
       .json({ success: false, message: 'Not authorized, token failed' });
   }
-};
+});
 
 // Grant access based on feature and required access level
 export const authorize = (feature, requiredLevel) => {
   return async (req, res, next) => {
     // Made async to potentially fetch resource for 'own' check
     if (!req.user) {
-      return res
-        .status(401)
-        .json({ success: false, message: 'Not authorized' });
+      // This should ideally not be hit if 'protect' middleware is always used before 'authorize'
+      // and 'protect' now handles guest user creation or explicit denial.
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, user object not found on request',
+      });
     }
 
     const userRole = req.user.role;
@@ -136,6 +172,14 @@ export const authorize = (feature, requiredLevel) => {
       requiredLevel === ACCESS_LEVELS.CREATE_EDIT
     ) {
       if (hasAccess(userLevel, requiredLevel)) {
+        // For Guest users, if the required level is READ and they have READ access, allow.
+        // Otherwise, if it's CREATE_EDIT or FULL, guests should be denied even if hasAccess might pass based on 'Guest' having 'READ'.
+        // This is a specific check to ensure guests cannot perform write operations even if a feature is generally 'READ' accessible.
+        // However, the permissions for 'Guest' are already set to 'READ' for relevant features,
+        // and 'NONE' for sensitive ones like 'siteSettings' or 'userManagement'.
+        // The `hasAccess` function and role permissions should correctly restrict guests.
+        // If a guest tries to access a 'FULL' or 'CREATE_EDIT' required endpoint,
+        // their 'READ' permission for that feature (or 'NONE') will correctly be evaluated by `hasAccess`.
         return next(); // User has sufficient general access
       } else {
         return res.status(403).json({
@@ -147,6 +191,17 @@ export const authorize = (feature, requiredLevel) => {
 
     // 4. Handle 'own' access level check (more complex)
     if (requiredLevel === ACCESS_LEVELS.OWN) {
+      // Guests cannot "own" resources in a persistent way.
+      // If a guest somehow reaches an 'own' check, they should be denied.
+      // The 'Guest' role in permissions.js has 'READ' access for data features, not 'OWN'.
+      // This check primarily applies to authenticated users.
+      if (userRole === 'Guest') {
+        return res.status(403).json({
+          success: false,
+          message: 'Guests cannot perform actions requiring ownership.',
+        });
+      }
+
       // If user has FULL or CREATE_EDIT, they automatically pass 'own' check for this feature
       if (
         userLevel === ACCESS_LEVELS.FULL ||

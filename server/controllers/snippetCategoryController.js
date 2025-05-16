@@ -74,6 +74,16 @@ export const getCategory = asyncHandler(async (req, res, next) => {
  * @returns {Object} Newly created snippet category object
  */
 export const createCategory = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to create categories. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   // Add user ID to request body
   req.body.user = req.user.id;
 
@@ -96,6 +106,16 @@ export const createCategory = asyncHandler(async (req, res, next) => {
  * @returns {Object} Updated snippet category object
  */
 export const updateCategory = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to update categories. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   let category = await SnippetCategory.findById(req.params.id);
 
   // Check if category exists
@@ -133,6 +153,16 @@ export const updateCategory = asyncHandler(async (req, res, next) => {
  * @returns {Object} Success message
  */
 export const deleteCategory = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete categories. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const category = await SnippetCategory.findById(req.params.id);
 
   // Check if category exists

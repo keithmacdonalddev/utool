@@ -140,6 +140,21 @@ export const getTasksForProject = async (req, res, next) => {
  * @access  Private - requires authentication and project membership
  */
 export const createTask = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to create task', {
+      userId: req.user._id, // Guest ID
+      projectId: req.params.projectId,
+      action: 'create_task_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to create tasks. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const projectId = req.params.projectId;
 
   // Log attempted action - don't include the full req object
@@ -442,6 +457,22 @@ export const getTask = async (req, res, next) => {
  * @access  Private - requires being the assignee or project owner
  */
 export const updateTask = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to update task', {
+      userId: req.user._id, // Guest ID
+      taskId: req.params.id,
+      projectId: req.params.projectId,
+      action: 'update_task_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to update tasks. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const projectId = req.params.projectId;
   const taskId = req.params.id;
 
@@ -587,6 +618,22 @@ export const updateTask = async (req, res, next) => {
  * @access  Private - requires being the assignee or project owner
  */
 export const deleteTask = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to delete task', {
+      userId: req.user._id, // Guest ID
+      taskId: req.params.id,
+      projectId: req.params.projectId,
+      action: 'delete_task_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete tasks. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const projectId = req.params.projectId;
   const taskId = req.params.id;
 
@@ -738,6 +785,22 @@ export const deleteTask = async (req, res, next) => {
  * @access  Private - requires authentication
  */
 export const bulkUpdateTasks = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to bulk update tasks', {
+      userId: req.user._id, // Guest ID
+      projectId: req.params.projectId,
+      taskIds: req.body.taskIds,
+      action: 'bulk_update_tasks_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to update tasks. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const projectId = req.params.projectId;
 
   try {

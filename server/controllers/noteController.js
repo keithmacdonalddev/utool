@@ -117,6 +117,21 @@ export const getNotesForTask = async (req, res, next) => {
 // @route   POST /api/v1/tasks/:taskId/notes
 // @access  Private
 export const createNoteForTask = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to create note for task', {
+      userId: req.user._id, // Guest ID
+      taskId: req.params.taskId,
+      action: 'create_note_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to create notes. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     // Check if the task exists and belongs to the user (or if user has access)
     const task = await Task.findById(req.params.taskId);
@@ -270,6 +285,21 @@ export const getUserNotes = async (req, res, next) => {
 // @route   DELETE /api/v1/notes/:id
 // @access  Private
 export const deleteNote = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to delete note', {
+      userId: req.user._id, // Guest ID
+      noteId: req.params.id,
+      action: 'delete_note_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete notes. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     const note = await Note.findById(req.params.id);
 
@@ -343,6 +373,21 @@ export const deleteNote = async (req, res, next) => {
 // @route   DELETE /api/v1/notes/:id/permanent
 // @access  Private
 export const permanentlyDeleteNote = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to permanently delete note', {
+      userId: req.user._id, // Guest ID
+      noteId: req.params.id,
+      action: 'permanent_delete_note_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete notes. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     const note = await Note.findById(req.params.id);
 
@@ -386,6 +431,21 @@ export const permanentlyDeleteNote = async (req, res, next) => {
 // @route   PUT /api/v1/notes/:id/restore
 // @access  Private
 export const restoreNote = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to restore note', {
+      userId: req.user._id, // Guest ID
+      noteId: req.params.id,
+      action: 'restore_note_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to restore notes. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     const note = await Note.findById(req.params.id);
 
@@ -447,6 +507,20 @@ export const getTrashedNotes = async (req, res, next) => {
 // @route   DELETE /api/v1/notes/trash/empty
 // @access  Private
 export const emptyTrash = async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    logger.warn('Guest user attempt to empty trash', {
+      userId: req.user._id, // Guest ID
+      action: 'empty_trash_denied_guest',
+    });
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to empty trash. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   try {
     const result = await Note.deleteMany({
       user: req.user.id,

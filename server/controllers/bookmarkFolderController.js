@@ -47,6 +47,16 @@ export const getFolder = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/bookmark-folders
 // @access  Private
 export const createFolder = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to create bookmark folders. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   // Add user ID to folder data
   req.body.user = req.user.id;
 
@@ -75,6 +85,16 @@ export const createFolder = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/bookmark-folders/:id
 // @access  Private
 export const updateFolder = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to update bookmark folders. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   let folder = await BookmarkFolder.findById(req.params.id);
 
   if (!folder) {
@@ -124,6 +144,16 @@ export const updateFolder = asyncHandler(async (req, res, next) => {
 // @route   DELETE /api/v1/bookmark-folders/:id
 // @access  Private
 export const deleteFolder = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete bookmark folders. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const folder = await BookmarkFolder.findById(req.params.id);
 
   if (!folder) {

@@ -384,15 +384,15 @@ const SnippetsFeature = forwardRef(
             </tr>
           </thead>
           <tbody className="bg-card divide-y divide-dark-700">
+            {' '}
             {snippetsToRender.map((snippet) => (
               <tr
                 key={snippet._id}
                 className="hover:bg-dark-700 transition-colors"
               >
-                {' '}
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[#F8FAFC] text-left">
                   {snippet.title}
-                </td>{' '}
+                </td>
                 <td className="px-6 py-4 max-w-xs text-sm text-[#C7C9D1] text-left">
                   <div className="relative max-w-xs">
                     <span
@@ -498,7 +498,6 @@ const SnippetsFeature = forwardRef(
             Add Snippet
           </Button>
         </div>
-
         {snippetsLoading ? (
           <div className="text-center py-6">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto"></div>
@@ -538,7 +537,6 @@ const SnippetsFeature = forwardRef(
         ) : (
           renderSnippetTable(filteredSnippets)
         )}
-
         {/* Create Snippet Modal - Using Portal Component */}
         <Modal
           isOpen={isCreateModalOpen}
@@ -608,7 +606,6 @@ const SnippetsFeature = forwardRef(
             </div>
           </form>
         </Modal>
-
         {/* Edit Snippet Modal - Using Portal Component */}
         <Modal
           isOpen={isEditModalOpen && !!snippetToEdit}
@@ -679,8 +676,7 @@ const SnippetsFeature = forwardRef(
               </div>
             </form>
           )}
-        </Modal>
-
+        </Modal>{' '}
         {/* Delete Snippet Confirmation Dialog - Using Portal Component */}
         <Modal
           isOpen={isDeleteDialogOpen && !!snippetToDelete}
@@ -689,7 +685,7 @@ const SnippetsFeature = forwardRef(
           titleId="delete-dialog-title"
           maxWidth="max-w-md"
         >
-          {snippetToDelete && (
+          {snippetToDelete ? (
             <>
               <p className="mt-2 text-gray-300">
                 Are you sure you want to delete "
@@ -713,11 +709,12 @@ const SnippetsFeature = forwardRef(
                 >
                   Delete
                 </Button>
-              </div>{' '}
+              </div>
             </>
+          ) : (
+            <p>Loading snippet information...</p>
           )}
         </Modal>
-
         {/* Snippet Content Tooltip Portal */}
         {activeTooltipSnippet && (
           <TooltipPortal

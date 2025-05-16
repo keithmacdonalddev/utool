@@ -46,6 +46,16 @@ export const getBookmark = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/bookmarks
 // @access  Private
 export const createBookmark = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to create bookmarks. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   // Add user ID to bookmark data
   req.body.user = req.user.id;
 
@@ -61,6 +71,16 @@ export const createBookmark = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/bookmarks/:id
 // @access  Private
 export const updateBookmark = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to update bookmarks. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   let bookmark = await Bookmark.findById(req.params.id);
 
   if (!bookmark) {
@@ -91,6 +111,16 @@ export const updateBookmark = asyncHandler(async (req, res, next) => {
 // @route   DELETE /api/v1/bookmarks/:id
 // @access  Private
 export const deleteBookmark = asyncHandler(async (req, res, next) => {
+  // Check if the user is a guest
+  if (req.user && req.user.isGuest) {
+    return res.status(403).json({
+      success: false,
+      message:
+        'Guests are not allowed to delete bookmarks. Please log in or sign up.',
+      notificationType: 'warning',
+    });
+  }
+
   const bookmark = await Bookmark.findById(req.params.id);
 
   if (!bookmark) {

@@ -12,7 +12,9 @@
  */
 
 import { useMemo } from 'react';
+import { useSelector } from 'react-redux';
 import { getTasksForProject } from '../features/tasks/taskSlice';
+import { selectGuestItemsByType } from '../features/guestSandbox/guestSandboxSlice';
 import useDataFetching from './useDataFetching';
 
 /**
@@ -35,6 +37,27 @@ const useProjectTasks = (projectId, options = {}) => {
     smartRefresh = true,
   } = options;
 
+  // Get auth state to check if user is a guest
+  const { isGuest } = useSelector((state) => state.auth);
+
+  // Get guest task data directly if the user is a guest
+  const guestTasks = useSelector((state) =>
+    isGuest ? selectGuestItemsByType(state, 'tasks') : []
+  );
+
+  // Filter guest tasks for this project and format them to match API structure
+  const filteredGuestTasks = useMemo(() => {
+    if (!isGuest || !projectId) return [];
+    return guestTasks
+      .filter((task) => task.data.projectId === projectId)
+      .map((task) => ({
+        ...task.data,
+        _id: task.id,
+        id: task.id,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+      }));
+  }, [isGuest, projectId, guestTasks]);
   // Selector functions for the useDataFetching hook
   const selectTasks = useMemo(() => (state) => state.tasks.tasks, []);
 
@@ -49,9 +72,11 @@ const useProjectTasks = (projectId, options = {}) => {
     () => (state) => state.tasks.isError ? state.tasks.message : null,
     []
   );
-  // Use our generic hook with task-specific selectors
+
+  // Skip API fetch if user is a guest - we'll use the guest tasks directly
+  const shouldSkipFetch = isGuest || skipInitialFetch; // Use our generic hook with task-specific selectors
   const {
-    data: tasks,
+    data: regularTasks,
     isLoading,
     error,
     refetch: refetchTasks,
@@ -69,11 +94,14 @@ const useProjectTasks = (projectId, options = {}) => {
       smartRefresh,
     }, // Pass to the action creator
     cacheTimeout,
-    skipInitialFetch,
-    backgroundRefresh,
+    skipInitialFetch: shouldSkipFetch, // Skip if guest user
+    backgroundRefresh: isGuest ? false : backgroundRefresh, // No background refresh for guests
     smartRefresh,
     idField: '_id', // Use _id for comparing task objects
   });
+
+  // Combine the results - for guests, use filteredGuestTasks; for regular users, use the API data
+  const tasks = isGuest ? filteredGuestTasks : regularTasks;
 
   return {
     tasks,

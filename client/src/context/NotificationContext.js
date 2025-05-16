@@ -13,11 +13,14 @@ export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [pinnedToasts, setPinnedToasts] = useState([]);
-  const { user } = useSelector((state) => state.auth);
+  const { user, token } = useSelector((state) => state.auth); // Added token
 
   // Fetch initial notifications and set up socket listener
   useEffect(() => {
-    if (user) {
+    // Ensure both user and token are present before fetching notifications
+    // and setting up socket listeners. This prevents attempts to fetch
+    // data or connect to sockets before authentication is fully established.
+    if (user && token) {
       fetchNotifications();
       fetchUnreadCount();
 
@@ -45,7 +48,10 @@ export const NotificationProvider = ({ children }) => {
         };
       }
     }
-  }, [user]);
+    // Add token to the dependency array. The effect will re-run if the token changes,
+    // ensuring that notification fetching and socket connections are re-established
+    // if a new token is acquired (e.g., after re-login).
+  }, [user, token]); // Added token to dependency array
 
   // Custom function to display toast notification with pin/close buttons
   const showSystemNotification = (notification) => {
@@ -172,7 +178,10 @@ export const NotificationProvider = ({ children }) => {
 
   // Fetch all notifications from the API
   const fetchNotifications = async () => {
-    if (!user) return;
+    // Guard clause: Do not attempt to fetch if there's no user or token.
+    // This is an additional safeguard, though the useEffect hook should
+    // primarily control when this function is called.
+    if (!user || !token) return;
 
     setIsLoading(true);
     try {
@@ -187,7 +196,10 @@ export const NotificationProvider = ({ children }) => {
 
   // Fetch unread notification count
   const fetchUnreadCount = async () => {
-    if (!user) return;
+    // Guard clause: Do not attempt to fetch if there's no user or token.
+    // Similar to fetchNotifications, this ensures that the function does not
+    // proceed without necessary authentication details.
+    if (!user || !token) return;
 
     try {
       const response = await api.get('/notifications/unread-count');
@@ -199,7 +211,9 @@ export const NotificationProvider = ({ children }) => {
 
   // Mark a notification as read
   const markAsRead = async (id) => {
-    if (!user) return;
+    // Guard clause: Do not attempt to modify data if there's no user or token.
+    // All write operations should be protected by ensuring authentication.
+    if (!user || !token) return;
 
     try {
       await api.put('/notifications/read', { ids: [id] });
@@ -222,7 +236,8 @@ export const NotificationProvider = ({ children }) => {
 
   // Mark all notifications as read
   const markAllAsRead = async () => {
-    if (!user || unreadCount === 0) return;
+    // Guard clause: Ensure user and token are present and there are unread messages.
+    if (!user || !token || unreadCount === 0) return;
 
     try {
       await api.put('/notifications/read-all');
@@ -244,7 +259,8 @@ export const NotificationProvider = ({ children }) => {
 
   // Delete a notification
   const deleteNotification = async (id) => {
-    if (!user) return;
+    // Guard clause: Protect delete operations with user and token check.
+    if (!user || !token) return;
 
     try {
       await api.delete(`/notifications/${id}`);
@@ -266,7 +282,8 @@ export const NotificationProvider = ({ children }) => {
 
   // Clear all notifications
   const clearAllNotifications = async () => {
-    if (!user || notifications.length === 0) return;
+    // Guard clause: Protect clear all operation, ensure there are notifications to clear.
+    if (!user || !token || notifications.length === 0) return;
 
     try {
       await api.delete('/notifications');
