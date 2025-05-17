@@ -1,20 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '../../context/NotificationContext';
-import { Bell, Check, Trash2, X } from 'lucide-react';
+import { Bell, Check, Trash2, X, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
+import { connectSocketWithToken } from '../../utils/socket';
+import { useSelector } from 'react-redux';
 
 const NotificationBell = () => {
   const {
     notifications,
     unreadCount,
     isLoading,
+    socketConnected,
     markAsRead,
     markAllAsRead,
     deleteNotification,
     clearAllNotifications,
     handleNotificationClick,
+    fetchNotifications,
+    fetchUnreadCount,
   } = useNotifications();
+  
+  const { token } = useSelector((state) => state.auth);
 
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -35,6 +42,20 @@ const NotificationBell = () => {
 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
+    
+    // Refresh notifications when opening the dropdown
+    if (!isOpen) {
+      fetchNotifications();
+      fetchUnreadCount();
+    }
+  };
+  
+  // Handle manual reconnection of socket
+  const handleReconnect = (e) => {
+    e.stopPropagation();
+    if (token) {
+      connectSocketWithToken(token);
+    }
   };
 
   // Handle notification item click
@@ -46,15 +67,31 @@ const NotificationBell = () => {
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Bell Icon Button */}
-      <button
-        onClick={toggleDropdown}
-        className="p-2 rounded-full hover:bg-dark-700 focus:outline-none focus:ring-2 focus:ring-primary-400 relative"
-        aria-label="Notifications"
-      >
-        <Bell
-          size={20}
-          className={unreadCount > 0 ? 'text-accent-purple' : 'text-gray-400'}
-        />
+      <div className="flex items-center">
+        {/* Socket connection status indicator */}
+        <div className="mr-1" title={socketConnected ? "Real-time notifications connected" : "Real-time notifications disconnected"}>
+          {socketConnected ? (
+            <Wifi size={14} className="text-green-500" />
+          ) : (
+            <button 
+              onClick={handleReconnect}
+              className="text-red-500 hover:text-red-400 focus:outline-none"
+              title="Click to reconnect"
+            >
+              <WifiOff size={14} />
+            </button>
+          )}
+        </div>
+        
+        <button
+          onClick={toggleDropdown}
+          className="p-2 rounded-full hover:bg-dark-700 focus:outline-none focus:ring-2 focus:ring-primary-400 relative"
+          aria-label="Notifications"
+        >
+          <Bell
+            size={20}
+            className={unreadCount > 0 ? 'text-accent-purple' : 'text-gray-400'}
+          />
 
         {/* Notification Counter Badge */}
         {unreadCount > 0 && (
@@ -63,13 +100,35 @@ const NotificationBell = () => {
           </span>
         )}
       </button>
+      </div>
 
       {/* Dropdown Menu */}
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 bg-card border border-dark-700 shadow-lg rounded-md max-h-[80vh] overflow-hidden flex flex-col z-50">
           {/* Header */}
           <div className="flex items-center justify-between p-3 border-b border-dark-700">
-            <h3 className="text-base font-semibold">Notifications</h3>
+            <div className="flex items-center">
+              <h3 className="text-base font-semibold">Notifications</h3>
+              {/* Socket connection status in dropdown */}
+              <div className="ml-2 flex items-center">
+                {socketConnected ? (
+                  <span className="flex items-center text-xs text-green-500">
+                    <Wifi size={12} className="mr-1" />
+                    <span>Live</span>
+                  </span>
+                ) : (
+                  <button 
+                    onClick={handleReconnect}
+                    className="flex items-center text-xs text-red-500 hover:text-red-400"
+                    title="Click to reconnect"
+                  >
+                    <WifiOff size={12} className="mr-1" />
+                    <span>Offline</span>
+                    <RefreshCw size={12} className="ml-1 animate-spin-slow" />
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="flex space-x-1">
               {unreadCount > 0 && (
                 <button
@@ -155,6 +214,16 @@ const NotificationBell = () => {
               <div className="flex flex-col items-center justify-center p-6 text-center">
                 <Bell size={24} className="text-gray-400 mb-2" />
                 <p className="text-sm text-gray-400">No notifications</p>
+                {!socketConnected && (
+                  <button 
+                    onClick={handleReconnect}
+                    className="mt-3 flex items-center text-xs text-red-500 hover:text-red-400 bg-dark-800 p-2 rounded"
+                  >
+                    <WifiOff size={12} className="mr-1" />
+                    <span>Reconnect to real-time updates</span>
+                    <RefreshCw size={12} className="ml-1" />
+                  </button>
+                )}
               </div>
             )}
           </div>

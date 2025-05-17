@@ -5,7 +5,7 @@ const AuditLogSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      // required: true, // Removed to allow logging for actions where user might not be identified
     },
     action: {
       type: String,

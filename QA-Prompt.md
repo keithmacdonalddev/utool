@@ -1,3 +1,5 @@
+** IMPORTANT: NEVER CHANGE THE TEXT BETWEEN LINE 1 AND LINE 97 **
+
 <!-- filepath: vsls:/QA-Prompt.md -->
 <!-- Instructions for AI Agent Reading/Accessing Files in this Workspace -->
 <!--
@@ -89,88 +91,8 @@ In your response, remind the main agent to remove the text in the QA-Response.md
 3.  **Report Format:** Provide your entire response in Markdown format within this `QA-Response.md` file.
 4.  **Critical for Review:** The main code agent will **ONLY** retrieve your review from `QA-Response.md`. Failure to correctly populate this file will mean your review is missed.
 
-You must clean up the text under the comments below when you are done your task.
-When you are finished with your QA-Response.md, clear the QA review infomation below the comments below. Ask the user before removing the text.
+Collaboration Guideline:
+When you are finished outputting your review to QA-Response.md, clear the content below line 97 on this file (QA-Prompt.md). Ask the user before removing the text.
 
 <!-- ----------------------------------------------------------------- -->
 <!-- START QA REVIEW INFORMATION FOR THE QA EXPERT AGENT BELOW -->
-
-# QA Review Information: Guest Mode Sample Data Enhancement
-
-## Task Summary
-
-Enhanced the guest user experience by implementing comprehensive sample data for all major features (tasks, projects, notes, bookmarks, comments, friends) when a user logs in as a guest. This allows guest users to explore and interact with the full functionality of the application without needing to create an account.
-
-## Type of Change
-
-Feature Enhancement / User Experience Improvement
-
-## Files Reviewed for Context
-
-- `client/src/features/auth/authSlice.js` - Guest login functionality
-- `client/src/features/guestSandbox/guestSandboxSlice.js` - Guest data storage structure
-- `client/src/utils/guestDataFormatters.js` - Existing utility for formatting guest data
-- `client/src/utils/testGuestMode.js` - Test utility for guest functionality
-- `client/src/hooks/useFriends.js` - Support for guest mode in hooks
-- `client/src/hooks/useRecentTasks.js` - Reference for guest data handling
-- `client/src/hooks/useNotes.js` - Reference for guest data handling
-- `client/src/hooks/useBookmarks.js` - Reference for guest data handling
-- `client/src/hooks/useProjects.js` - Reference for guest data handling
-
-## Scope of Changes
-
-- `client/src/utils/guestSampleData.js` (New file)
-- `client/src/features/auth/authSlice.js`
-- `client/src/utils/testGuestMode.js`
-
-## Detailed Changes Overview
-
-1. Created a new utility file `guestSampleData.js` with:
-
-   - Data generators for each entity type (tasks, projects, notes, bookmarks, comments, friends)
-   - Realistic sample data that demonstrates app features
-   - Proper data relationships (tasks link to projects, comments reference tasks/projects)
-   - Error handling and documentation on data relationships
-
-2. Updated `authSlice.js` to:
-
-   - Import the sample data generator
-   - Initialize all sample data types when a user logs in as guest
-   - Add error handling during sample data loading
-
-3. Enhanced `testGuestMode.js` to:
-   - Use the new sample data generators
-   - Add utility functions for each entity type
-   - Add a convenience function to initialize all sample data at once
-
-## Relevant Requirements
-
-The guest user experience should showcase the application's capabilities to potential users and provide a seamless demo experience without requiring account creation.
-
-## Potential Areas of Note/Risk
-
-1. **Data Relationships**: Verify that relationships between entities are maintained correctly (e.g., tasks reference valid project IDs)
-2. **Performance**: The sample data is comprehensive - if it becomes too large, it might affect initial load time for guest users
-3. **Error Handling**: We've added error handling to prevent guest login failures if sample data generation fails, but it should be tested thoroughly
-4. **Sample Data Quality**: The sample data should realistically represent actual usage patterns and demonstrate feature capabilities
-
-## Dependency Changes
-
-No new external dependencies were added.
-
-## Verification Instructions
-
-1. Log in as a guest from the login page
-2. Verify that sample data appears for all major features:
-   - Tasks list should show varied tasks with different statuses and priorities
-   - Projects should be populated with sample projects
-   - Notes should contain formatted sample notes
-   - Bookmarks should contain sample bookmarks
-   - Friends list should show sample contacts
-3. Verify task-project relationships by opening a project and checking that its tasks appear correctly
-
-## Additional Notes for QA
-
-- Please verify that the sample data is of sufficient quality and realism for a good demo experience
-- Check that all sample data properly follows the application's data models and validation rules
-- Consider whether the amount of sample data is appropriate (not too little, not overwhelming)

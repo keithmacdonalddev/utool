@@ -9,6 +9,7 @@
 
 import axios from 'axios';
 import { store } from '../app/store'; // Import the Redux store
+import { refreshToken, logoutUser } from '../features/auth/authSlice'; // Import actions
 import { toast } from 'react-toastify';
 import { isLogoutInProgress } from './authState'; // Import the global logout state checker
 
@@ -121,15 +122,19 @@ api.interceptors.request.use(
      * It uses the Redux store directly to access the current auth state,
      * demonstrating how to integrate Redux with API requests.
      */
-    const token = store.getState().auth.token; // If we're making an authenticated request (to a protected endpoint)
-    // but we don't have a token, reject the request immediately
+    const token = store.getState().auth.token;
+    // If we're making an authenticated request (to a protected endpoint)
+    // but we don't have a token, AND it's not a refresh token request itself,
+    // reject the request immediately.
+    const isRefreshTokenRequest = config.url.includes('/auth/refresh-token');
+
     const isProtectedEndpoint =
       !config.url.includes('/auth/login') &&
       !config.url.includes('/auth/register') &&
       !config.url.includes('/auth/verify-email') &&
       !config.url.includes('/settings/guest-access-status'); // Add guest access status endpoint as public
 
-    if (isProtectedEndpoint && !token) {
+    if (isProtectedEndpoint && !token && !isRefreshTokenRequest) {
       // Create a canceled request error
       const error = new Error(
         'Request canceled - no authentication token available'
@@ -138,7 +143,8 @@ api.interceptors.request.use(
       return Promise.reject(error);
     }
 
-    if (token) {
+    if (token && !isRefreshTokenRequest) {
+      // Do not add Auth header to refresh token requests if it uses cookies
       // Add Authorization header if token exists (Bearer token pattern)
       config.headers['Authorization'] = `Bearer ${token}`;
     }
@@ -150,16 +156,22 @@ api.interceptors.request.use(
   }
 );
 
-/**
- * RESPONSE INTERCEPTOR PATTERN
- *
- * Intercepts and processes every response before it reaches your components.
- * Allows for:
- * - Global error handling
- * - Response transformation
- * - Automatic notifications
- * - Authentication state management
- */
+// Variable to prevent multiple concurrent refresh attempts
+let isRefreshing = false;
+// Array to hold requests that are waiting for token refresh
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
   (response) => {
     /**
@@ -171,44 +183,88 @@ api.interceptors.response.use(
     handleServerNotification(response);
     return response;
   },
-  (error) => {
-    /**
-     * ERROR RESPONSE HANDLING
-     *
-     * Centralized error processing pattern allows handling common
-     * error scenarios once, instead of in every component.
-     */
+  async (error) => {
+    const originalRequest = error.config;
+    // Check if logout is in progress - if so, don't attempt refresh
+    if (isLogoutInProgress()) {
+      console.log('Logout in progress, refresh attempt skipped.');
+      return Promise.reject(error);
+    }
 
-    // Display error notifications from server
+    // Handle server notifications for errors as well
     if (error.response && error.response.data) {
       handleServerNotification(error.response);
     }
 
-    /**
-     * AUTHENTICATION ERROR HANDLING
-     *
-     * This pattern handles expired or invalid tokens (401 Unauthorized),
-     * automatically redirecting to the login page.
-     *
-     * Security benefits:
-     * - Prevents unauthorized access attempts
-     * - Handles token expiration gracefully
-     * - Improves user experience by explaining session timeouts
-     */
-    if (error.response && error.response.status === 401) {
-      // Prevent redirect loops by checking current path
-      if (!window.location.pathname.includes('/login')) {
-        console.log('Authentication error detected, redirecting to login');
-
-        // Security practice: Clear potentially compromised auth data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-
-        // Redirect to login page with context
-        setTimeout(() => {
-          window.location.href = '/login?session=expired';
-        }, 100);
+    // Specific handling for 401 Unauthorized errors (potential token expiry)
+    if (
+      error.response &&
+      error.response.status === 401 &&
+      !originalRequest._retry
+    ) {
+      // Prevent retrying refresh token requests themselves if they fail with 401
+      if (originalRequest.url.includes('/auth/refresh-token')) {
+        console.error(
+          'Refresh token request itself failed with 401. Logging out.'
+        );
+        store.dispatch(logoutUser()); // Dispatch logoutUser thunk
+        return Promise.reject(error);
       }
+
+      if (isRefreshing) {
+        // If token is already being refreshed, queue the original request
+        return new Promise(function (resolve, reject) {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers['Authorization'] = 'Bearer ' + token;
+            return api(originalRequest); // Retry with new token
+          })
+          .catch((err) => {
+            return Promise.reject(err); // Propagate error if queue processing fails
+          });
+      }
+
+      originalRequest._retry = true; // Mark that we've attempted a retry
+      isRefreshing = true;
+
+      try {
+        const resultAction = await store.dispatch(refreshToken()); // Dispatch refreshToken thunk
+        if (refreshToken.fulfilled.match(resultAction)) {
+          const { token: newToken } = resultAction.payload;
+          api.defaults.headers.common['Authorization'] = 'Bearer ' + newToken;
+          originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
+          processQueue(null, newToken); // Process queued requests with new token
+          return api(originalRequest); // Retry the original request with the new token
+        } else {
+          // Refresh token failed (e.g., it was invalid or expired)
+          console.error('Token refresh failed:', resultAction.payload);
+          processQueue(
+            resultAction.payload || new Error('Token refresh failed'),
+            null
+          );
+          store.dispatch(logoutUser()); // Dispatch logoutUser thunk
+          return Promise.reject(
+            resultAction.payload || new Error('Token refresh failed')
+          );
+        }
+      } catch (refreshError) {
+        console.error('Exception during token refresh:', refreshError);
+        processQueue(refreshError, null);
+        store.dispatch(logoutUser()); // Dispatch logoutUser thunk on critical error
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    } else if (
+      error.response &&
+      error.response.status === 401 &&
+      originalRequest._retry
+    ) {
+      // If retry already happened and still 401, logout
+      console.error('Token refresh retry failed. Logging out.');
+      store.dispatch(logoutUser());
+      return Promise.reject(error);
     }
 
     /**

@@ -45,6 +45,7 @@ import dotenv from 'dotenv';
 import helmet from 'helmet'; // Security middleware for HTTP headers
 import rateLimit from 'express-rate-limit'; // API rate limiting
 import schedule from 'node-schedule'; // For scheduled tasks
+import cookieParser from 'cookie-parser'; // Cookie parsing middleware
 dotenv.config();
 
 /**
@@ -87,6 +88,20 @@ function validateEnvironmentVariables(logger) {
       name: 'JWT_COOKIE_EXPIRE_DAYS',
       reason: 'Cookie expiration will use default if not specified',
       defaultValue: '30',
+    },
+    {
+      name: 'REFRESH_TOKEN_SECRET', // Added
+      reason: 'Required for refresh token functionality', // Added
+    },
+    {
+      name: 'REFRESH_TOKEN_EXPIRES_IN', // Added
+      reason: 'Refresh token expiration time', // Added
+      defaultValue: '30d', // Added
+    },
+    {
+      name: 'REFRESH_TOKEN_COOKIE_EXPIRE_DAYS', // Added
+      reason: 'Cookie expiration for refresh tokens', // Added
+      defaultValue: '30', // Added
     },
     {
       name: 'EMAIL_HOST',

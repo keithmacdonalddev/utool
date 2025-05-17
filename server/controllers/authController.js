@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import { logger } from '../utils/logger.js';
+import asyncHandler from 'express-async-handler';
+import ErrorResponse from '../utils/errorResponse.js';
 
 // Helper function to generate JWT
 const getSignedJwtToken = (id) => {
@@ -31,7 +33,7 @@ async function addIpToUser(user, ip) {
 // @desc    Register user
 // @route   POST /api/v1/auth/register
 // @access  Public
-export const register = async (req, res, next) => {
+export const register = asyncHandler(async (req, res, next) => {
   const { name, email, password } = req.body;
 
   try {
@@ -86,12 +88,12 @@ export const register = async (req, res, next) => {
       .status(500)
       .json({ success: false, message: 'Server error during registration' });
   }
-};
+});
 
 // @desc    Login user
 // @route   POST /api/v1/auth/login
 // @access  Public
-export const login = async (req, res, next) => {
+export const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -119,10 +121,19 @@ export const login = async (req, res, next) => {
 
     if (!user) {
       const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-      await auditLog(req, 'login', 'failed', { email });
+      // It's important to still log the attempt, even if the user doesn't exist.
+      // The audit log function should be able to handle a null or undefined userId for 'login' actions.
+      await auditLog(req, 'login', 'failed', {
+        email,
+        reason: 'User not found',
+      });
       return res
         .status(401)
-        .json({ success: false, message: 'Invalid credentials' });
+        .json({
+          success: false,
+          message:
+            'User with this email does not exist. Please check your email or register.',
+        }); // MODIFIED MESSAGE
     }
 
     // Check if account is locked
@@ -130,6 +141,13 @@ export const login = async (req, res, next) => {
       const remainingTime = Math.ceil(
         (user.accountLockedUntil - Date.now()) / 60000
       );
+      // Log this specific type of failure as well
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+      await auditLog(req, 'login', 'failed', {
+        userId: user._id, // User ID is known here
+        email: user.email,
+        reason: 'Account locked',
+      });
       return res.status(403).json({
         success: false,
         message: `Account locked. Try again in ${remainingTime} minutes.`,
@@ -141,19 +159,26 @@ export const login = async (req, res, next) => {
       user.failedLoginAttempts += 1;
       const { auditLog } = await import('../middleware/auditLogMiddleware.js');
       await auditLog(req, 'login', 'failed', {
-        email,
+        userId: user._id, // User ID is known here
+        email: user.email,
+        reason: 'Incorrect password',
         failedAttempts: user.failedLoginAttempts,
       });
 
-      const MAX_FAILED_ATTEMPTS = 5;
-      const LOCK_TIME = 15 * 60 * 1000;
+      const MAX_FAILED_ATTEMPTS = 5; // Consider moving to config
+      const LOCK_TIME = 15 * 60 * 1000; // 15 minutes, consider moving to config
       if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
         user.accountLockedUntil = Date.now() + LOCK_TIME;
+        // No need to validate before save here, as we are just updating lock status
         await user.save({ validateBeforeSave: false });
-        const { auditLog } = await import(
+        const { auditLog: lockAuditLog } = await import(
+          // Use a different alias to avoid conflict
           '../middleware/auditLogMiddleware.js'
         );
-        await auditLog(req, 'account_lock', 'success', { userId: user._id });
+        await lockAuditLog(req, 'account_lock', 'success', {
+          userId: user._id,
+          email: user.email,
+        });
         return res.status(403).json({
           success: false,
           message: `Account locked due to too many failed login attempts. Try again in 15 minutes.`,
@@ -163,7 +188,10 @@ export const login = async (req, res, next) => {
       await user.save({ validateBeforeSave: false });
       return res
         .status(401)
-        .json({ success: false, message: 'Invalid credentials' });
+        .json({
+          success: false,
+          message: 'Incorrect password. Please try again.',
+        }); // MODIFIED MESSAGE
     }
 
     if (!user.isVerified) {
@@ -188,6 +216,7 @@ export const login = async (req, res, next) => {
     const { auditLog } = await import('../middleware/auditLogMiddleware.js');
     await auditLog(req, 'login', 'success', { userId: user._id });
     console.log(`Login successful for user: ${user.email} (${user._id})`);
+    // If credentials are valid, send token response
     sendTokenResponse(user, 200, res);
   } catch (err) {
     console.error('Login error detail:', err.message);
@@ -206,7 +235,7 @@ export const login = async (req, res, next) => {
         process.env.NODE_ENV === 'development' ? errorDetails : undefined,
     });
   }
-};
+});
 
 // @desc    Verify email
 // @route   GET /api/v1/auth/verify-email/:token
@@ -318,7 +347,7 @@ export const resendVerificationLink = async (req, res, next) => {
 // @desc    Get current logged in user
 // @route   GET /api/v1/auth/me
 // @access  Private
-export const getMe = async (req, res, next) => {
+export const getMe = asyncHandler(async (req, res, next) => {
   // req.user is set by the protect middleware
   // We might want to re-fetch to ensure latest data, but req.user should be sufficient
   const user = await User.findById(req.user.id); // Re-fetch to be safe
@@ -329,12 +358,12 @@ export const getMe = async (req, res, next) => {
   }
 
   res.status(200).json({ success: true, data: user });
-};
+});
 
 // @desc    Update user details (name, email - not password)
 // @route   PUT /api/v1/auth/updateme
 // @access  Private
-export const updateMe = async (req, res, next) => {
+export const updateMe = asyncHandler(async (req, res, next) => {
   // Fields allowed to be updated by the user themselves
   const fieldsToUpdate = {
     name: req.body.name,
@@ -410,14 +439,14 @@ export const updateMe = async (req, res, next) => {
       .status(500)
       .json({ success: false, message: 'Server error updating user details' });
   }
-};
+});
 
 // TODO: Add updateMyPassword controller later
 
 // @desc    Logout user
 // @route   POST /api/v1/auth/logout
 // @access  Private (but can be called by anyone with a token)
-export const logout = async (req, res, next) => {
+export const logout = asyncHandler(async (req, res, next) => {
   try {
     // Get user info from either the authenticated user or our preserved logout info
     const userInfo = req.user || req.logoutUserInfo;
@@ -495,11 +524,18 @@ export const logout = async (req, res, next) => {
       });
     }
 
-    // Clear the auth cookie (if using cookies)
-    res.clearCookie('token', {
+    // Clear the access token cookie (if you were setting one, though typically it's Bearer token)
+    res.cookie('token', 'none', {
+      expires: new Date(Date.now() + 10 * 1000), // expires in 10 seconds
+      httpOnly: true,
+    });
+
+    // Clear the refresh token cookie
+    res.cookie('refreshToken', 'none', {
+      expires: new Date(Date.now() + 10 * 1000), // expires in 10 seconds
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'Strict',
     });
 
     return res
@@ -517,35 +553,92 @@ export const logout = async (req, res, next) => {
       .status(500)
       .json({ success: false, message: 'Server error during logout' });
   }
-};
+});
+
+// @desc    Refresh access token
+// @route   POST /api/v1/auth/refresh-token
+// @access  Public (relies on HttpOnly cookie for refresh token)
+export const refreshToken = asyncHandler(async (req, res, next) => {
+  const { refreshToken } = req.cookies;
+
+  if (!refreshToken) {
+    return next(new ErrorResponse('Refresh token not found', 401));
+  }
+
+  try {
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+
+    // Find user by ID from decoded token
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return next(new ErrorResponse('Invalid refresh token', 401));
+    }
+
+    // Issue a new access token
+    const accessToken = getSignedJwtToken(user.id); // Assuming getSignedJwtToken only returns access token
+
+    res.status(200).json({
+      success: true,
+      token: accessToken,
+      // Optionally, send back user data if needed, but typically just the new access token
+      // data: { id: user._id, name: user.name, email: user.email, role: user.role }
+    });
+  } catch (err) {
+    // Handle expired or invalid refresh token
+    console.error('Refresh token error:', err.message);
+    return next(new ErrorResponse('Invalid or expired refresh token', 403));
+  }
+});
 
 // Get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {
-  const token = getSignedJwtToken(user._id);
+  // Create access token
+  const accessToken = getSignedJwtToken(user.id); // This should be the short-lived access token
 
-  const options = {
+  // Create refresh token
+  const refreshToken = jwt.sign(
+    { id: user.id },
+    process.env.REFRESH_TOKEN_SECRET,
+    {
+      expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN,
+    }
+  );
+
+  const accessTokenOptions = {
+    expires: new Date(
+      Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000
+    ),
+    httpOnly: true, // Makes it inaccessible to JavaScript running in the browser
+  };
+
+  const refreshTokenOptions = {
     expires: new Date(
       Date.now() +
-        parseInt(process.env.JWT_COOKIE_EXPIRE_DAYS || '30', 10) *
+        parseInt(process.env.REFRESH_TOKEN_COOKIE_EXPIRE_DAYS) *
           24 *
           60 *
           60 *
           1000
     ),
-    httpOnly: true,
+    httpOnly: true, // Crucial for security
+    secure: process.env.NODE_ENV === 'production', // Send only over HTTPS in production
+    sameSite: 'Strict', // Mitigates CSRF attacks
   };
 
   if (process.env.NODE_ENV === 'production') {
-    options.secure = true;
+    accessTokenOptions.secure = true; // Send only over HTTPS in production
   }
 
-  const userOutput = { ...user.toObject() };
-  delete userOutput.password;
-  delete userOutput.verificationToken;
-  delete userOutput.verificationTokenExpires;
+  // Set refresh token in an HTTP-only cookie
+  res.cookie('refreshToken', refreshToken, refreshTokenOptions);
 
-  res
-    .status(statusCode)
-    .cookie('token', token, options)
-    .json({ success: true, token, user: userOutput });
+  // The access token is sent in the JSON response body
+  // The client will store this (e.g., in memory/Redux) and send it as a Bearer token
+  res.status(statusCode).json({
+    success: true,
+    token: accessToken, // Access token
+    // user: { id: user._id, name: user.name, email: user.email, role: user.role } // Optionally send user data
+  });
 };

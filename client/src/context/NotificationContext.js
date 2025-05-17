@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import api from '../utils/api';
-import socket from '../utils/socket'; // Import as default export instead of named export
+import { connectSocketWithToken, disconnectSocket, getSocket } from '../utils/socket';
 import { toast } from 'react-toastify';
 import { PinIcon, XCircleIcon } from 'lucide-react';
 
@@ -13,48 +13,11 @@ export const NotificationProvider = ({ children }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [pinnedToasts, setPinnedToasts] = useState([]);
-  const { user, token } = useSelector((state) => state.auth); // Added token
-
-  // Fetch initial notifications and set up socket listener
-  useEffect(() => {
-    // Ensure both user and token are present before fetching notifications
-    // and setting up socket listeners. This prevents attempts to fetch
-    // data or connect to sockets before authentication is fully established.
-    if (user && token) {
-      fetchNotifications();
-      fetchUnreadCount();
-
-      // Make sure socket exists before attaching listeners
-      if (socket && typeof socket.on === 'function') {
-        // Set up socket listener for new notifications
-        socket.on('notification', (notification) => {
-          // Add the new notification to the state
-          setNotifications((prevNotifications) => [
-            notification,
-            ...prevNotifications,
-          ]);
-          // Increment unread count
-          setUnreadCount((prevCount) => prevCount + 1);
-
-          // Show toast notification
-          showSystemNotification(notification);
-        });
-
-        // Clean up the socket listener when the component unmounts
-        return () => {
-          if (socket && typeof socket.off === 'function') {
-            socket.off('notification');
-          }
-        };
-      }
-    }
-    // Add token to the dependency array. The effect will re-run if the token changes,
-    // ensuring that notification fetching and socket connections are re-established
-    // if a new token is acquired (e.g., after re-login).
-  }, [user, token]); // Added token to dependency array
+  const [socketConnected, setSocketConnected] = useState(false);
+  const { user, token } = useSelector((state) => state.auth);
 
   // Custom function to display toast notification with pin/close buttons
-  const showSystemNotification = (notification) => {
+  const showSystemNotification = useCallback((notification) => {
     const toastId = notification._id || Date.now().toString();
 
     const ToastContent = () => (
@@ -101,10 +64,10 @@ export const NotificationProvider = ({ children }) => {
       toastId: toastId,
       type: notification.type || 'info',
     });
-  };
-
+  }, []);
+  
   // Handle pinning a toast notification
-  const handlePinToast = (toastId, notification) => {
+  const handlePinToast = useCallback((toastId, notification) => {
     // First dismiss the auto-closing toast
     toast.dismiss(toastId);
 
@@ -155,10 +118,32 @@ export const NotificationProvider = ({ children }) => {
 
     // Keep track of pinned toasts
     setPinnedToasts((prev) => [...prev, pinnedToastId]);
-  };
+  }, []);
+  
+  // Handle notification click
+  const handleNotificationClick = useCallback((notification) => {
+    // Mark the notification as read
+    markAsRead(notification._id);
 
+    // Navigate to the URL if provided
+    if (notification.url) {
+      window.location.href = notification.url;
+    }
+  }, []);
+  
+  // Memoize the notification handler to stabilize useEffect dependencies
+  const handleNewNotification = useCallback((notification) => {
+    console.log('Received new notification via socket:', notification);
+    setNotifications((prevNotifications) => [
+      notification,
+      ...prevNotifications,
+    ]);
+    setUnreadCount((prevCount) => prevCount + 1);
+    showSystemNotification(notification);
+  }, [showSystemNotification]);
+  
   // Show a notification with the ability to pin
-  const showNotification = (message, type = 'info') => {
+  const showNotification = useCallback((message, type = 'info') => {
     // Create notification object
     const notification = {
       _id: Date.now().toString(),
@@ -174,10 +159,10 @@ export const NotificationProvider = ({ children }) => {
 
     // Display the notification
     showSystemNotification(notification);
-  };
-
-  // Fetch all notifications from the API
-  const fetchNotifications = async () => {
+  }, [showSystemNotification]);
+  
+  // Fetch all notifications from the API - wrapped in useCallback for stability
+  const fetchNotifications = useCallback(async () => {
     // Guard clause: Do not attempt to fetch if there's no user or token.
     // This is an additional safeguard, though the useEffect hook should
     // primarily control when this function is called.
@@ -189,13 +174,14 @@ export const NotificationProvider = ({ children }) => {
       setNotifications(response.data.data);
     } catch (error) {
       console.error('Error fetching notifications:', error);
+      toast.error('Failed to fetch notifications. Please try again later.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user, token]);
 
-  // Fetch unread notification count
-  const fetchUnreadCount = async () => {
+  // Fetch unread notification count - wrapped in useCallback for stability
+  const fetchUnreadCount = useCallback(async () => {
     // Guard clause: Do not attempt to fetch if there's no user or token.
     // Similar to fetchNotifications, this ensures that the function does not
     // proceed without necessary authentication details.
@@ -206,8 +192,9 @@ export const NotificationProvider = ({ children }) => {
       setUnreadCount(response.data.count);
     } catch (error) {
       console.error('Error fetching unread count:', error);
+      toast.error('Failed to fetch notification count. Please try again later.');
     }
-  };
+  }, [user, token]);
 
   // Mark a notification as read
   const markAsRead = async (id) => {
@@ -231,6 +218,7 @@ export const NotificationProvider = ({ children }) => {
       setUnreadCount((prevCount) => Math.max(0, prevCount - 1));
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      toast.error('Failed to mark notification as read.');
     }
   };
 
@@ -254,6 +242,7 @@ export const NotificationProvider = ({ children }) => {
       setUnreadCount(0);
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
+      toast.error('Failed to mark all notifications as read.');
     }
   };
 
@@ -277,6 +266,7 @@ export const NotificationProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Error deleting notification:', error);
+      toast.error('Failed to delete notification.');
     }
   };
 
@@ -295,31 +285,92 @@ export const NotificationProvider = ({ children }) => {
       setUnreadCount(0);
     } catch (error) {
       console.error('Error clearing notifications:', error);
+      toast.error('Failed to clear all notifications.');
     }
   };
+  
+  // Fetch initial notifications and set up socket listener
+  useEffect(() => {
+    let currentSocket;
 
-  // Handle notification click
-  const handleNotificationClick = (notification) => {
-    // Mark the notification as read
-    markAsRead(notification._id);
+    // Ensure both user and token are present before fetching notifications
+    // and setting up socket listeners
+    if (user && token) {
+      fetchNotifications();
+      fetchUnreadCount();
 
-    // Navigate to the URL if provided
-    if (notification.url) {
-      window.location.href = notification.url;
+      // Connect socket with the current token
+      currentSocket = connectSocketWithToken(token);
+      
+      // Check initial connection state
+      if (currentSocket.connected) {
+        console.log('Socket already connected in NotificationContext');
+        setSocketConnected(true);
+      }
+
+      // Set up connection status listeners
+      currentSocket.on('connect', () => {
+        console.log('Socket connected in NotificationContext');
+        setSocketConnected(true);
+      });
+
+      currentSocket.on('disconnect', () => {
+        console.log('Socket disconnected in NotificationContext');
+        setSocketConnected(false);
+      });
+
+      // Attach notification listener to the actual socket instance
+      currentSocket.on('notification', handleNewNotification);
+
+      // Cleanup: remove listeners when component unmounts or dependencies change
+      return () => {
+        if (currentSocket) {
+          currentSocket.off('connect');
+          currentSocket.off('disconnect');
+          currentSocket.off('notification', handleNewNotification);
+        }
+      };
+    } else {
+      // No user or token, ensure socket is disconnected
+      disconnectSocket();
+      setSocketConnected(false);
     }
-  };
+  }, [user, token, handleNewNotification, fetchNotifications, fetchUnreadCount]);
+
+  // Add fallback polling for notifications when socket is disconnected
+  useEffect(() => {
+    let pollInterval;
+    
+    if (user && token && !socketConnected) {
+      console.log('Socket disconnected, enabling fallback polling for notifications');
+      // Poll every 30 seconds if socket is disconnected
+      pollInterval = setInterval(() => {
+        console.log('Polling for notifications (fallback mode)');
+        fetchNotifications();
+        fetchUnreadCount();
+      }, 30000);
+    }
+    
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [user, token, socketConnected, fetchNotifications, fetchUnreadCount]);
+
 
   // Value to be provided to consumers
   const contextValue = {
     notifications,
     unreadCount,
     isLoading,
+    socketConnected,
+    fetchNotifications,
+    fetchUnreadCount,
     markAsRead,
     markAllAsRead,
     deleteNotification,
     clearAllNotifications,
-    fetchNotifications,
-    handleNotificationClick,
     showNotification,
   };
 

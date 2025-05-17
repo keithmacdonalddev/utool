@@ -4,7 +4,7 @@
 import React, { Suspense, lazy, useEffect } from 'react'; // React core and hooks
 import { NotificationProvider } from './context/NotificationContext'; // Custom notification context
 import { useDispatch, useSelector } from 'react-redux'; // Redux hooks for state management
-import { connectWithAuth, disconnectSocket } from './utils/socket'; // Socket.IO connection utilities
+import { connectSocketWithToken, disconnectSocket } from './utils/socket'; // Socket.IO connection utilities
 import {
   BrowserRouter as Router, // Client-side router implementation
   Routes, // Container for all routes
@@ -81,7 +81,7 @@ function App() {
   useEffect(() => {
     if (token) {
       // Connect to socket with authentication token when user is logged in
-      connectWithAuth();
+      connectSocketWithToken(token);
     } else {
       // Disconnect socket when no token is present (logged out)
       disconnectSocket();

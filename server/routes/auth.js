@@ -7,6 +7,7 @@ import {
   verifyEmail,
   resendVerificationLink,
   updateMe,
+  refreshToken, // Added
 } from '../controllers/authController.js';
 
 import { protect } from '../middleware/authMiddleware.js';
@@ -61,9 +62,10 @@ router.post(
 // All other routes
 router.post('/register', register);
 router.post('/login', login);
+router.get('/logout', protect, logout); // Assuming logout still needs protection for logging or other actions
 router.get('/me', protect, getMe);
-router.get('/verify-email/:token', verifyEmail);
-router.post('/resend-verification', resendVerificationLink);
 router.put('/updateme', protect, updateMe);
+router.post('/resend-verification', resendVerificationLink);
+router.post('/refresh-token', refreshToken); // Added new route
 
 export default router;

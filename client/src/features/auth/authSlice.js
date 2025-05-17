@@ -6,6 +6,7 @@ import api from '../../utils/api'; // Preconfigured axios instance with baseURL 
 import { resetGuestSandbox, setItems } from '../guestSandbox/guestSandboxSlice'; // Import the actions
 import { createGuestItem } from '../../utils/guestDataFormatters'; // Import utility for guest items
 import { generateAllSampleData } from '../../utils/guestSampleData'; // Import sample data generator
+import { disconnectSocket } from '../../utils/socket'; // Import socket utility for proper cleanup
 
 // API endpoint paths (relative to baseURL defined in api.js)
 // Using a constant makes it easier to update all endpoint paths if they change
@@ -55,6 +56,48 @@ const initialState = {
 // === ASYNC THUNKS ===
 // Async thunks handle side effects (API calls) and update the Redux store
 // They are the recommended way to handle async logic in Redux Toolkit
+
+/**
+ * New Async Thunk for refreshing the access token
+ */
+export const refreshToken = createAsyncThunk(
+  'auth/refreshToken',
+  async (_, thunkAPI) => {
+    try {
+      // The refresh token is in an HttpOnly cookie, so no need to send it in the body/headers.
+      // The server will automatically use it.
+      const response = await api.post(AUTH_URL + 'refresh-token');
+
+      if (response.data && response.data.token) {
+        // Store the new access token in localStorage
+        localStorage.setItem('token', response.data.token);
+        // Optionally, if the response includes updated user details, update them too
+        // if (response.data.user) {
+        //   localStorage.setItem('user', JSON.stringify(response.data.user));
+        // }
+        return response.data; // Contains the new access token, potentially user data
+      } else {
+        // If the response is not as expected, reject.
+        return thunkAPI.rejectWithValue(
+          'Invalid response from refresh token endpoint'
+        );
+      }
+    } catch (error) {
+      const message =
+        (error.response &&
+          error.response.data &&
+          error.response.data.message) ||
+        error.message ||
+        error.toString();
+      // If refresh fails (e.g., refresh token expired or invalid), log out the user
+      // Dispatching logoutUser directly from here can be complex due to thunk interactions.
+      // It's often better to handle this in the component or Axios interceptor that calls refreshToken.
+      // For now, we just reject, and the caller (e.g., Axios interceptor) will handle logout.
+      console.error('Refresh token thunk error:', message);
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
 
 /**
  * Fetches the current guest access status from the server.
@@ -231,15 +274,14 @@ export const loginUser = createAsyncThunk(
       // Make API request to login endpoint
       const response = await api.post(AUTH_URL + 'login', userData);
 
-      // When login is successful, we receive both user data and a JWT token
+      // When login is successful, we receive user data and an ACCESS token in the response body.
+      // The REFRESH token is set as an HttpOnly cookie by the server.
       if (response.data.token && response.data.user) {
-        // Store authentication data in localStorage for persistence
-        // This allows the user to remain logged in after page refresh
         localStorage.setItem('user', JSON.stringify(response.data.user));
-        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('token', response.data.token); // This is the ACCESS token
       }
 
-      return response.data; // Contains user object and token
+      return response.data; // Contains user object and access token
     } catch (error) {
       // Standardized error handling
       const message =
@@ -262,35 +304,33 @@ export const logoutUser = createAsyncThunk(
   'auth/logout',
   async (_, thunkAPI) => {
     try {
-      // Check if the current user is a guest
-      const { auth } = thunkAPI.getState();
+      disconnectSocket();
 
-      // If this is a guest user, end their session in analytics
+      const { auth } = thunkAPI.getState();
       if (auth.isGuest && auth.user && auth.user._id) {
         try {
           await api.put(`/api/v1/analytics/guest-session/${auth.user._id}/end`);
         } catch (error) {
           console.error('Error ending guest session:', error);
-          // Continue with logout even if analytics fails
         }
       }
 
-      // Import the secure logout utility
       const { executeSecureLogout } = await import('../../utils/authState');
 
-      // For authenticated users, make the API call to the server to log the action
+      // For authenticated users, make the API call to the server.
+      // The server will clear the HttpOnly refresh token cookie.
       if (!auth.isGuest) {
-        await api.post(AUTH_URL + 'logout');
+        await api.get(AUTH_URL + 'logout'); // Changed to GET to match route, if it was POST, adjust server route or this.
+        // Assuming the plan meant to call the existing logout which is GET.
+        // If a new POST logout is made for clearing cookies, this should be POST.
       }
 
-      // Then use our secure logout mechanism that prevents additional requests
-      executeSecureLogout();
-      thunkAPI.dispatch(resetGuestSandbox()); // Dispatch reset action here
+      executeSecureLogout(); // Clears client-side access token and user from localStorage and Redux state.
+      thunkAPI.dispatch(resetGuestSandbox());
 
-      // Return true to indicate success
       return true;
     } catch (error) {
-      // Even if backend logout fails, we generally want to clear frontend state
+      disconnectSocket();
       const message =
         (error.response &&
           error.response.data &&
@@ -299,34 +339,30 @@ export const logoutUser = createAsyncThunk(
         error.toString();
       console.error('Logout error:', message);
 
-      // Still execute secure logout on error
       const { executeSecureLogout } = await import('../../utils/authState');
       executeSecureLogout();
-      thunkAPI.dispatch(resetGuestSandbox()); // Also dispatch reset on error before clearing local auth state
+      thunkAPI.dispatch(resetGuestSandbox());
 
-      // Return false instead of rejecting
       return false;
     }
   }
 );
 
-/**
- * Delete the current user's account
- *
- * @returns {Promise} Resolves when account deletion is complete
- */
+// Ensure deleteUser is defined if it was intended to be used.
+// If it was a copy-paste error and not needed, these cases should be removed.
+// Assuming it IS a thunk that should exist:
 export const deleteUser = createAsyncThunk(
-  'auth/delete',
+  'auth/delete', // Action type prefix
   async (_, thunkAPI) => {
     try {
-      // Call API to delete user account
-      const response = await api.delete(AUTH_URL + 'me');
+      // Example: API call to delete the user
+      await api.delete(AUTH_URL + 'me'); // Assuming 'me' is the endpoint for the current user
 
-      // Clear authentication data from localStorage
+      // Clear local storage upon successful deletion
       localStorage.removeItem('user');
       localStorage.removeItem('token');
 
-      return response.data;
+      return true; // Indicate success
     } catch (error) {
       const message =
         (error.response &&
@@ -390,6 +426,30 @@ export const authSlice = createSlice({
   // In this case, these handle the async thunk actions defined above
   extraReducers: (builder) => {
     builder
+      // === REFRESH TOKEN CASES ===
+      .addCase(refreshToken.pending, (state) => {
+        // Optionally set a loading state for token refresh if needed for UI feedback
+        // state.isRefreshingToken = true;
+      })
+      .addCase(refreshToken.fulfilled, (state, action) => {
+        state.token = action.payload.token; // Update the access token in Redux state
+        // if (action.payload.user) { // If user data is also sent back
+        //   state.user = action.payload.user;
+        // }
+        // state.isRefreshingToken = false;
+      })
+      .addCase(refreshToken.rejected, (state, action) => {
+        // If refresh token fails, the interceptor should handle logout.
+        // We might clear the token here as a defensive measure, but the primary
+        // logout flow (clearing user, etc.) is usually handled by logoutUser.
+        state.token = null;
+        // state.isRefreshingToken = false;
+        // state.isError = true; // Potentially set error state
+        // state.message = action.payload; // Store error message
+        console.error('Refresh token rejected in slice:', action.payload);
+        // Consider dispatching logoutUser or a specific action to handle session termination
+        // For now, this is handled by the Axios interceptor which will dispatch logoutUser.
+      })
       // === REGISTER USER CASES ===
       // The pending case is when the API call starts
       .addCase(registerUser.pending, (state) => {
@@ -449,6 +509,9 @@ export const authSlice = createSlice({
       })
 
       // === LOGOUT USER CASES ===
+      .addCase(logoutUser.pending, (state) => {
+        state.isLoading = true; // Show loading during logout
+      })
       .addCase(logoutUser.fulfilled, (state) => {
         // Reset state to logged-out values for an authenticated user.
         state.user = null;
@@ -457,9 +520,6 @@ export const authSlice = createSlice({
         state.isSuccess = false;
         state.message = '';
         // Note: localStorage is cleared in the thunk itself
-      })
-      .addCase(logoutUser.pending, (state) => {
-        state.isLoading = true; // Show loading during logout
       })
       .addCase(logoutUser.rejected, (state, action) => {
         state.isLoading = false;
@@ -473,25 +533,23 @@ export const authSlice = createSlice({
         localStorage.removeItem('user');
         localStorage.removeItem('token');
       })
-
       // === DELETE USER CASES ===
       .addCase(deleteUser.pending, (state) => {
-        state.isLoading = true; // Show loading indicator
+        state.isLoading = true;
       })
       .addCase(deleteUser.fulfilled, (state) => {
-        state.isLoading = false; // Hide loading indicator
-        state.isSuccess = true; // Show success message/UI
-        state.user = null; // Clear user data
-        state.token = null; // Clear token
-        state.isGuest = false; // Ensure guest flag is false after account deletion.
+        state.isLoading = false;
+        state.isSuccess = true;
+        state.user = null;
+        state.token = null;
+        state.isGuest = false;
         state.message = 'User account deleted successfully.';
       })
       .addCase(deleteUser.rejected, (state, action) => {
-        state.isLoading = false; // Hide loading indicator
-        state.isError = true; // Show error message/UI
-        state.message = action.payload; // Error message
+        state.isLoading = false;
+        state.isError = true;
+        state.message = action.payload;
       })
-
       // === FETCH GUEST ACCESS STATUS CASES ===
       .addCase(fetchGuestAccessStatus.pending, (state) => {
         state.isLoading = true; // Indicate loading while fetching status.
