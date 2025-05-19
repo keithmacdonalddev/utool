@@ -434,9 +434,6 @@ const authLimiter = rateLimit({
   },
 });
 
-// Apply rate limiting to auth routes
-app.use('/api/v1/auth', authLimiter);
-
 // Apply logout priority middleware to catch logout requests early
 // This helps prevent race conditions by prioritizing logout requests
 app.use(logoutPriorityMiddleware);

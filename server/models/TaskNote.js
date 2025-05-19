@@ -31,4 +31,4 @@ const NoteSchema = new mongoose.Schema({
 // Optional: Add index for faster querying by task
 NoteSchema.index({ task: 1 });
 
-export default mongoose.model('Note', NoteSchema);
+export default mongoose.model('TaskNote', NoteSchema);

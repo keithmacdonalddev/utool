@@ -268,29 +268,21 @@ export const registerUser = createAsyncThunk(
  * @returns {Promise} With the user data and authentication token
  */
 export const loginUser = createAsyncThunk(
-  'auth/login',
-  async (userData, thunkAPI) => {
+  'auth/loginUser',
+  async (userData, { rejectWithValue }) => {
     try {
-      // Make API request to login endpoint
-      const response = await api.post(AUTH_URL + 'login', userData);
-
-      // When login is successful, we receive user data and an ACCESS token in the response body.
-      // The REFRESH token is set as an HttpOnly cookie by the server.
-      if (response.data.token && response.data.user) {
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        localStorage.setItem('token', response.data.token); // This is the ACCESS token
-      }
-
-      return response.data; // Contains user object and access token
+      const response = await api.post('/auth/login', userData);
+      // The backend now sends { success: true, token: '...', user: { ... } }
+      // So, response.data will be this object.
+      return response.data; // This will be { success, token, user }
     } catch (error) {
-      // Standardized error handling
       const message =
         (error.response &&
           error.response.data &&
           error.response.data.message) ||
         error.message ||
         error.toString();
-      return thunkAPI.rejectWithValue(message);
+      return rejectWithValue(message);
     }
   }
 );
@@ -479,33 +471,41 @@ export const authSlice = createSlice({
         state.token = null; // Ensure token is null
       }) // === LOGIN USER CASES ===
       .addCase(loginUser.pending, (state) => {
-        state.isLoading = true; // Show loading indicator
-        state.isLoggingInUser = true; // Specific flag for user login
-        // If a guest was active, clear them out upon real login attempt.
-        if (state.isGuest) {
-          state.user = null;
-          state.isGuest = false;
-          localStorage.removeItem('guestUser');
-        }
+        state.isLoading = true;
+        state.isError = false;
+        state.isSuccess = false;
+        state.message = '';
+        state.user = null; // Explicitly set user to null on pending
+        state.token = null; // Explicitly set token to null on pending
       })
       .addCase(loginUser.fulfilled, (state, action) => {
-        state.isLoading = false; // Hide loading indicator
-        state.isLoggingInUser = false; // Reset specific flag
-        state.isSuccess = true; // Show success message/UI
-        state.user = action.payload.user; // Store authenticated user data
-        state.token = action.payload.token; // Store JWT token
-        state.isGuest = false; // Ensure guest flag is explicitly false for an authenticated user.
-        state.message = ''; // Clear any previous messages
-        // Ensure any residual guest data from a previous session is cleared from localStorage.
-        localStorage.removeItem('guestUser');
+        state.isLoading = false;
+        state.isSuccess = true;
+        // action.payload is now { success: true, token: '...', user: { ... } }
+        state.user = action.payload.user; // Correctly access user object
+        state.token = action.payload.token; // Correctly access token
+        state.isError = false;
+        state.message = action.payload.message || 'Login successful'; // Use message from payload if available
+
+        // Store user and token in localStorage
+        if (action.payload.user) {
+          localStorage.setItem('user', JSON.stringify(action.payload.user));
+        }
+        if (action.payload.token) {
+          localStorage.setItem('token', action.payload.token);
+        }
+        // connectSocket(); // Socket connection is handled in App.js based on token presence
       })
       .addCase(loginUser.rejected, (state, action) => {
-        state.isLoading = false; // Hide loading indicator
-        state.isLoggingInUser = false; // Reset specific flag
-        state.isError = true; // Show error message/UI
-        state.message = action.payload; // Error message from rejectWithValue
-        state.user = null; // Ensure user is null
-        state.token = null; // Ensure token is null
+        state.isLoading = false;
+        state.isError = true;
+        state.message = action.payload?.message || 'Login failed'; // Use message from payload
+        state.user = null;
+        state.token = null; // Clear token on rejection
+        // disconnectSocket(); // Socket disconnection is handled in App.js
+        // Clear localStorage on failed login
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
       })
 
       // === LOGOUT USER CASES ===

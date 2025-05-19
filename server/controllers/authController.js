@@ -127,13 +127,11 @@ export const login = asyncHandler(async (req, res, next) => {
         email,
         reason: 'User not found',
       });
-      return res
-        .status(401)
-        .json({
-          success: false,
-          message:
-            'User with this email does not exist. Please check your email or register.',
-        }); // MODIFIED MESSAGE
+      return res.status(401).json({
+        success: false,
+        message:
+          'User with this email does not exist. Please check your email or register.',
+      }); // MODIFIED MESSAGE
     }
 
     // Check if account is locked
@@ -186,12 +184,10 @@ export const login = asyncHandler(async (req, res, next) => {
       }
 
       await user.save({ validateBeforeSave: false });
-      return res
-        .status(401)
-        .json({
-          success: false,
-          message: 'Incorrect password. Please try again.',
-        }); // MODIFIED MESSAGE
+      return res.status(401).json({
+        success: false,
+        message: 'Incorrect password. Please try again.',
+      }); // MODIFIED MESSAGE
     }
 
     if (!user.isVerified) {
@@ -639,6 +635,15 @@ const sendTokenResponse = (user, statusCode, res) => {
   res.status(statusCode).json({
     success: true,
     token: accessToken, // Access token
-    // user: { id: user._id, name: user.name, email: user.email, role: user.role } // Optionally send user data
+    user: {
+      // MODIFIED: Include user data in the response
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar, // Add other relevant non-sensitive fields
+      isVerified: user.isVerified,
+      // Add any other fields the client might need immediately after login
+    },
   });
 };

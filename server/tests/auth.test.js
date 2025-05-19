@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import User from '../models/User'; // Adjust path to your User model
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 
 // Load environment variables from .env file
 dotenv.config({ path: './config/config.env' }); // Ensure this path is correct relative to server root for tests
@@ -14,11 +15,34 @@ const generateToken = (id, secret, expiresIn) => {
   return jwt.sign({ id }, secret, { expiresIn });
 };
 
+let mongoServer;
+
 describe('Auth Endpoints', () => {
   // Connect to a test database before all tests
   beforeAll(async () => {
-    const mongoUri =
-      process.env.MONGO_URI_TEST || 'mongodb://localhost:27017/utool_test_db';
+    // CRITICAL SAFETY CHECK: Ensure NODE_ENV is 'test'
+    if (process.env.NODE_ENV !== 'test') {
+      throw new Error(
+        'FATAL: NODE_ENV is not set to "test". Aborting tests to prevent data loss on non-test database. Current NODE_ENV: ' +
+          process.env.NODE_ENV
+      );
+    }
+
+    mongoServer = await MongoMemoryServer.create();
+    const mongoUri = mongoServer.getUri();
+
+    // The following safety checks for dbName are less critical with MongoMemoryServer,
+    // as it always creates a random, isolated database. However, they don't hurt.
+    const dbName = mongoUri.split('/').pop().split('?')[0];
+    if (!dbName) {
+      // Basic check that URI parsing worked
+      throw new Error(
+        `FATAL: Could not determine database name from MongoMemoryServer URI: ${mongoUri}`
+      );
+    }
+    // console.log(`Test suite connecting to In-Memory MongoDB: ${mongoUri}`);
+    // console.log(`In-Memory DB Name: ${dbName}`);
+
     if (mongoose.connection.readyState === 0) {
       await mongoose.connect(mongoUri);
     }
@@ -26,13 +50,35 @@ describe('Auth Endpoints', () => {
 
   // Clear the User collection before each test
   beforeEach(async () => {
-    await User.deleteMany({});
+    // Additional safety: double-check environment before destructive operations
+    if (process.env.NODE_ENV !== 'test') {
+      console.error(
+        'CRITICAL ERROR: Attempted to run beforeEach data clearing in non-test environment. Aborting.'
+      );
+      throw new Error("Refusing to clear data: NODE_ENV is not 'test'.");
+    }
+    // With MongoMemoryServer, mongoose.connection.name will be the random DB name.
+    // The check for '_test' is no longer strictly necessary but can be kept if desired for consistency.
+    // For instance, if you ever switch back from MongoMemoryServer temporarily.
+    const collections = mongoose.connection.collections;
+    for (const key in collections) {
+      const collection = collections[key];
+      await collection.deleteMany({});
+    }
   });
 
   // Disconnect from the database after all tests
   afterAll(async () => {
-    await User.deleteMany({});
-    await mongoose.connection.close();
+    // Clear all data from the in-memory database before stopping the server
+    const collections = mongoose.connection.collections;
+    for (const key in collections) {
+      const collection = collections[key];
+      await collection.deleteMany({});
+    }
+    await mongoose.disconnect();
+    if (mongoServer) {
+      await mongoServer.stop();
+    }
   });
 
   describe('POST /api/v1/auth/register', () => {
