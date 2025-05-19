@@ -38,3 +38,6 @@ logs
 # Ignore any file named chat.json anywhere in the repository
 chat.json
 
+# Ignore Google Drive credentials file
+.gdrive-server-credentials.json
+
