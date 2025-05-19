@@ -346,38 +346,39 @@ import publicSettingsRoutes from './routes/publicSettingsRoutes.js'; // Added fo
 
 // Enhanced CORS configuration for Vercel frontend
 // CORS is necessary to allow the frontend to communicate with this API
-app.use(
-  cors({
-    // Dynamic origin validation function
-    origin: function (origin, callback) {
-      const allowedOrigins = [
-        process.env.FRONTEND_URL,
-        'http://localhost:3000',
-        'https://utool-xi.vercel.app',
-      ]; // Allow requests with no origin (like mobile apps, curl requests)
+const corsOptions = {
+  // Dynamic origin validation function
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      'http://localhost:3000',
+      'https://utool-xi.vercel.app',
+    ]; // Allow requests with no origin (like mobile apps, curl requests)
 
-      if (!origin) return callback(null, true); // Check if origin is allowed or if we're in development mode
+    if (!origin) return callback(null, true); // Check if origin is allowed or if we're in development mode
 
-      if (
-        allowedOrigins.indexOf(origin) !== -1 ||
-        process.env.NODE_ENV !== 'production'
-      ) {
-        logger.verbose(`CORS allowed origin: ${origin}`);
-        callback(null, true);
-      } else {
-        logger.warn(`CORS blocked origin: ${origin}`); // In production, do not allow unauthorized origins
-        callback(new Error(`Origin ${origin} not allowed by CORS`));
-      }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly include all methods
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true, // Allow cookies and authentication headers
-    maxAge: 86400, // Cache preflight requests for 24 hours
-  })
-);
+    if (
+      allowedOrigins.indexOf(origin) !== -1 ||
+      process.env.NODE_ENV !== 'production'
+    ) {
+      logger.verbose(`CORS allowed origin: ${origin}`);
+      callback(null, true);
+    } else {
+      logger.warn(`CORS blocked origin: ${origin}`); // In production, do not allow unauthorized origins
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly include all methods
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true, // Allow cookies and authentication headers
+  maxAge: 86400, // Cache preflight requests for 24 hours
+};
+
+app.use(cors(corsOptions));
 
 // Add CORS headers for preflight OPTIONS requests (extra safety)
-app.options(/(.*)/, cors());
+// Use the same options for consistency
+app.options('*', cors(corsOptions)); // Changed from app.options(/(.*)/, cors());
 
 // Apply Helmet middleware for securing HTTP headers
 app.use(helmet());
