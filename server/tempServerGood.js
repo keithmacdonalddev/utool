@@ -48,10 +48,6 @@ import schedule from 'node-schedule'; // For scheduled tasks
 import cookieParser from 'cookie-parser'; // Cookie parsing middleware
 dotenv.config();
 
-// Import custom logger for structured logging
-// This logger is used throughout the application for consistent logging
-import { logger } from './utils/logger.js';
-
 /**
  * Validates required environment variables to ensure proper server configuration.
  * This function checks for the presence of critical variables and exits if any are missing.
@@ -229,6 +225,7 @@ function validateEnvironmentVariables(logger) {
 }
 
 // Regular imports continue...
+import { logger } from './utils/logger.js';
 import { isShuttingDown, setShuttingDown } from './utils/serverState.js';
 import { authenticateSocket, handleConnection } from './utils/socketManager.js';
 import { logoutPriorityMiddleware } from './middleware/logoutPriorityMiddleware.js';
@@ -380,7 +377,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Add CORS headers for preflight OPTIONS requests (extra safety)
-app.options(/(.*)/, cors());
+// Use the same options for consistency
+app.options('*', cors(corsOptions)); // Changed from app.options(/(.*)/, cors());
 
 // Apply Helmet middleware for securing HTTP headers
 app.use(helmet());
@@ -581,7 +579,7 @@ app.get('/', (req, res) => {
 });
 
 // Add a catch-all route for standalone task requests to redirect/inform users
-app.all('/api/v1/tasks/*any', (req, res) => {
+app.all('/api/v1/tasks/*', (req, res) => {
   logger.warn(`Attempted access to standalone task route: ${req.originalUrl}`, {
     method: req.method,
     userId: req.user?.id,
