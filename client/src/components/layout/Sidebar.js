@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import Portal from '../Portal'; // Import the Portal component
+import useFlyoutMenu from '../../hooks/useFlyoutMenu'; // Import the flyout menu hook
+import {
+  getAvailableAdminNavigation,
+  isAdminFlyoutEnabled,
+} from '../../config/adminConfig'; // Import admin configuration
 import {
   LayoutDashboard,
   FolderKanban,
@@ -20,6 +25,12 @@ import {
   Archive, // Added for Archive page
   ChevronRight, // For submenu indicator
   BarChart2, // Added for Analytics
+  Shield, // Added for Admin Panel
+  Users2, // Added for Roles
+  Activity, // Added for System Health
+  Globe, // Added for Public Settings
+  Settings2, // Added for Maintenance Tools
+  Gauge, // Added for Dashboard
   // ChevronDown, // For submenu indicator // Removed as it's not used for Resources fly-out
 } from 'lucide-react'; // Removed UserGroup import which isn't available
 
@@ -95,6 +106,45 @@ const Sidebar = ({
    * The timeout can be cleared if the cursor re-enters the trigger or submenu area.
    */
   let leaveTimeout = useRef(null);
+
+  // Admin Flyout Navigation State Management
+  /**
+   * @description Admin flyout menu state management using the useFlyoutMenu hook.
+   * Provides consistent behavior for the admin panel navigation with ARIA support,
+   * keyboard navigation, and touch device compatibility.
+   */
+  const {
+    isOpen: adminSubmenuOpen,
+    openFlyout: openAdminFlyout,
+    closeFlyout: closeAdminFlyout,
+    toggleFlyout: toggleAdminFlyout,
+    flyoutRef: adminMenuRef,
+    triggerRef: adminButtonRef,
+    getAriaProps: getAdminAriaProps,
+  } = useFlyoutMenu();
+
+  /**
+   * @state {object} adminSubmenuPosition - Stores the calculated position for the admin flyout menu.
+   * This allows dynamic positioning of the flyout next to its trigger button.
+   * @property {number} top - The CSS `top` value for the admin flyout.
+   * @property {number} left - The CSS `left` value for the admin flyout.
+   */
+  const [adminSubmenuPosition, setAdminSubmenuPosition] = useState({
+    top: 0,
+    left: 0,
+  });
+
+  /**
+   * @ref {number|null} adminLeaveTimeout - Timeout ref for admin flyout mouse leave delay.
+   * Provides a grace period when moving mouse from trigger to flyout menu.
+   */
+  const adminLeaveTimeout = useRef(null);
+
+  /**
+   * @description Get available admin navigation based on feature flags and user permissions.
+   * This ensures the flyout only shows features that are currently available.
+   */
+  const adminNavigation = getAvailableAdminNavigation();
 
   /**
    * @effect
@@ -223,6 +273,97 @@ const Sidebar = ({
             resourcesMenuRef.current?.querySelectorAll('[role="menuitem"]');
           items?.[0]?.focus();
         }, 0);
+      }
+    }
+  };
+
+  // Admin Flyout Navigation Handlers
+  /**
+   * @function handleAdminMouseEnter
+   * @description Opens the admin flyout menu and calculates its position.
+   * Clears any pending close timeouts and positions the flyout relative to the trigger button.
+   */
+  const handleAdminMouseEnter = () => {
+    clearTimeout(adminLeaveTimeout.current);
+
+    // Calculate position based on trigger button
+    if (adminButtonRef.current) {
+      const rect = adminButtonRef.current.getBoundingClientRect();
+      const sidebarWidth =
+        adminButtonRef.current.closest('aside')?.offsetWidth || 256;
+
+      setAdminSubmenuPosition({
+        top: rect.top,
+        left: rect.left + sidebarWidth + 8, // 8px gap from sidebar
+      });
+    }
+
+    openAdminFlyout();
+  };
+
+  /**
+   * @function handleAdminMouseLeave
+   * @description Initiates closing of the admin flyout menu after a short delay.
+   * Provides a grace period for users to move mouse from trigger to flyout.
+   */
+  const handleAdminMouseLeave = () => {
+    adminLeaveTimeout.current = setTimeout(() => {
+      if (isTouchDevice && adminSubmenuOpen) return;
+      closeAdminFlyout();
+    }, 150);
+  };
+
+  /**
+   * @function handleAdminTriggerClick
+   * @description Handles click/tap events on the admin flyout trigger.
+   * Toggles the flyout state and manages positioning.
+   */
+  const handleAdminTriggerClick = () => {
+    if (adminSubmenuOpen) {
+      closeAdminFlyout();
+    } else {
+      handleAdminMouseEnter();
+    }
+  };
+
+  /**
+   * @function handleAdminKeyboardNav
+   * @description Manages keyboard navigation for the admin flyout menu.
+   * Provides ARIA-compliant keyboard interaction for accessibility.
+   *
+   * @param {React.KeyboardEvent} event - The keyboard event object
+   * @param {string} type - Either 'trigger' or 'item'
+   * @param {number} [index] - Index of the current item for navigation
+   */
+  const handleAdminKeyboardNav = (event, type, index) => {
+    const items = adminMenuRef.current?.querySelectorAll('[role="menuitem"]');
+
+    if (type === 'trigger') {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        const opening = !adminSubmenuOpen;
+        if (opening) {
+          handleAdminMouseEnter();
+          if (items && items.length > 0) {
+            setTimeout(() => items[0].focus(), 0);
+          }
+        } else {
+          closeAdminFlyout();
+        }
+      }
+    } else if (type === 'item' && adminSubmenuOpen && items) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeAdminFlyout();
+        adminButtonRef.current?.focus();
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        const nextIndex = (index + 1) % items.length;
+        items[nextIndex]?.focus();
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        const prevIndex = (index - 1 + items.length) % items.length;
+        items[prevIndex]?.focus();
       }
     }
   };
@@ -614,73 +755,381 @@ const Sidebar = ({
             <Archive size={20} className="flex-shrink-0" />
             <span className={linkTextClasses}>Archive</span>
           </NavLink>
-          {/* Admin Specific Links: Rendered only if user has 'Admin' role */}
-          {user?.role === 'Admin' &&
-            !isGuest && ( // Also check !isGuest, though Admin role implies not a guest
-              <>
-                <NavLink
-                  to="/admin/users"
-                  className={({ isActive }) =>
-                    `${linkItemClasses} ${
-                      isMinimized ? 'md:justify-center' : ''
-                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
-                  }
-                  onClick={() => {
-                    if (isOpen && window.innerWidth < 768) toggleSidebar();
-                  }}
-                  title="User Management"
-                >
-                  <Users size={20} className="flex-shrink-0" />
-                  <span className={linkTextClasses}>User Management</span>
-                </NavLink>{' '}
-                <NavLink
-                  to="/admin/audit-logs"
-                  className={({ isActive }) =>
-                    `${linkItemClasses} ${
-                      isMinimized ? 'md:justify-center' : ''
-                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
-                  }
-                  onClick={() => {
-                    if (isOpen && window.innerWidth < 768) toggleSidebar();
-                  }}
-                  title="Audit Logs"
-                >
-                  <History size={20} className="flex-shrink-0" />
-                  <span className={linkTextClasses}>Audit Logs</span>
-                </NavLink>
-                <NavLink
-                  to="/admin/settings"
-                  className={({ isActive }) =>
-                    `${linkItemClasses} ${
-                      isMinimized ? 'md:justify-center' : ''
-                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
-                  }
-                  onClick={() => {
-                    if (isOpen && window.innerWidth < 768) toggleSidebar();
-                  }}
-                  title="Admin Settings"
-                >
-                  {' '}
-                  <Settings size={20} className="flex-shrink-0" />
-                  <span className={linkTextClasses}>Admin Settings</span>
-                </NavLink>
-                <NavLink
-                  to="/admin/analytics/guest"
-                  className={({ isActive }) =>
-                    `${linkItemClasses} ${
-                      isMinimized ? 'md:justify-center' : ''
-                    } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
-                  }
-                  onClick={() => {
-                    if (isOpen && window.innerWidth < 768) toggleSidebar();
-                  }}
-                  title="Guest Analytics"
-                >
-                  <BarChart2 size={20} className="flex-shrink-0" />
-                  <span className={linkTextClasses}>Guest Analytics</span>
-                </NavLink>
-              </>
-            )}
+          {/* Admin Panel Flyout Navigation */}
+          {user?.role === 'Admin' && !isGuest && isAdminFlyoutEnabled() && (
+            <div
+              ref={adminButtonRef}
+              className="relative w-full"
+              onMouseEnter={handleAdminMouseEnter}
+              onMouseLeave={handleAdminMouseLeave}
+              onClick={handleAdminTriggerClick}
+              onKeyDown={(e) => handleAdminKeyboardNav(e, 'trigger')}
+              tabIndex={0}
+              role="button"
+              {...getAdminAriaProps()}
+              aria-controls="admin-submenu"
+              aria-label="Admin Panel Navigation"
+            >
+              <div
+                className={`${linkItemClasses} ${
+                  isMinimized ? 'md:justify-center' : ''
+                } ${
+                  adminSubmenuOpen ? activeLinkClasses : inactiveLinkClasses
+                }`}
+              >
+                <Shield size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>Admin Panel</span>
+                {!isMinimized && (
+                  <span className="ml-auto pl-1">
+                    <ChevronRight size={16} />
+                  </span>
+                )}
+              </div>
+
+              {adminSubmenuOpen && (
+                <Portal>
+                  <div
+                    ref={adminMenuRef}
+                    id="admin-submenu"
+                    role="menu"
+                    aria-labelledby="admin-menu-button"
+                    className="fixed p-3 rounded-md shadow-xl bg-app-sidebar border border-sidebar-border z-[100] w-64"
+                    style={{
+                      top: adminSubmenuPosition.top,
+                      left: adminSubmenuPosition.left,
+                    }}
+                    onMouseEnter={handleAdminMouseEnter}
+                    onMouseLeave={handleAdminMouseLeave}
+                  >
+                    {/* Dashboard */}
+                    {adminNavigation.dashboard && (
+                      <NavLink
+                        to={adminNavigation.dashboard.path}
+                        className={`${submenuLinkClasses} mb-2`}
+                        onClick={() => {
+                          if (isOpen && window.innerWidth < 768)
+                            toggleSidebar();
+                          closeAdminFlyout();
+                        }}
+                        role="menuitem"
+                        tabIndex={0}
+                        onKeyDown={(e) => handleAdminKeyboardNav(e, 'item', 0)}
+                      >
+                        <Gauge size={16} className="mr-2" />
+                        {adminNavigation.dashboard.title}
+                      </NavLink>
+                    )}
+
+                    {/* User Management Section */}
+                    {adminNavigation.userManagement && (
+                      <div className="border-t border-sidebar-border pt-2 mb-2">
+                        <div className="text-xs font-semibold text-gray-400 mb-1 px-2">
+                          {adminNavigation.userManagement.title}
+                        </div>
+                        {adminNavigation.userManagement.items.allUsers && (
+                          <NavLink
+                            to={
+                              adminNavigation.userManagement.items.allUsers.path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 1)
+                            }
+                          >
+                            <Users size={16} className="mr-2" />
+                            {
+                              adminNavigation.userManagement.items.allUsers
+                                .title
+                            }
+                          </NavLink>
+                        )}
+                        {adminNavigation.userManagement.items
+                          .rolesPermissions && (
+                          <NavLink
+                            to={
+                              adminNavigation.userManagement.items
+                                .rolesPermissions.path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 2)
+                            }
+                          >
+                            <Users2 size={16} className="mr-2" />
+                            {
+                              adminNavigation.userManagement.items
+                                .rolesPermissions.title
+                            }
+                          </NavLink>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Security & Monitoring Section */}
+                    {adminNavigation.securityMonitoring && (
+                      <div className="border-t border-sidebar-border pt-2 mb-2">
+                        <div className="text-xs font-semibold text-gray-400 mb-1 px-2">
+                          {adminNavigation.securityMonitoring.title}
+                        </div>
+                        {adminNavigation.securityMonitoring.items.auditLogs && (
+                          <NavLink
+                            to={
+                              adminNavigation.securityMonitoring.items.auditLogs
+                                .path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 3)
+                            }
+                          >
+                            <History size={16} className="mr-2" />
+                            {
+                              adminNavigation.securityMonitoring.items.auditLogs
+                                .title
+                            }
+                          </NavLink>
+                        )}
+                        {adminNavigation.securityMonitoring.items
+                          .systemHealth && (
+                          <NavLink
+                            to={
+                              adminNavigation.securityMonitoring.items
+                                .systemHealth.path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 4)
+                            }
+                          >
+                            <Activity size={16} className="mr-2" />
+                            {
+                              adminNavigation.securityMonitoring.items
+                                .systemHealth.title
+                            }
+                          </NavLink>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Content Management Section */}
+                    {adminNavigation.contentManagement && (
+                      <div className="border-t border-sidebar-border pt-2 mb-2">
+                        <div className="text-xs font-semibold text-gray-400 mb-1 px-2">
+                          {adminNavigation.contentManagement.title}
+                        </div>
+                        {adminNavigation.contentManagement.items
+                          .guestAnalytics && (
+                          <NavLink
+                            to={
+                              adminNavigation.contentManagement.items
+                                .guestAnalytics.path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 5)
+                            }
+                          >
+                            <BarChart2 size={16} className="mr-2" />
+                            {
+                              adminNavigation.contentManagement.items
+                                .guestAnalytics.title
+                            }
+                          </NavLink>
+                        )}
+                        {adminNavigation.contentManagement.items
+                          .publicSettings && (
+                          <NavLink
+                            to={
+                              adminNavigation.contentManagement.items
+                                .publicSettings.path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 6)
+                            }
+                          >
+                            <Globe size={16} className="mr-2" />
+                            {
+                              adminNavigation.contentManagement.items
+                                .publicSettings.title
+                            }
+                          </NavLink>
+                        )}
+                      </div>
+                    )}
+
+                    {/* System Administration Section */}
+                    {adminNavigation.systemAdministration && (
+                      <div className="border-t border-sidebar-border pt-2">
+                        <div className="text-xs font-semibold text-gray-400 mb-1 px-2">
+                          {adminNavigation.systemAdministration.title}
+                        </div>
+                        {adminNavigation.systemAdministration.items
+                          .applicationSettings && (
+                          <NavLink
+                            to={
+                              adminNavigation.systemAdministration.items
+                                .applicationSettings.path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 7)
+                            }
+                          >
+                            <Settings size={16} className="mr-2" />
+                            {
+                              adminNavigation.systemAdministration.items
+                                .applicationSettings.title
+                            }
+                          </NavLink>
+                        )}
+                        {adminNavigation.systemAdministration.items
+                          .maintenanceTools && (
+                          <NavLink
+                            to={
+                              adminNavigation.systemAdministration.items
+                                .maintenanceTools.path
+                            }
+                            className={submenuLinkClasses}
+                            onClick={() => {
+                              if (isOpen && window.innerWidth < 768)
+                                toggleSidebar();
+                              closeAdminFlyout();
+                            }}
+                            role="menuitem"
+                            tabIndex={0}
+                            onKeyDown={(e) =>
+                              handleAdminKeyboardNav(e, 'item', 8)
+                            }
+                          >
+                            <Settings2 size={16} className="mr-2" />
+                            {
+                              adminNavigation.systemAdministration.items
+                                .maintenanceTools.title
+                            }
+                          </NavLink>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Portal>
+              )}
+            </div>
+          )}
+          {/* Fallback: Legacy admin links for when flyout is disabled */}
+          {user?.role === 'Admin' && !isGuest && !isAdminFlyoutEnabled() && (
+            <>
+              <NavLink
+                to="/admin/users"
+                className={({ isActive }) =>
+                  `${linkItemClasses} ${
+                    isMinimized ? 'md:justify-center' : ''
+                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                }
+                onClick={() => {
+                  if (isOpen && window.innerWidth < 768) toggleSidebar();
+                }}
+                title="User Management"
+              >
+                <Users size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>User Management</span>
+              </NavLink>
+              <NavLink
+                to="/admin/audit-logs"
+                className={({ isActive }) =>
+                  `${linkItemClasses} ${
+                    isMinimized ? 'md:justify-center' : ''
+                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                }
+                onClick={() => {
+                  if (isOpen && window.innerWidth < 768) toggleSidebar();
+                }}
+                title="Audit Logs"
+              >
+                <History size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>Audit Logs</span>
+              </NavLink>
+              <NavLink
+                to="/admin/settings"
+                className={({ isActive }) =>
+                  `${linkItemClasses} ${
+                    isMinimized ? 'md:justify-center' : ''
+                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                }
+                onClick={() => {
+                  if (isOpen && window.innerWidth < 768) toggleSidebar();
+                }}
+                title="Admin Settings"
+              >
+                <Settings size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>Admin Settings</span>
+              </NavLink>
+              <NavLink
+                to="/admin/analytics/guest"
+                className={({ isActive }) =>
+                  `${linkItemClasses} ${
+                    isMinimized ? 'md:justify-center' : ''
+                  } ${isActive ? activeLinkClasses : inactiveLinkClasses}`
+                }
+                onClick={() => {
+                  if (isOpen && window.innerWidth < 768) toggleSidebar();
+                }}
+                title="Guest Analytics"
+              >
+                <BarChart2 size={20} className="flex-shrink-0" />
+                <span className={linkTextClasses}>Guest Analytics</span>
+              </NavLink>
+            </>
+          )}
         </nav>
 
         {/* Footer Links Area: Profile, Settings (optional), Logout */}

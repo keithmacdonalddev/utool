@@ -95,12 +95,11 @@ const validateUserQuery = [
     .optional()
     .isIn(['active', 'inactive', ''])
     .withMessage('Status must be active, inactive, or empty'),
-
   query('sortBy')
     .optional()
-    .isIn(['name', 'email', 'role', 'createdAt', 'lastActive'])
+    .isIn(['firstName', 'lastName', 'email', 'role', 'createdAt', 'lastActive'])
     .withMessage(
-      'Sort field must be name, email, role, createdAt, or lastActive'
+      'Sort field must be firstName, lastName, email, role, createdAt, or lastActive'
     ),
 
   query('sortOrder')
@@ -119,13 +118,19 @@ const validateUserUpdate = [
   param('userId')
     .isMongoId()
     .withMessage('User ID must be a valid MongoDB ObjectId'),
-
-  body('name')
+  body('firstName')
     .optional()
-    .isLength({ min: 1, max: 100 })
+    .isLength({ min: 1, max: 50 })
     .trim()
     .escape()
-    .withMessage('Name must be between 1 and 100 characters'),
+    .withMessage('First name must be between 1 and 50 characters'),
+
+  body('lastName')
+    .optional()
+    .isLength({ min: 1, max: 50 })
+    .trim()
+    .escape()
+    .withMessage('Last name must be between 1 and 50 characters'),
 
   body('email')
     .optional()

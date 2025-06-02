@@ -1,3 +1,9 @@
+<!-- DO NOT EDIT OR USE THIS FILE - EXAMPLE USE ONLY -->
+
+    ************************* Disclaimer *************************
+ This file is an example of a comprehensive plan to add a large feature, reorganize sizeable features or tackle an extensive refactor. After 3 full iterations, this document ballooned to 3550 lines of guidance to ensure a smooth implementation. Although this plan is taylored to a specific use case, use it in full or in part to assist in your large coding tasks.
+     **************************************************************
+
 # ADMIN TOOL REORGANIZATION PLAN
 
 ## Production-Ready Phased Implementation Strategy

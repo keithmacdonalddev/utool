@@ -12,10 +12,10 @@ import { Search, X, ChevronDown } from 'lucide-react';
  * @param {Object} props - Component props
  * @param {Object} props.filterConfig - Configuration defining available filters
  * @param {Object} props.filterState - Current state of all filters
- * @param {Function} props.onFilterChange - Handler for individual filter changes
- * @param {Function} props.onApplyFilters - Handler called when filters should be applied
+ * @param {Function} props.onFilterChange - Handler for individual filter changes * @param {Function} props.onApplyFilters - Handler called when filters should be applied
  * @param {Function} props.onClearFilters - Handler to reset filters to defaults
  * @param {Function} props.onSearch - Handler for search queries
+ * @param {string} [props.searchPlaceholder] - Placeholder text for the search input
  * @param {React.ReactNode} [props.actionButtons] - Optional additional action buttons to display
  * @returns {JSX.Element} The filter interface component
  */
@@ -26,6 +26,7 @@ const TableFilters = ({
   onApplyFilters,
   onClearFilters,
   onSearch,
+  searchPlaceholder = 'Search...',
   actionButtons,
 }) => {
   // Local state for UI controls
@@ -56,13 +57,15 @@ const TableFilters = ({
       onSearch(searchQuery);
     }
   };
-
   /**
    * Clears the search input and resets related state
    * This provides a quick way for users to start a new search
+   * Also triggers an empty search to reset the results
    */
   const handleClearSearch = () => {
     setSearchQuery('');
+    // Trigger search with empty query to reset results
+    onSearch('');
   };
 
   /**
@@ -384,16 +387,16 @@ const TableFilters = ({
         {/* Search Box */}
         <form onSubmit={handleSearch} className="flex flex-1 max-w-3xl">
           <div className="relative flex-grow">
+            {' '}
             {/* Search text input */}
             <input
               type="text"
-              placeholder="Search..."
+              placeholder={searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full p-2 pr-8 border border-gray-300 rounded-md bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               aria-label="Search input"
             />
-
             {/* Clear button - only visible when there's a search query */}
             {searchQuery && (
               <button

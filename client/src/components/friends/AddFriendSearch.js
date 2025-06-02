@@ -20,12 +20,12 @@ function AddFriendSearch() {
   );
   const { user: currentUser } = useSelector((state) => state.auth);
 
-  // Clear search results when the component unmounts or the tab changes
+  // Clear search results when the component unmounts, the tab changes, or the current user changes
   useEffect(() => {
     return () => {
       dispatch(clearSearchResults());
     };
-  }, [dispatch]);
+  }, [dispatch, currentUser]); // Added currentUser to dependency array
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -38,6 +38,8 @@ function AddFriendSearch() {
     await dispatch(sendFriendRequest(userId));
     // Refresh the friend requests list to show newly sent request
     dispatch(getFriendRequests());
+    // Clear search results after sending a request
+    dispatch(clearSearchResults());
     // Optionally provide feedback like a toast notification here
   };
 
@@ -89,7 +91,9 @@ function AddFriendSearch() {
                 <div className="flex items-center space-x-3">
                   <UserAvatar user={user} size="sm" />
                   <div>
-                    <p className="font-medium text-foreground">{user.name}</p>
+                    <p className="font-medium text-foreground">
+                      {user.firstName} {user.lastName}
+                    </p>
                     <p className="text-sm text-muted-foreground">
                       {user.email}
                     </p>
@@ -100,7 +104,7 @@ function AddFriendSearch() {
                   variant="outline"
                   onClick={() => handleSendRequest(user._id)}
                   disabled={isLoading} // Disable button while any friend action is loading
-                  aria-label={`Send friend request to ${user.name}`}
+                  aria-label={`Send friend request to ${user.firstName} ${user.lastName}`}
                 >
                   <UserPlus size={16} className="mr-1" /> Add Friend
                 </Button>

@@ -8,7 +8,8 @@ import Card from '../components/common/Card';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -21,7 +22,7 @@ const RegisterPage = () => {
     (state) => state.auth
   );
 
-  const { name, email, password, confirmPassword } = formData;
+  const { firstName, lastName, email, password, confirmPassword } = formData;
 
   useEffect(() => {
     // Handle redirection or display messages after registration attempt
@@ -50,7 +51,8 @@ const RegisterPage = () => {
       setLocalError('Passwords do not match');
     } else {
       const userData = {
-        name: name || undefined,
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
         email,
         password,
       };
@@ -63,39 +65,51 @@ const RegisterPage = () => {
       <h1 className="text-3xl font-bold mb-6 text-center text-text">
         Register
       </h1>
-
       {isLoading && <p className="text-center text-blue-500">Loading...</p>}
-
       {localError && (
         <div className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
           {localError}
         </div>
       )}
-
       {isError && message && (
         <div className="text-center text-red-500 bg-red-100 p-2 rounded mb-4">
           {message}
         </div>
       )}
-
       {isSuccess && message && !isError && (
         <div className="text-center text-green-500 bg-green-100 p-2 rounded mb-4">
           {message}
         </div>
-      )}
-
+      )}{' '}
       <Card>
+        {' '}
         <form onSubmit={onSubmit} className="px-2">
-          <FormInput
-            id="name"
-            label="Name (Optional)"
-            type="text"
-            placeholder="Your Name"
-            name="name"
-            value={name}
-            onChange={onChange}
-            disabled={isLoading}
-          />
+          {/* First Name and Last Name - Side by Side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <FormInput
+              id="firstName"
+              label="First Name"
+              type="text"
+              placeholder="Your First Name"
+              name="firstName"
+              value={firstName}
+              onChange={onChange}
+              disabled={isLoading}
+              required
+            />
+
+            <FormInput
+              id="lastName"
+              label="Last Name"
+              type="text"
+              placeholder="Your Last Name"
+              name="lastName"
+              value={lastName}
+              onChange={onChange}
+              disabled={isLoading}
+              required
+            />
+          </div>
 
           <FormInput
             id="email"

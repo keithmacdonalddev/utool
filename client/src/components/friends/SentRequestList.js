@@ -63,7 +63,10 @@ function SentRequestList() {
                 <UserAvatar user={user} size="sm" />
                 <div>
                   <p className="font-medium text-foreground">
-                    {user.name || 'Unknown User'}
+                    {/* Updated to use firstName, lastName, and username */}
+                    {user.firstName
+                      ? `${user.firstName} ${user.lastName || ''}`.trim()
+                      : user.username || 'Unknown User'}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {user.email || 'No email available'}
@@ -76,7 +79,10 @@ function SentRequestList() {
                 onClick={() => handleCancelRequest(userId)}
                 disabled={isLoading}
                 aria-label={`Cancel friend request sent to ${
-                  user.name || 'Unknown User'
+                  // Updated to use firstName, lastName, and username
+                  user.firstName
+                    ? `${user.firstName} ${user.lastName || ''}`.trim()
+                    : user.username || 'Unknown User'
                 }`}
               >
                 <XCircle size={16} className="mr-1" /> Cancel Request

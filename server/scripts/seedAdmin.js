@@ -59,11 +59,12 @@ const seedAdminUser = async () => {
     } else {
       // Create new admin user
       adminUser = new User({
+        firstName: 'Keith',
+        lastName: 'MacDonald',
         email: adminEmail,
         password: adminPassword,
         role: 'Admin',
         isVerified: true, // Mark as verified immediately
-        // Add name if desired: name: 'Admin User',
       });
       await adminUser.save(); // Password hashing happens here via pre-save hook
       console.log('Admin user created successfully.');

@@ -129,7 +129,12 @@ const ProjectDetailsInfo = ({
           Created by
         </span>
         <span className="font-medium">
-          {project.owner?.name || 'Unknown user'}
+          {/* Updated to use firstName, lastName, and username */}
+          {project.owner?.firstName
+            ? `${project.owner.firstName} ${
+                project.owner.lastName || ''
+              }`.trim()
+            : project.owner?.username || 'Unknown user'}
         </span>{' '}
         on {project.createdAt ? formatDateForDisplay(project.createdAt) : 'N/A'}
       </div>
@@ -234,7 +239,13 @@ const ProjectDetailsInfo = ({
                         <option value="">Select friend...</option>
                         {availableUsersToAdd.map((user) => (
                           <option key={user._id} value={user._id}>
-                            {user.name} ({user.email})
+                            {/* Updated to use firstName, lastName, and username */}
+                            {user.firstName
+                              ? `${user.firstName} ${
+                                  user.lastName || ''
+                                }`.trim()
+                              : user.username}{' '}
+                            ({user.email})
                           </option>
                         ))}
                       </select>
@@ -263,14 +274,29 @@ const ProjectDetailsInfo = ({
                     src={
                       member.avatar ||
                       `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                        member.name || member.email || '?'
+                        // Updated to use firstName, lastName, and username for avatar fallback
+                        member.firstName
+                          ? `${member.firstName} ${
+                              member.lastName || ''
+                            }`.trim()
+                          : member.username || member.email || '?'
                       )}&background=random&color=fff&size=32`
                     }
-                    alt={member.name || member.email || 'Member'}
+                    alt={
+                      // Updated to use firstName, lastName, and username for alt text
+                      member.firstName
+                        ? `${member.firstName} ${member.lastName || ''}`.trim()
+                        : member.username || member.email || 'Member'
+                    }
                     className={`h-8 w-8 rounded-full object-cover border-2 border-dark-600 ${
                       i === 0 ? '' : '-ml-2'
                     } hover:border-primary transition-colors`}
-                    title={member.name || member.email}
+                    title={
+                      // Updated to use firstName, lastName, and username for title
+                      member.firstName
+                        ? `${member.firstName} ${member.lastName || ''}`.trim()
+                        : member.username || member.email
+                    }
                   />
                 ))}
                 {project.members.length > 5 && (
@@ -278,7 +304,12 @@ const ProjectDetailsInfo = ({
                     className="-ml-2 h-8 w-8 bg-dark-600 rounded-full border-2 border-dark-600 flex items-center justify-center text-xs text-gray-200"
                     title={project.members
                       .slice(5)
-                      .map((m) => m.name || m.email)
+                      // Updated to use firstName, lastName, and username for title
+                      .map((m) =>
+                        m.firstName
+                          ? `${m.firstName} ${m.lastName || ''}`.trim()
+                          : m.username || m.email
+                      )
                       .join(', ')}
                   >
                     +{project.members.length - 5}

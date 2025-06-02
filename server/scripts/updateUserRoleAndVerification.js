@@ -110,7 +110,7 @@ const updateUserRoleAndVerification = async () => {
     }
 
     console.log(
-      `Found user: ${user.name} (ID: ${user._id}, Current Role: ${user.role}, Verified: ${user.isVerified})`
+      `Found user: ${user.username} (ID: ${user._id}, Current Role: ${user.role}, Verified: ${user.isVerified})`
     );
 
     user.role = 'Admin';

@@ -65,15 +65,13 @@ export const protect = asyncHandler(async (req, res, next) => {
       if (settings.guestAccessEnabled) {
         // If guest access is enabled and no token, treat as guest
         req.user = {
-          _id: `guest_${randomUUID()}`, // Cryptographically secure UUID
-          name: 'Guest User',
+          _id: `guest_${randomUUID()}`,
+          username: 'Guest User', // Changed from name to username
+          firstName: 'Guest', // Added firstName for guest
+          lastName: 'User', // Added lastName for guest
           role: 'Guest', // Standardized role name
           isGuest: true, // Explicit flag for guest identification
-          // Add any other default properties expected by downstream logic,
-          // e.g., permissions object indicating no write access.
-          // For now, isGuest: true will be the primary check.
         };
-        // console.log('Guest user session initiated:', req.user); // Optional: for debugging
         return next(); // Proceed as guest
       } else {
         // No token and guest access is disabled
@@ -100,34 +98,55 @@ export const protect = asyncHandler(async (req, res, next) => {
   try {
     // Check if token is blacklisted (logged out)
     if (isTokenBlacklisted(token)) {
-      console.warn('Access attempt with blacklisted token', { token });
+      // console.log('Access denied: Token is blacklisted.'); // Optional: for debugging
       return res.status(401).json({
         success: false,
-        message: 'Token has been invalidated, please log in again',
+        message: 'Not authorized. Token has been invalidated.', // User-friendly message
       });
     }
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Get user from the token payload (ID) and attach to request
-    // Exclude password from being attached
-    req.user = await User.findById(decoded.id).select('-password');
+    // Check if user exists and attach to request object
+    // The decoded token now contains `id` and `username`.
+    // We fetch the full user object to ensure all fields are up-to-date.
+    req.user = await User.findById(decoded.id);
 
     if (!req.user) {
-      // Handle case where user associated with token no longer exists
-      return res
-        .status(401)
-        .json({ success: false, message: 'Not authorized, user not found' });
+      // console.log('Access denied: User not found for token.'); // Optional: for debugging
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized. User not found.', // User-friendly message
+      });
     }
 
-    next(); // Proceed to the next middleware/route handler
-  } catch (err) {
-    console.error('Token verification error:', err);
-    // Handle specific JWT errors like TokenExpiredError if needed
-    return res
-      .status(401)
-      .json({ success: false, message: 'Not authorized, token failed' });
+    // Check if user is verified (if applicable to the route, could be a separate middleware)
+    // For now, basic protection just ensures user exists and token is valid.
+    // Specific routes can add more checks like `authorize` middleware for roles.
+
+    // console.log('User authenticated:', req.user.email, req.user.role); // Optional: for debugging
+    next();
+  } catch (error) {
+    // console.error('Authentication error in protect middleware:', error.message); // Optional: for debugging
+    // Handle specific JWT errors for better client feedback
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized. Invalid token.', // User-friendly message
+      });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized. Token expired.', // User-friendly message
+      });
+    }
+    // Fallback for other errors
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized. Please log in.', // User-friendly message
+    });
   }
 });
 

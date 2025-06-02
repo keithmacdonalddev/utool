@@ -26,7 +26,7 @@ const scheduleTaskReminders = () => {
           $lte: new Date(now.getTime() + 60 * 60 * 1000), // +1 hour
         },
         reminderSent: false,
-      }).populate('user', 'name email');
+      }).populate('user', 'username firstName lastName email');
 
       logger.verbose(
         `Found ${tasks.length} tasks due in the next hour that need reminders`
@@ -66,7 +66,7 @@ const scheduleTaskReminders = () => {
             text: `Your task "${task.title}" is due soon.`,
             html: `
               <h2>Task Reminder</h2>
-              <p>Hello ${task.user.name},</p>
+              <p>Hello ${task.user.firstName || task.user.username},</p>
               <p>Your task <strong>${task.title}</strong> is due soon.</p>
               <p>Due Date: ${task.dueDate.toLocaleString()}</p>
               <p>Description: ${
@@ -131,7 +131,7 @@ const scheduleNoteReminders = () => {
           $lte: new Date(now.getTime() + 60 * 60 * 1000), // +1 hour
         },
         'reminder.sent': false,
-      }).populate('user', 'name email');
+      }).populate('user', 'username firstName lastName email');
 
       logger.verbose(
         `Found ${notes.length} notes with reminders due in the next hour`
@@ -171,7 +171,7 @@ const scheduleNoteReminders = () => {
             text: `Reminder for your note: "${note.title}"`,
             html: `
               <h2>Note Reminder</h2>
-              <p>Hello ${note.user.name},</p>
+              <p>Hello ${note.user.firstName || note.user.username},</p>
               <p>This is a reminder for your note: <strong>${
                 note.title
               }</strong></p>

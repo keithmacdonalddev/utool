@@ -70,7 +70,10 @@ function FriendRequestList() {
                 <UserAvatar user={user} size="sm" />
                 <div>
                   <p className="font-medium text-foreground">
-                    {user.name || 'Unknown User'}
+                    {/* Updated to use firstName, lastName, and username */}
+                    {user.firstName
+                      ? `${user.firstName} ${user.lastName || ''}`.trim()
+                      : user.username || 'Unknown User'}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {user.email || 'No email available'}
@@ -84,7 +87,10 @@ function FriendRequestList() {
                   onClick={() => handleAccept(userId)}
                   disabled={isLoading}
                   aria-label={`Accept friend request from ${
-                    user.name || 'Unknown User'
+                    // Updated to use firstName, lastName, and username
+                    user.firstName
+                      ? `${user.firstName} ${user.lastName || ''}`.trim()
+                      : user.username || 'Unknown User'
                   }`}
                 >
                   <UserCheck size={16} className="mr-1" /> Accept
@@ -95,7 +101,10 @@ function FriendRequestList() {
                   onClick={() => handleReject(userId)}
                   disabled={isLoading}
                   aria-label={`Reject friend request from ${
-                    user.name || 'Unknown User'
+                    // Updated to use firstName, lastName, and username
+                    user.firstName
+                      ? `${user.firstName} ${user.lastName || ''}`.trim()
+                      : user.username || 'Unknown User'
                   }`}
                 >
                   <UserX size={16} className="mr-1" /> Reject

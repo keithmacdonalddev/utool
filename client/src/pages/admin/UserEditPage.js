@@ -10,10 +10,10 @@ import FormCheckbox from '../../components/common/FormCheckbox';
 const UserEditPage = () => {
   const { id: userId } = useParams();
   const navigate = useNavigate();
-
   // Initialize with avatar field
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     role: '',
     isVerified: false,
@@ -37,11 +37,10 @@ const UserEditPage = () => {
 
   // Track if there are form changes
   const hasChanges = () => {
-    if (!originalData) return false;
-
-    // Check for changes in all fields except resetPassword and newPassword
+    if (!originalData) return false; // Check for changes in all fields except resetPassword and newPassword
     return (
-      originalData.name !== formData.name ||
+      originalData.firstName !== formData.firstName ||
+      originalData.lastName !== formData.lastName ||
       originalData.email !== formData.email ||
       originalData.role !== formData.role ||
       originalData.isVerified !== formData.isVerified ||
@@ -76,7 +75,8 @@ const UserEditPage = () => {
         if (res.data.success) {
           // Include avatar in destructuring and state update
           const {
-            name,
+            firstName,
+            lastName,
             email,
             role,
             isVerified,
@@ -90,7 +90,8 @@ const UserEditPage = () => {
           } = res.data.data;
 
           const userData = {
-            name,
+            firstName,
+            lastName,
             email,
             role,
             isVerified,
@@ -137,7 +138,12 @@ const UserEditPage = () => {
     setError('');
 
     // Basic validation
-    if (!formData.name.trim() || !formData.email.trim() || !formData.role) {
+    if (
+      !formData.firstName.trim() ||
+      !formData.lastName.trim() ||
+      !formData.email.trim() ||
+      !formData.role
+    ) {
       setError('Name, Email, and Role cannot be empty.');
       setIsUpdating(false);
       return;
@@ -218,16 +224,38 @@ const UserEditPage = () => {
         onSubmit={onSubmit}
         className="bg-card border border-dark-700 shadow-md rounded px-8 pt-6 pb-8 mb-4"
       >
-        {/* Name */}
-        <FormInput
-          id="name"
-          label="Name"
-          type="text"
-          name="name"
-          value={formData.name}
-          onChange={onChange}
-          required
-        />
+        {' '}
+        {/* User ID - Read Only */}
+        <div className="mb-4">
+          <label className="block text-foreground text-sm font-medium mb-2">
+            User ID (Read-only)
+          </label>
+          <div className="p-2 bg-dark-700 border border-dark-600 rounded text-sm font-mono text-gray-400">
+            {userId || 'Not available'}
+          </div>
+        </div>
+        {/* First Name and Last Name - Side by Side */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <FormInput
+            id="firstName"
+            label="First Name"
+            type="text"
+            name="firstName"
+            value={formData.firstName}
+            onChange={onChange}
+            required
+          />
+
+          <FormInput
+            id="lastName"
+            label="Last Name"
+            type="text"
+            name="lastName"
+            value={formData.lastName}
+            onChange={onChange}
+            required
+          />
+        </div>
         {/* Email */}
         <FormInput
           id="email"
@@ -294,7 +322,6 @@ const UserEditPage = () => {
             </div>
           )}
         </div>
-
         {/* Additional Metadata Fields */}
         <div className="mb-6">
           <label
@@ -313,7 +340,6 @@ const UserEditPage = () => {
             onChange={onChange}
           />
         </div>
-
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label
@@ -350,7 +376,6 @@ const UserEditPage = () => {
             />
           </div>
         </div>
-
         <div className="mb-6">
           <label
             className="block text-foreground text-sm font-medium mb-2"
@@ -368,7 +393,6 @@ const UserEditPage = () => {
             onChange={onChange}
           />
         </div>
-
         <div className="mb-6">
           <label
             className="block text-foreground text-sm font-medium mb-2"
@@ -390,7 +414,6 @@ const UserEditPage = () => {
             {formData.bio?.length || 0}/500 characters
           </p>
         </div>
-
         {/* Avatar URL Input */}
         <div className="mb-6">
           <label
@@ -419,7 +442,6 @@ const UserEditPage = () => {
             </div>
           )}
         </div>
-
         {/* IP Addresses Section */}
         {formData.ipAddresses && formData.ipAddresses.length > 0 && (
           <div className="mb-6">
@@ -438,7 +460,6 @@ const UserEditPage = () => {
             </ul>
           </div>
         )}
-
         <div className="flex items-center justify-center gap-4">
           <button
             className="px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50 disabled:opacity-50 transition-colors duration-200"

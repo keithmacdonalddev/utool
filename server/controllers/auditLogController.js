@@ -678,7 +678,7 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
     // Populate user details
     const userIds = userActivity.map((item) => item._id);
     const users = await User.find({ _id: { $in: userIds } }).select(
-      'name email role'
+      'username firstName lastName email role' // UPDATED
     );
 
     // Map user details to activity
@@ -690,11 +690,18 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
         user: user
           ? {
               _id: user._id,
-              name: user.name,
+              username: user.username, // UPDATED
+              firstName: user.firstName, // ADDED
+              lastName: user.lastName, // ADDED
               email: user.email,
               role: user.role,
             }
-          : { _id: activity._id, name: 'Unknown User' },
+          : {
+              _id: activity._id,
+              username: 'Unknown User',
+              firstName: 'Unknown',
+              lastName: 'User',
+            }, // UPDATED to include fallbacks
         stats: {
           totalActions: activity.totalActions,
           successRate:
@@ -736,8 +743,6 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
   }
 
   // Normal query execution (when not using journey grouping or reports)
-  query = query.populate('userId', 'name email role');
-
   // Select fields
   if (req.query.select) {
     const fields = req.query.select.split(',').join(' ');
@@ -749,8 +754,11 @@ export const getAuditLogs = asyncHandler(async (req, res, next) => {
     const sortBy = req.query.sort.split(',').join(' ');
     query = query.sort(sortBy);
   } else {
-    query = query.sort('-timestamp');
+    query = query.sort('-timestamp'); // Default sort
   }
+
+  // Populate user details - UPDATED
+  query = query.populate('user', 'username firstName lastName email');
 
   // Pagination
   const page = parseInt(req.query.page, 10) || 1;
@@ -834,7 +842,7 @@ export const searchAuditLogs = asyncHandler(async (req, res, next) => {
     { score: { $meta: 'textScore' } }
   )
     .sort({ score: { $meta: 'textScore' } })
-    .populate('userId', 'name email role')
+    .populate('user', 'username firstName lastName email')
     .limit(50);
 
   res.status(200).json({
@@ -1001,7 +1009,9 @@ export const getUserActivitySummary = asyncHandler(async (req, res, next) => {
       data: {
         user: {
           _id: user._id,
-          name: user.name,
+          username: user.username, // UPDATED
+          firstName: user.firstName, // ADDED
+          lastName: user.lastName, // ADDED
           email: user.email,
           role: user.role,
         },
@@ -1051,7 +1061,9 @@ export const getUserActivitySummary = asyncHandler(async (req, res, next) => {
     data: {
       user: {
         _id: user._id,
-        name: user.name,
+        username: user.username, // UPDATED
+        firstName: user.firstName, // ADDED
+        lastName: user.lastName, // ADDED
         email: user.email,
         role: user.role,
       },
@@ -1105,7 +1117,7 @@ export const getResourceAuditLogs = asyncHandler(async (req, res) => {
     'stateChanges.resourceId': resourceId,
   })
     .sort('-timestamp')
-    .populate('userId', 'name email role');
+    .populate('user', 'username firstName lastName email');
 
   res.status(200).json({
     success: true,
@@ -1113,3 +1125,378 @@ export const getResourceAuditLogs = asyncHandler(async (req, res) => {
     data: logs,
   });
 });
+
+/**
+ * Create a new audit log entry
+ *
+ * @route   POST /api/v1/audit-logs
+ * @access  Private/Admin
+ */
+export const createAuditLogEntry = asyncHandler(async (req, res, next) => {
+  const {
+    action,
+    resourceType,
+    resourceId,
+    status,
+    ipAddress,
+    userAgent,
+    context,
+    details,
+    eventCategory,
+    severityLevel,
+    journeyId,
+    clientInfo,
+    performanceMetrics,
+    stateChanges,
+  } = req.body;
+
+  try {
+    // Validate required fields
+    if (!action || !resourceType || !resourceId) {
+      return next(
+        new ErrorResponse(
+          'Action, resourceType, and resourceId are required',
+          400
+        )
+      );
+    }
+
+    // Create audit log entry
+    const log = await AuditLog.create({
+      action,
+      resourceType,
+      resourceId,
+      status,
+      ipAddress,
+      userAgent,
+      context,
+      details,
+      eventCategory: eventCategory || 'general',
+      severityLevel: severityLevel || 'info',
+      journeyId,
+      clientInfo,
+      performanceMetrics,
+      stateChanges,
+      timestamp: new Date(),
+      // user: req.user ? req.user._id : null, // This was for the route handler, remove from helper
+    });
+
+    // Populate userDetails if userId or user object is available in logData for the helper
+    if (logData.user) {
+      log.userId = logData.user._id;
+      log.userDetails = {
+        username: logData.user.username,
+        firstName: logData.user.firstName,
+        lastName: logData.user.lastName,
+        email: logData.user.email,
+      };
+    } else if (logData.userId) {
+      log.userId = logData.userId;
+      try {
+        const foundUser = await User.findById(logData.userId).select(
+          'username firstName lastName email'
+        );
+        if (foundUser) {
+          log.userDetails = {
+            username: foundUser.username,
+            firstName: foundUser.firstName,
+            lastName: foundUser.lastName,
+            email: foundUser.email,
+          };
+        }
+      } catch (error) {
+        logger.warn(
+          `Could not fetch userDetails for userId ${logData.userId} in audit log: ${error.message}`
+        );
+      }
+    }
+    await log.save(); // Save again to persist userDetails if added
+
+    logger.info(
+      `Audit log created: ${log.action} for ${log.resourceType}:${log.resourceId}`,
+      { auditLogId: log._id }
+    );
+    return log;
+  } catch (error) {
+    logger.error('Error creating audit log entry:', error);
+    return next(new ErrorResponse('Error creating audit log entry', 500));
+  }
+});
+
+/**
+ * Create a new audit log entry (ROUTE HANDLER - POST /api/v1/audit-logs)
+ *
+ * @route   POST /api/v1/audit-logs
+ * @access  Private/Admin
+ */
+export const createAuditLog = asyncHandler(async (req, res, next) => {
+  // Renamed from createAuditLogEntry to createAuditLog to avoid conflict
+  const {
+    action,
+    resourceType,
+    resourceId,
+    status,
+    ipAddress,
+    userAgent,
+    context,
+    details,
+    eventCategory,
+    severityLevel,
+    journeyId,
+    clientInfo,
+    performanceMetrics,
+    stateChanges,
+  } = req.body;
+
+  try {
+    // Validate required fields
+    if (!action || !resourceType || !resourceId) {
+      return next(
+        new ErrorResponse(
+          'Action, resourceType, and resourceId are required',
+          400
+        )
+      );
+    }
+
+    const logData = {
+      action,
+      resourceType,
+      resourceId,
+      status,
+      ipAddress,
+      userAgent,
+      context,
+      details,
+      eventCategory: eventCategory || 'general',
+      severityLevel: severityLevel || 'info',
+      journeyId,
+      clientInfo,
+      performanceMetrics,
+      stateChanges,
+      user: req.user, // Pass the full req.user object to the helper
+    };
+
+    // Use the helper function to create the entry
+    const log = await createAuditLogEntry(logData);
+
+    res.status(201).json({
+      success: true,
+      data: log,
+    });
+  } catch (error) {
+    logger.error('Error creating audit log entry via route:', error);
+    return next(new ErrorResponse('Error creating audit log entry', 500));
+  }
+});
+
+/**
+ * Get a specific audit log by ID
+ *
+ * @route   GET /api/v1/audit-logs/:id
+ * @access  Private/Admin
+ */
+export const getAuditLogById = asyncHandler(async (req, res, next) => {
+  const auditLog = await AuditLog.findById(req.params.id).populate(
+    'user',
+    'username firstName lastName email' // UPDATED
+  );
+
+  if (!auditLog) {
+    return next(new ErrorResponse('Audit log not found', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: auditLog,
+  });
+});
+
+/**
+ * Get audit logs for a specific user
+ *
+ * @route   GET /api/v1/audit-logs/users/:userId
+ * @access  Private/Admin
+ */
+export const getAuditLogsByUser = asyncHandler(async (req, res, next) => {
+  const userId = req.params.userId;
+
+  // Validate user exists
+  const user = await User.findById(userId);
+  if (!user) {
+    return next(new ErrorResponse(`User not found with id of ${userId}`, 404));
+  }
+
+  // Base query for audit logs by this user
+  let query = AuditLog.find({ userId });
+
+  // Populate user details - UPDATED
+  query = query.populate('user', 'username firstName lastName email');
+
+  // Sorting (default to newest first)
+  query = query.sort(req.query.sort || '-timestamp');
+
+  // Pagination
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 25;
+  const startIndex = (page - 1) * limit;
+  const endIndex = page * limit;
+
+  // Count total documents for this user
+  const total = await query.countDocuments();
+
+  // Paginate
+  query = query.skip(startIndex).limit(limit);
+
+  // Execute query
+  const auditLogs = await query;
+
+  // Pagination result
+  const pagination = {};
+  if (endIndex < total) {
+    pagination.next = {
+      page: page + 1,
+      limit,
+    };
+  }
+
+  if (startIndex > 0) {
+    pagination.prev = {
+      page: page - 1,
+      limit,
+    };
+  }
+
+  res.status(200).json({
+    success: true,
+    count: auditLogs.length,
+    pagination,
+    data: auditLogs,
+  });
+});
+
+/**
+ * Get audit logs for a specific journey
+ *
+ * @route   GET /api/v1/audit-logs/journeys/:journeyId
+ * @access  Private/Admin
+ */
+export const getAuditLogJourney = asyncHandler(async (req, res, next) => {
+  const journeyId = req.params.journeyId;
+
+  const logs = await AuditLog.find({ journeyId })
+    .sort('timestamp')
+    .populate('user', 'username firstName lastName email'); // UPDATED
+
+  if (!logs || logs.length === 0) {
+    return next(new ErrorResponse('No logs found for this journey', 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    count: logs.length,
+    data: logs,
+  });
+});
+
+/**
+ * Create a login audit log entry
+ *
+ * @route   POST /api/v1/audit-logs/login
+ * @access  Private
+ */
+export const createAuditLogEntryForLogin = async (
+  userId,
+  status,
+  ipAddress,
+  userAgent,
+  loginMethod = 'password',
+  context = 'User login attempt',
+  user, // Pass the full user object if available
+  journeyId,
+  clientInfo
+) => {
+  // userDetails will be populated by the main createAuditLogEntry helper
+  return createAuditLogEntry({
+    userId, // Keep userId for direct linking if user object is not yet populated
+    user, // Pass the full user object
+    action: 'login',
+    resourceType: 'authentication',
+    resourceId: userId,
+    status,
+    ipAddress,
+    userAgent,
+    context,
+    details: { loginMethod },
+    eventCategory: 'authentication',
+    severityLevel: status === 'success' ? 'info' : 'warning',
+    journeyId,
+    clientInfo,
+  });
+};
+
+/**
+ * Create a logout audit log entry
+ *
+ * @route   POST /api/v1/audit-logs/logout
+ * @access  Private
+ */
+export const createAuditLogEntryForLogout = async (
+  req, // Pass the Express request object
+  userId,
+  status = 'success',
+  context = 'User logout',
+  journeyId,
+  clientInfo
+) => {
+  // userDetails will be populated by the main createAuditLogEntry helper
+  return createAuditLogEntry({
+    user: req.user, // Pass the full req.user object
+    action: 'logout',
+    resourceType: 'authentication',
+    resourceId: userId,
+    status,
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent'),
+    context,
+    eventCategory: 'authentication',
+    severityLevel: 'info',
+    journeyId,
+    clientInfo,
+  });
+};
+
+/**
+ * Create a system event audit log entry
+ *
+ * @route   POST /api/v1/audit-logs/system
+ * @access  Private/Admin
+ */
+export const createAuditLogEntryForSystemEvent = async (
+  action,
+  status,
+  details,
+  resourceType = 'System',
+  resourceId = null,
+  severityLevel = 'info',
+  userId = null, // Optional: ID of user initiating or related to the system event
+  context = 'System event',
+  journeyId,
+  clientInfo
+) => {
+  const logData = {
+    action,
+    resourceType,
+    resourceId,
+    status,
+    details,
+    eventCategory: 'system',
+    severityLevel,
+    context,
+    journeyId,
+    clientInfo,
+    userId, // Pass userId, userDetails will be fetched by helper if needed
+  };
+
+  return createAuditLogEntry(logData);
+};

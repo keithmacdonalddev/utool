@@ -22,10 +22,10 @@ const ProfilePage = () => {
     isError: authError,
     message: authMessage,
   } = useSelector((state) => state.auth);
-
   // Initialize with all fields
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     avatar: '',
     jobTitle: '',
@@ -39,12 +39,12 @@ const ProfilePage = () => {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const { showNotification } = useNotifications();
-
   // Populate form when user data is loaded
   useEffect(() => {
     if (user) {
       setFormData({
-        name: user.name || '',
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
         email: user.email || '',
         avatar: user.avatar || '',
         jobTitle: user.jobTitle || '',
@@ -65,11 +65,13 @@ const ProfilePage = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     setIsUpdating(true);
-    setUpdateError('');
-
-    // Basic validation
-    if (!formData.name.trim() || !formData.email.trim()) {
-      setUpdateError('Name and Email cannot be empty.');
+    setUpdateError(''); // Basic validation
+    if (
+      !formData.firstName.trim() ||
+      !formData.lastName.trim() ||
+      !formData.email.trim()
+    ) {
+      setUpdateError('First name, last name, and email cannot be empty.');
       setIsUpdating(false);
       return;
     }
@@ -141,28 +143,49 @@ const ProfilePage = () => {
   return (
     <div className="container mx-auto p-4 max-w-lg">
       <PageHeader title="Your Profile" backLink="/dashboard" />
-
       {updateError && (
         <Alert
           type="error"
           message={updateError}
           onClose={() => setUpdateError('')}
         />
-      )}
-
+      )}{' '}
       <Card>
         <form onSubmit={onSubmit} className="px-2">
-          <FormInput
-            id="name"
-            label="Name"
-            type="text"
-            placeholder="Your Name"
-            name="name"
-            value={formData.name}
-            onChange={onChange}
-            required
-          />
+          {' '}
+          {/* Read-only User ID display */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-text mb-1">
+              User ID (Read-only)
+            </label>
+            <div className="p-2 bg-dark-700 border border-dark-600 rounded text-sm font-mono text-gray-400">
+              {user._id || 'Not available'}
+            </div>
+          </div>
+          {/* First Name and Last Name - Side by Side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <FormInput
+              id="firstName"
+              label="First Name"
+              type="text"
+              placeholder="Your First Name"
+              name="firstName"
+              value={formData.firstName}
+              onChange={onChange}
+              required
+            />
 
+            <FormInput
+              id="lastName"
+              label="Last Name"
+              type="text"
+              placeholder="Your Last Name"
+              name="lastName"
+              value={formData.lastName}
+              onChange={onChange}
+              required
+            />
+          </div>
           <FormInput
             id="email"
             label="Email Address"
@@ -173,7 +196,6 @@ const ProfilePage = () => {
             onChange={onChange}
             required
           />
-
           <FormInput
             id="avatar"
             label="Avatar URL (Optional)"
@@ -185,7 +207,6 @@ const ProfilePage = () => {
             helpText={formData.avatar ? 'Preview shown below' : null}
             className="mb-2"
           />
-
           {formData.avatar && (
             <div className="mt-2 mb-4 flex justify-center">
               <img
@@ -194,13 +215,14 @@ const ProfilePage = () => {
                 className="h-16 w-16 rounded-full object-cover"
                 onError={(e) =>
                   (e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                    formData.name || 'User'
+                    `${formData.firstName || ''} ${
+                      formData.lastName || ''
+                    }`.trim() || 'User'
                   )}&background=random`)
                 }
               />
             </div>
           )}
-
           <FormInput
             id="jobTitle"
             label="Job Title"
@@ -210,7 +232,6 @@ const ProfilePage = () => {
             value={formData.jobTitle}
             onChange={onChange}
           />
-
           <div className="grid grid-cols-2 gap-4">
             <FormInput
               id="country"
@@ -232,7 +253,6 @@ const ProfilePage = () => {
               onChange={onChange}
             />
           </div>
-
           <FormInput
             id="website"
             label="Website"
@@ -242,7 +262,6 @@ const ProfilePage = () => {
             value={formData.website}
             onChange={onChange}
           />
-
           <FormTextarea
             id="bio"
             label="Bio"
@@ -255,7 +274,6 @@ const ProfilePage = () => {
             showCharCount={true}
             className="mb-6"
           />
-
           <div className="flex items-center justify-center mb-6">
             <Button type="submit" disabled={isUpdating}>
               {isUpdating ? 'Updating...' : 'Update Profile'}

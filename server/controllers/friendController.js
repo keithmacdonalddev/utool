@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import asyncHandler from '../middleware/async.js';
 import ErrorResponse from '../utils/errorResponse.js';
 
-// @desc    Search users by name or email
+// @desc    Search users by firstName, lastName or email
 // @route   GET /api/v1/friends/search
 // @access  Private
 export const searchUsers = asyncHandler(async (req, res, next) => {
@@ -27,14 +27,14 @@ export const searchUsers = asyncHandler(async (req, res, next) => {
     ...currentUser.friendRequestsSent,
     ...currentUser.friendRequestsReceived,
   ];
-
   const users = await User.find({
     _id: { $nin: excludedIds }, // Exclude specified IDs
     $or: [
-      { name: { $regex: searchTerm, $options: 'i' } },
+      { firstName: { $regex: searchTerm, $options: 'i' } },
+      { lastName: { $regex: searchTerm, $options: 'i' } },
       { email: { $regex: searchTerm, $options: 'i' } },
     ],
-  }).select('name email avatar'); // Select only necessary fields
+  }).select('firstName lastName email avatar'); // Select only necessary fields
 
   res.status(200).json({ success: true, data: users });
 });
@@ -86,14 +86,13 @@ export const sendFriendRequest = asyncHandler(async (req, res, next) => {
   try {
     const Notification = (await import('../models/Notification.js')).default;
     const { logger } = await import('../utils/logger.js');
-
     logger.info(
       `Creating friend request notification for user ${recipientId}`,
       {
         sender: senderId,
-        senderName: sender.name,
+        senderName: `${sender.firstName} ${sender.lastName}`,
         recipient: recipientId,
-        recipientName: recipient.name,
+        recipientName: `${recipient.firstName} ${recipient.lastName}`,
       }
     );
 
@@ -101,7 +100,7 @@ export const sendFriendRequest = asyncHandler(async (req, res, next) => {
       user: recipientId,
       type: 'friend_request',
       title: 'New Friend Request',
-      message: `${sender.name} sent you a friend request`,
+      message: `${sender.firstName} ${sender.lastName} sent you a friend request`,
       relatedItem: senderId,
       itemModel: 'User',
       url: '/friends',
@@ -236,14 +235,13 @@ export const acceptFriendRequest = asyncHandler(async (req, res, next) => {
   try {
     const Notification = (await import('../models/Notification.js')).default;
     const { logger } = await import('../utils/logger.js');
-
     logger.info(
       `Creating friend request acceptance notification for user ${senderId}`,
       {
         sender: recipientId,
-        senderName: recipient.name,
+        senderName: `${recipient.firstName} ${recipient.lastName}`,
         recipient: senderId,
-        recipientName: sender.name,
+        recipientName: `${sender.firstName} ${sender.lastName}`,
       }
     );
 
@@ -251,7 +249,7 @@ export const acceptFriendRequest = asyncHandler(async (req, res, next) => {
       user: senderId,
       type: 'friend_request',
       title: 'Friend Request Accepted',
-      message: `${recipient.name} accepted your friend request`,
+      message: `${recipient.firstName} ${recipient.lastName} accepted your friend request`,
       relatedItem: recipientId,
       itemModel: 'User',
       url: '/friends',
@@ -479,7 +477,7 @@ export const removeFriend = asyncHandler(async (req, res, next) => {
 export const getFriends = asyncHandler(async (req, res, next) => {
   const user = await User.findById(req.user.id).populate(
     'friends',
-    'name email avatar'
+    'firstName lastName email avatar'
   );
   if (!user) {
     return next(new ErrorResponse('User not found', 404));
@@ -492,8 +490,8 @@ export const getFriends = asyncHandler(async (req, res, next) => {
 // @access  Private
 export const getFriendRequests = asyncHandler(async (req, res, next) => {
   const user = await User.findById(req.user.id)
-    .populate('friendRequestsSent', 'name email avatar')
-    .populate('friendRequestsReceived', 'name email avatar');
+    .populate('friendRequestsSent', 'firstName lastName email avatar')
+    .populate('friendRequestsReceived', 'firstName lastName email avatar');
 
   if (!user) {
     return next(new ErrorResponse('User not found', 404));

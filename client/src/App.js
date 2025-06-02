@@ -54,6 +54,22 @@ const GuestAnalyticsPage = lazy(() =>
   import('./pages/admin/GuestAnalyticsPage')
 );
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
+const AdminDashboardPage = lazy(() =>
+  import('./pages/admin/AdminDashboardPage')
+); // New admin dashboard
+const AnalyticsPage = lazy(() => import('./pages/admin/AnalyticsPage')); // Enhanced analytics page
+const PublicSettingsPage = lazy(() =>
+  import('./pages/admin/PublicSettingsPage')
+); // Public settings management
+const SystemHealthPage = lazy(() => import('./pages/admin/SystemHealthPage')); // System health monitoring
+const BatchOperationsPage = lazy(() =>
+  import('./pages/admin/BatchOperationsPage')
+); // Batch operations and maintenance tools
+const RoleManagementPage = lazy(() =>
+  import('./pages/admin/RoleManagementPage')
+); // Role management and permissions
+const ReportingPage = lazy(() => import('./pages/admin/ReportingPage')); // Reporting & Audit - Milestone 6
+const ComingSoonPage = lazy(() => import('./components/admin/ComingSoonPage')); // Coming soon component for future features
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
@@ -203,6 +219,16 @@ function App() {
                     <Route
                       element={<ProtectedRoute allowedRoles={['Admin']} />}
                     >
+                      {/* Main admin dashboard and redirect */}
+                      <Route
+                        path="/admin"
+                        element={<Navigate to="/admin/dashboard" replace />}
+                      />
+                      <Route
+                        path="/admin/dashboard"
+                        element={<AdminDashboardPage />}
+                      />
+                      {/* Existing admin routes */}
                       <Route
                         path="/admin/users"
                         element={<AdminUserListPage />}
@@ -222,6 +248,45 @@ function App() {
                       <Route
                         path="/admin/analytics/guest"
                         element={<GuestAnalyticsPage />}
+                      />
+                      {/* New routes with placeholder pages */}
+                      <Route
+                        path="/admin/roles"
+                        element={<RoleManagementPage />}
+                      />
+                      <Route
+                        path="/admin/system-health"
+                        element={<SystemHealthPage />}
+                      />
+                      <Route
+                        path="/admin/analytics"
+                        element={<AnalyticsPage />}
+                      />
+                      <Route
+                        path="/admin/public-settings"
+                        element={<PublicSettingsPage />}
+                      />
+                      <Route
+                        path="/admin/batch-operations"
+                        element={<BatchOperationsPage />}
+                      />
+                      <Route
+                        path="/admin/reporting"
+                        element={<ReportingPage />}
+                      />
+                      <Route
+                        path="/admin/maintenance"
+                        element={
+                          <ComingSoonPage
+                            title="Advanced Maintenance"
+                            features={[
+                              'Scheduled maintenance windows',
+                              'Automated backup management',
+                              'Performance optimization wizards',
+                              'Database migration tools',
+                            ]}
+                          />
+                        }
                       />
                     </Route>
                   </Route>

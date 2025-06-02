@@ -8,8 +8,10 @@ import asyncHandler from 'express-async-handler';
 import ErrorResponse from '../utils/errorResponse.js';
 
 // Helper function to generate JWT
-const getSignedJwtToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const getSignedJwtToken = (id, username) => {
+  // Added username to payload
+  return jwt.sign({ id, username }, process.env.JWT_SECRET, {
+    // Added username to JWT payload
     expiresIn: process.env.JWT_EXPIRES_IN || '30d', // Default to 30 days
   });
 };
@@ -34,22 +36,45 @@ async function addIpToUser(user, ip) {
 // @route   POST /api/v1/auth/register
 // @access  Public
 export const register = asyncHandler(async (req, res, next) => {
-  const { name, email, password } = req.body;
+  // Extract firstName and lastName from request body instead of single 'name' field
+  // This allows for better data granularity and consistent user identification
+  const { firstName, lastName, username, email, password } = req.body; // Added username
 
   try {
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    // Check if user already exists by email or username
+    const existingUserByEmail = await User.findOne({ email });
+    if (existingUserByEmail) {
       const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-      await auditLog(req, 'register', 'failed', { email });
+      await auditLog(req, 'register', 'failed', {
+        email,
+        reason: 'Email already exists',
+      });
       return res
         .status(400)
-        .json({ success: false, message: 'User already exists' });
+        .json({
+          success: false,
+          message: 'User with this email already exists',
+        });
     }
 
-    // Create user
+    const existingUserByUsername = await User.findOne({ username });
+    if (existingUserByUsername) {
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+      await auditLog(req, 'register', 'failed', {
+        username,
+        reason: 'Username already exists',
+      });
+      return res
+        .status(400)
+        .json({ success: false, message: 'Username is already taken' });
+    }
+
+    // Create user with separate firstName and lastName fields
+    // This provides better data structure for user identification and display purposes
     const user = await User.create({
-      name,
+      firstName,
+      lastName,
+      username, // Added username
       email,
       password, // Password will be hashed by Mongoose pre-save hook
     });
@@ -356,13 +381,17 @@ export const getMe = asyncHandler(async (req, res, next) => {
   res.status(200).json({ success: true, data: user });
 });
 
-// @desc    Update user details (name, email - not password)
+// @desc    Update user details (firstName, lastName, email - not password)
 // @route   PUT /api/v1/auth/updateme
 // @access  Private
 export const updateMe = asyncHandler(async (req, res, next) => {
   // Fields allowed to be updated by the user themselves
+  // Updated to use firstName and lastName instead of single 'name' field
+  // This provides better granular control over user name components
   const fieldsToUpdate = {
-    name: req.body.name,
+    firstName: req.body.firstName,
+    lastName: req.body.lastName,
+    username: req.body.username, // Added username
     email: req.body.email,
     avatar: req.body.avatar,
     jobTitle: req.body.jobTitle,
@@ -418,11 +447,16 @@ export const updateMe = asyncHandler(async (req, res, next) => {
     // Handle potential duplicate email error
     if (
       err.code === 11000 ||
-      (err.name === 'MongoServerError' && err.keyValue?.email)
+      (err.name === 'MongoServerError' &&
+        (err.keyValue?.email || err.keyValue?.username)) // Check for username uniqueness
     ) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Email address already in use.' });
+      let message = 'A user with that value already exists.';
+      if (err.keyValue?.email) {
+        message = 'Email address already in use.';
+      } else if (err.keyValue?.username) {
+        message = 'Username already taken.';
+      }
+      return res.status(400).json({ success: false, message });
     }
     // Handle validation errors
     if (err.name === 'ValidationError') {
@@ -573,13 +607,23 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
     }
 
     // Issue a new access token
-    const accessToken = getSignedJwtToken(user.id); // Assuming getSignedJwtToken only returns access token
+    const accessToken = getSignedJwtToken(user.id, user.username); // Pass username
 
     res.status(200).json({
       success: true,
       token: accessToken,
       // Optionally, send back user data if needed, but typically just the new access token
-      // data: { id: user._id, name: user.name, email: user.email, role: user.role }
+      user: {
+        // Send updated user object structure
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+        isVerified: user.isVerified,
+      },
     });
   } catch (err) {
     // Handle expired or invalid refresh token
@@ -591,7 +635,7 @@ export const refreshToken = asyncHandler(async (req, res, next) => {
 // Get token from model, create cookie and send response
 const sendTokenResponse = (user, statusCode, res) => {
   // Create access token
-  const accessToken = getSignedJwtToken(user.id); // This should be the short-lived access token
+  const accessToken = getSignedJwtToken(user.id, user.username); // Pass username to include in JWT payload
 
   // Create refresh token
   const refreshToken = jwt.sign(
@@ -636,13 +680,20 @@ const sendTokenResponse = (user, statusCode, res) => {
     success: true,
     token: accessToken, // Access token
     user: {
-      // MODIFIED: Include user data in the response
+      // MODIFIED: Include user data in the response with firstName/lastName/username fields
       _id: user._id,
-      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username, // Added username
       email: user.email,
       role: user.role,
       avatar: user.avatar, // Add other relevant non-sensitive fields
       isVerified: user.isVerified,
+      jobTitle: user.jobTitle,
+      country: user.country,
+      city: user.city,
+      website: user.website,
+      bio: user.bio,
       // Add any other fields the client might need immediately after login
     },
   });

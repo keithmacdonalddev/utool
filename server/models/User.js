@@ -7,10 +7,33 @@ import bcrypt from 'bcryptjs'; // Library for hashing passwords
 // Define the User schema using Mongoose's schema constructor
 // Each field specifies the type of data and additional validation/options
 const UserSchema = new mongoose.Schema({
-  // User's full name
-  name: {
-    type: String, // Data type
+  // User's first name - separated from the original 'name' field for better data granularity
+  firstName: {
+    type: String, // Data type for storing the user's first name
+    required: [true, 'Please provide a first name'], // Field is mandatory with custom error message
     trim: true, // Removes whitespace from both ends of the string
+    maxlength: [50, 'First name cannot be longer than 50 characters'], // Prevent extremely long names
+  },
+
+  // User's last name - separated from the original 'name' field for better data granularity
+  lastName: {
+    type: String, // Data type for storing the user's last name
+    required: [true, 'Please provide a last name'], // Field is mandatory with custom error message
+    trim: true, // Removes whitespace from both ends of the string
+    maxlength: [50, 'Last name cannot be longer than 50 characters'], // Prevent extremely long names
+  },
+
+  // New username field
+  username: {
+    type: String,
+    required: [true, 'Please provide a username'],
+    unique: true,
+    trim: true,
+    lowercase: true, // Optional: enforce lowercase usernames
+    minlength: [3, 'Username must be at least 3 characters'],
+    maxlength: [30, 'Username cannot be longer than 30 characters'],
+    // Optional: Add a regex for allowed characters if needed
+    // match: [/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'],
   },
 
   // User's email address - used as the unique identifier for authentication

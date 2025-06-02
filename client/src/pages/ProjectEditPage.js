@@ -100,7 +100,10 @@ const ProjectEditPage = () => {
         // This prevents the UI from breaking completely
         const placeholders = memberIds.map((id) => ({
           _id: id,
-          name: `Member (${id.substring(0, 5)}...)`,
+          // Updated to use username as a fallback
+          username: `Member (${id.substring(0, 5)}...)`,
+          firstName: 'Member',
+          lastName: `(${id.substring(0, 5)}...)`,
           email: 'Unknown email',
         }));
         setNonFriendMembers(placeholders);
@@ -352,10 +355,10 @@ const ProjectEditPage = () => {
   );
 
   // Find owner information for display
-  const ownerInfo =
-    [...friends, ...nonFriendMembers].find(
-      (member) => member._id === projectOwner
-    ) || {};
+  // Updated to use firstName, lastName, and username
+  const ownerInfo = [...friends, ...nonFriendMembers].find(
+    (member) => member._id === projectOwner
+  ) || { username: 'Unknown Owner', firstName: '', lastName: '' };
 
   return (
     <div className="container mx-auto px-4 py-8 bg-background text-foreground">
@@ -365,6 +368,22 @@ const ProjectEditPage = () => {
         <Card>
           {/* Form with grid layout for fields */}
           <form onSubmit={onSubmit} className="space-y-6 px-2">
+            {/* Project Owner Display */}
+            {projectOwner && (
+              <div className="mb-4 p-3 bg-muted/50 rounded-md">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Project Owner
+                </p>
+                <p className="text-lg">
+                  {ownerInfo.firstName
+                    ? `${ownerInfo.firstName} ${
+                        ownerInfo.lastName || ''
+                      }`.trim()
+                    : ownerInfo.username}
+                </p>
+              </div>
+            )}
+
             {/* Project Name */}
             <div>
               <FormInput
@@ -448,17 +467,6 @@ const ProjectEditPage = () => {
               </div>
             </div>
 
-            {/* Project Owner (non-editable) */}
-            <div className="mb-2">
-              <label className="block text-foreground text-sm font-medium mb-1.5">
-                Project Owner
-              </label>
-              <div className="bg-dark-800 px-3 py-2 rounded-md border border-dark-600 text-foreground/90">
-                {ownerInfo.name || 'Owner'}
-                {ownerInfo.email ? ` (${ownerInfo.email})` : ''}
-              </div>
-            </div>
-
             {/* Members */}
             <div className="mb-6">
               <label
@@ -480,9 +488,12 @@ const ProjectEditPage = () => {
                 onChange={onChange}
                 className="w-full px-3 py-2 rounded-md border bg-dark-700 text-foreground border-dark-600 hover:border-dark-500 focus:outline-none focus:ring-2 focus:ring-primary transition-colors duration-200 h-32"
               >
-                {availableMembers.map((user) => (
-                  <option key={user._id} value={user._id}>
-                    {user.name} ({user.email})
+                {availableMembers.map((member) => (
+                  <option key={member._id} value={member._id}>
+                    {member.firstName
+                      ? `${member.firstName} ${member.lastName || ''}`.trim()
+                      : member.username}{' '}
+                    ({member.email || 'No email'})
                   </option>
                 ))}
               </select>

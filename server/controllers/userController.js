@@ -110,29 +110,41 @@ export const getUser = async (req, res, next) => {
 // @access  Private/Admin
 export const createUser = async (req, res, next) => {
   // Admin might set role, initial password, verification status, avatar directly
-  const { name, email, password, role, isVerified, avatar } = req.body;
+  // Updated to use firstName, lastName, and username instead of single 'name' field
+  const {
+    firstName,
+    lastName,
+    username,
+    email,
+    password,
+    role,
+    isVerified,
+    avatar,
+  } = req.body;
 
   try {
     logger.verbose('Admin attempted to create new user', {
       userId: req.user?.id,
+      username,
       email,
     });
 
-    // Basic validation
-    if (!name || !email || !password || !role) {
+    // Basic validation - updated to require firstName, lastName, username, email, password, and role
+    if (!firstName || !lastName || !username || !email || !password || !role) {
       logger.warn('Invalid user creation request - missing required fields', {
         userId: req.user?.id,
         providedFields: Object.keys(req.body),
       });
       return res.status(400).json({
         success: false,
-        message: 'Please provide name, email, password, and role',
+        message:
+          'Please provide firstName, lastName, username, email, password, and role',
       });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    // Check if user already exists by email or username
+    const existingUserByEmail = await User.findOne({ email });
+    if (existingUserByEmail) {
       logger.warn('User creation failed - email already exists', {
         userId: req.user?.id,
         email,
@@ -142,9 +154,22 @@ export const createUser = async (req, res, next) => {
         message: 'User with that email already exists',
       });
     }
+    const existingUserByUsername = await User.findOne({ username });
+    if (existingUserByUsername) {
+      logger.warn('User creation failed - username already exists', {
+        userId: req.user?.id,
+        username,
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'User with that username already exists',
+      });
+    }
 
     const user = await User.create({
-      name,
+      firstName,
+      lastName,
+      username, // Added username
       email,
       password, // Hashed by pre-save hook
       role,
@@ -239,11 +264,11 @@ export const updateUser = async (req, res, next) => {
     const oldValues = {};
     const changedValues = {};
     let hasRoleChanged = false;
-    let hasProfileChanged = false;
-
-    // Update fields
+    let hasProfileChanged = false; // Update fields - updated to include firstName, lastName, and username
     const updatableFields = [
-      'name',
+      'firstName',
+      'lastName',
+      'username', // Added username
       'email',
       'role',
       'isVerified',
@@ -362,11 +387,16 @@ export const updateUser = async (req, res, next) => {
 
     if (
       err.code === 11000 ||
-      (err.name === 'MongoServerError' && err.keyValue?.email)
+      (err.name === 'MongoServerError' &&
+        (err.keyValue?.email || err.keyValue?.username)) // Check for username uniqueness
     ) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Email address already in use.' });
+      let message = 'A user with that value already exists.';
+      if (err.keyValue?.email) {
+        message = 'Email address already in use.';
+      } else if (err.keyValue?.username) {
+        message = 'Username already taken.';
+      }
+      return res.status(400).json({ success: false, message });
     }
     if (err.name === 'ValidationError') {
       const messages = Object.values(err.errors).map((val) => val.message);
@@ -422,7 +452,9 @@ export const deleteUser = async (req, res, next) => {
     // Store user info for audit log before deletion
     const userData = {
       id: user._id,
-      name: user.name,
+      username: user.username, // Changed from name to username
+      firstName: user.firstName, // Added firstName
+      lastName: user.lastName, // Added lastName
       email: user.email,
       role: user.role,
     };

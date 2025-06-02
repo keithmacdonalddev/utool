@@ -86,13 +86,14 @@ const UserListPage = () => {
   const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [currentUserRole, setCurrentUserRole] = useState(null);
-
   /**
    * Form State
    * This state manages the new user form data and state
    */
   const [newUser, setNewUser] = useState({
-    name: '',
+    username: '', // ADDED
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     role: '',
@@ -237,14 +238,20 @@ const UserListPage = () => {
   // =====================================
   // EVENT HANDLERS
   // =====================================
-
   /**
    * Handle creating a new user
    * Validates form data and submits to the API
    */
   const handleCreateUser = async () => {
     // Validate form data
-    if (!newUser.name || !newUser.email || !newUser.password || !newUser.role) {
+    if (
+      !newUser.username || // CHANGED
+      !newUser.firstName ||
+      !newUser.lastName ||
+      !newUser.email ||
+      !newUser.password ||
+      !newUser.role
+    ) {
       setCreateError('All fields are required');
       return;
     }
@@ -258,7 +265,9 @@ const UserListPage = () => {
         // Reset form and close modal on success
         setShowAddUserForm(false);
         setNewUser({
-          name: '',
+          username: '', // ADDED
+          firstName: '',
+          lastName: '',
           email: '',
           password: '',
           role: '',
@@ -387,7 +396,6 @@ const UserListPage = () => {
     setFilteredUsers(users);
     setTotalItems(users.length);
   };
-
   /**
    * Handle search queries from the search bar
    *
@@ -403,11 +411,17 @@ const UserListPage = () => {
       return;
     }
 
-    // Search in name and email fields
+    // Search in User ID, firstName, lastName, and email fields
     const lowercaseQuery = query.toLowerCase();
     const searchResults = users.filter(
       (user) =>
-        user.name.toLowerCase().includes(lowercaseQuery) ||
+        user._id.toLowerCase().includes(lowercaseQuery) ||
+        (user.username && // ADDED
+          user.username.toLowerCase().includes(lowercaseQuery)) ||
+        (user.firstName &&
+          user.firstName.toLowerCase().includes(lowercaseQuery)) ||
+        (user.lastName &&
+          user.lastName.toLowerCase().includes(lowercaseQuery)) ||
         user.email.toLowerCase().includes(lowercaseQuery)
     );
 
@@ -456,31 +470,35 @@ const UserListPage = () => {
       },
     },
   };
-
   /**
    * Columns configuration for the DataTable component
    * Defines what columns to display and how to render them
    */
   const columns = [
     {
-      key: 'name',
-      label: 'Name',
+      key: '_id',
+      label: 'User ID',
       sortable: true,
-      className: 'text-sm font-bold text-[#F8FAFC]',
-      // Custom render function for cells with copy button
+      className: 'text-xs text-[#C7C9D1] font-mono',
+      // Custom render function for User ID with copy button and truncated display
       render: (user) => (
         <div className="flex items-center">
-          <span className="cursor-pointer">{user.name}</span>
+          <span
+            className="cursor-pointer truncate max-w-[100px]"
+            title={user._id}
+          >
+            {user._id}
+          </span>
           <button
             onClick={(e) => {
               e.stopPropagation();
-              copyToClipboard(user.name, `name-${user._id}`);
+              copyToClipboard(user._id, `id-${user._id}`);
             }}
             className="ml-2 text-gray-400 hover:text-accent-blue focus:outline-none focus:ring-0 transition-colors"
-            title="Copy name to clipboard"
+            title="Copy User ID to clipboard"
             data-action="true"
           >
-            {copiedField === `name-${user._id}` ? (
+            {copiedField === `id-${user._id}` ? (
               <Check size={16} className="text-green-500" />
             ) : (
               <Copy size={16} />
@@ -488,6 +506,38 @@ const UserListPage = () => {
           </button>
         </div>
       ),
+    },
+    {
+      key: 'name',
+      label: 'Name',
+      sortable: true,
+      className: 'text-sm font-bold text-[#F8FAFC]',
+      // Custom render function for cells with copy button
+      render: (user) => {
+        const displayName = user.firstName
+          ? `${user.firstName} ${user.lastName || ''}`.trim()
+          : user.username || 'Unknown User';
+        return (
+          <div className="flex items-center">
+            <span className="cursor-pointer">{displayName}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                copyToClipboard(displayName, `name-${user._id}`);
+              }}
+              className="ml-2 text-gray-400 hover:text-accent-blue focus:outline-none focus:ring-0 transition-colors"
+              title="Copy name to clipboard"
+              data-action="true"
+            >
+              {copiedField === `name-${user._id}` ? (
+                <Check size={16} className="text-green-500" />
+              ) : (
+                <Copy size={16} />
+              )}
+            </button>
+          </div>
+        );
+      },
     },
     {
       key: 'email',
@@ -643,8 +693,7 @@ const UserListPage = () => {
             <Plus size={18} /> Add User
           </Button>
         </div>
-      </div>
-
+      </div>{' '}
       {/* Filters section */}
       <TableFilters
         filterConfig={filterConfig}
@@ -653,8 +702,8 @@ const UserListPage = () => {
         onApplyFilters={handleApplyFilters}
         onClearFilters={handleClearFilters}
         onSearch={handleSearch}
+        searchPlaceholder="Search by User ID, first name, last name, or email..."
       />
-
       {/* Main content section with DataTable */}
       <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 0 }}>
         <DataTable
@@ -684,7 +733,6 @@ const UserListPage = () => {
           />
         )}
       </div>
-
       {/* Add User Modal */}
       {showAddUserForm && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
@@ -695,21 +743,51 @@ const UserListPage = () => {
               </div>
               <h3 className="text-lg leading-6 font-medium text-foreground mt-2">
                 Create New User
-              </h3>
+              </h3>{' '}
               <div className="mt-2 px-7 py-3">
                 <div className="space-y-4">
-                  <FormInput
-                    id="newUserName"
-                    label="Name"
-                    type="text"
-                    name="name"
-                    value={newUser.name}
-                    onChange={(e) =>
-                      setNewUser({ ...newUser, name: e.target.value })
-                    }
-                    placeholder="Full name"
-                    required
-                  />
+                  {/* First Name and Last Name - Side by Side */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormInput
+                      id="newUserUsername" // ADDED
+                      label="Username" // ADDED
+                      type="text" // ADDED
+                      name="username" // ADDED
+                      value={newUser.username} // ADDED
+                      onChange={
+                        (
+                          e // ADDED
+                        ) =>
+                          setNewUser({ ...newUser, username: e.target.value }) // ADDED
+                      } // ADDED
+                      placeholder="Username" // ADDED
+                      required // ADDED
+                    />
+                    <FormInput
+                      id="newUserFirstName"
+                      label="First Name"
+                      type="text"
+                      name="firstName"
+                      value={newUser.firstName}
+                      onChange={(e) =>
+                        setNewUser({ ...newUser, firstName: e.target.value })
+                      }
+                      placeholder="First name"
+                      required
+                    />
+                    <FormInput
+                      id="newUserLastName"
+                      label="Last Name"
+                      type="text"
+                      name="lastName"
+                      value={newUser.lastName}
+                      onChange={(e) =>
+                        setNewUser({ ...newUser, lastName: e.target.value })
+                      }
+                      placeholder="Last name"
+                      required
+                    />
+                  </div>
                   <FormInput
                     id="newUserEmail"
                     label="Email"
@@ -766,11 +844,14 @@ const UserListPage = () => {
                   <div className="mt-2 text-sm text-red-400">{createError}</div>
                 )}
                 <div className="items-center px-4 py-3 mt-4 flex justify-center gap-4">
+                  {' '}
                   <button
                     onClick={handleCreateUser}
                     disabled={
                       isCreating ||
-                      !newUser.name ||
+                      !newUser.username || // CHANGED
+                      !newUser.firstName ||
+                      !newUser.lastName ||
                       !newUser.email ||
                       !newUser.password ||
                       !newUser.role
@@ -791,7 +872,6 @@ const UserListPage = () => {
           </div>
         </div>
       )}
-
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex justify-center items-center">
@@ -805,8 +885,13 @@ const UserListPage = () => {
               </h3>
               <div className="mt-2 px-7 py-3">
                 <p className="text-sm text-gray-400">
-                  Are you sure you want to delete the user {userToDelete?.name}?
-                  This action cannot be undone.
+                  Are you sure you want to delete the user{' '}
+                  {userToDelete?.firstName
+                    ? `${userToDelete.firstName} ${
+                        userToDelete.lastName || ''
+                      }`.trim()
+                    : userToDelete?.username || 'Unknown User'}
+                  ? This action cannot be undone.
                 </p>
                 {deleteError && (
                   <div className="mt-2 text-sm text-red-400">{deleteError}</div>

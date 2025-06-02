@@ -159,8 +159,9 @@ const MainLayout = () => {
             {/* Header Title - Shows personalized greeting with user's first name */}
             <div className="text-lg font-bold md:ml-0 ml-4 text-[#F8FAFC]">
               {/* If user exists and has a name, extract first name, otherwise show generic greeting */}
-              {user && user.name
-                ? `Hello, ${user.name.split(' ')[0]}`
+              {/* Updated to use firstName, lastName, and username */}
+              {user && (user.firstName || user.username)
+                ? `Hello, ${user.firstName || user.username}`
                 : 'Hello'}
               {isGuest && (
                 <span className="ml-2 text-sm font-normal bg-accent-warning text-text-primary px-2 py-1 rounded">
@@ -189,13 +190,21 @@ const MainLayout = () => {
                     <img
                       src={
                         user.avatar ||
+                        // Updated to use firstName, lastName, and username for avatar fallback
                         `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                          user.name || user.email || '?'
+                          user.firstName
+                            ? `${user.firstName} ${user.lastName || ''}`.trim()
+                            : user.username || user.email || '?'
                         )}&background=random`
                       }
                       alt="User Avatar"
                       className="h-8 w-8 rounded-full object-cover border-2 border-transparent hover:border-gray-300"
-                      title={user.name || user.email} // Tooltip showing user name or email
+                      // Updated to use firstName, lastName, and username for title
+                      title={
+                        user.firstName
+                          ? `${user.firstName} ${user.lastName || ''}`.trim()
+                          : user.username || user.email
+                      } // Tooltip showing user name or email
                     />
                   </button>
 

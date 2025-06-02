@@ -14,9 +14,9 @@ const activeConnections = new Map();
 const authenticateSocket = (socket, next) => {
   try {
     // Get token from handshake query or auth object (supporting multiple methods)
-    const token = 
-      socket.handshake.auth.token || 
-      socket.handshake.query.token || 
+    const token =
+      socket.handshake.auth.token ||
+      socket.handshake.query.token ||
       socket.handshake.headers.authorization?.split(' ')[1];
 
     if (!token) {
@@ -38,7 +38,10 @@ const authenticateSocket = (socket, next) => {
       if (!decoded.id) {
         logger.warn(`Socket authentication failed: Invalid token payload`, {
           socketId: socket.id,
-          decodedToken: { ...decoded, id: decoded.id ? '[REDACTED]' : 'missing' },
+          decodedToken: {
+            ...decoded,
+            id: decoded.id ? '[REDACTED]' : 'missing',
+          },
         });
         return next(new Error('Authentication error: Invalid token payload'));
       }
@@ -50,7 +53,8 @@ const authenticateSocket = (socket, next) => {
       logger.verbose(`Socket authenticated successfully: ${socket.id}`, {
         socketId: socket.id,
         userId: decoded.id,
-        name: decoded.name,
+        username: decoded.username, // UPDATED from decoded.name
+        firstName: decoded.firstName, // ADDED
         role: decoded.role,
       });
 
@@ -58,20 +62,20 @@ const authenticateSocket = (socket, next) => {
     } catch (err) {
       // Handle specific JWT errors with appropriate messages
       let errorMessage = 'Authentication error: Invalid token';
-      
+
       if (err.name === 'TokenExpiredError') {
         errorMessage = 'Authentication error: Token expired';
       } else if (err.name === 'JsonWebTokenError') {
         errorMessage = `Authentication error: ${err.message}`;
       }
-      
+
       logger.error(`Socket authentication failed: ${err.message}`, {
         socketId: socket.id,
         error: err.message,
         errorType: err.name,
         ip: socket.handshake.address,
       });
-      
+
       next(new Error(errorMessage));
     }
   } catch (err) {
@@ -97,7 +101,8 @@ const handleConnection = (io, socket) => {
     // Track this connection in our activeConnections map
     activeConnections.set(socket.id, {
       userId: socket.user?.id,
-      userName: socket.user?.name,
+      username: socket.user?.username, // UPDATED from userName: socket.user?.name
+      firstName: socket.user?.firstName, // ADDED
       connectedAt: new Date(),
       rooms: new Set(),
       ip: socket.handshake.address,
@@ -108,7 +113,8 @@ const handleConnection = (io, socket) => {
     logger.info(`Socket connected: ${socket.id}`, {
       socketId: socket.id,
       userId: socket.user?.id,
-      userName: socket.user?.name,
+      username: socket.user?.username, // UPDATED from userName: socket.user?.name
+      firstName: socket.user?.firstName, // ADDED
       timeConnected: new Date().toISOString(),
       connectionCount: activeConnections.size,
     });
@@ -118,20 +124,20 @@ const handleConnection = (io, socket) => {
       status: 'connected',
       socketId: socket.id,
       userId: socket.user?.id,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // Add user to their personal notification room
     if (socket.user && socket.user.id) {
       const userRoom = `user:${socket.user.id}`;
       socket.join(userRoom);
-      
+
       // Update our tracking
       const connectionInfo = activeConnections.get(socket.id);
       if (connectionInfo) {
         connectionInfo.rooms.add(userRoom);
       }
-      
+
       logger.info(
         `User ${socket.user.id} joined their private notification room`,
         {
@@ -139,12 +145,12 @@ const handleConnection = (io, socket) => {
           socketId: socket.id,
         }
       );
-      
+
       // Notify user of successful subscription to notifications
       socket.emit('notification_status', {
         status: 'subscribed',
         room: userRoom,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -155,26 +161,26 @@ const handleConnection = (io, socket) => {
           logger.warn('Attempted to join document with invalid ID', {
             socketId: socket.id,
             userId: socket.user?.id,
-            documentId
+            documentId,
           });
           socket.emit('error', { message: 'Invalid document ID' });
           return;
         }
-        
+
         socket.join(documentId);
-        
+
         // Update our tracking
         const connectionInfo = activeConnections.get(socket.id);
         if (connectionInfo) {
           connectionInfo.rooms.add(documentId);
         }
-        
+
         logger.verbose(`User joined document: ${documentId}`, {
           socketId: socket.id,
           userId: socket.user?.id,
           documentId,
         });
-        
+
         // Acknowledge successful join
         socket.emit('document_joined', { documentId });
       } catch (error) {
@@ -229,7 +235,7 @@ const handleConnection = (io, socket) => {
       } catch (error) {
         logger.error(`Error handling ping`, {
           error: error.message,
-          socketId: socket.id
+          socketId: socket.id,
         });
       }
     });
@@ -239,20 +245,20 @@ const handleConnection = (io, socket) => {
       try {
         // Remove from our tracking
         activeConnections.delete(socket.id);
-        
+
         logger.info(`Socket disconnected: ${socket.id}`, {
           socketId: socket.id,
           userId: socket.user?.id,
           timeDisconnected: new Date().toISOString(),
           reason,
-          remainingConnections: activeConnections.size
+          remainingConnections: activeConnections.size,
         });
       } catch (error) {
         // Use console.error as a last resort if logger itself is failing
         console.error(`Error logging socket disconnect: ${error.message}`);
       }
     });
-    
+
     // Handle errors
     socket.on('error', (error) => {
       logger.error(`Socket error for ${socket.id}`, {
@@ -269,7 +275,7 @@ const handleConnection = (io, socket) => {
       stack: error.stack,
       socketId: socket?.id || 'unknown',
     });
-    
+
     // Try to notify the client
     try {
       if (socket && socket.connected) {
@@ -299,7 +305,7 @@ const sendNotification = async (io, userId, notification, options = {}) => {
     socketCount: 0,
     notificationId: notification?._id || null,
   };
-  
+
   try {
     // Parameter validation with detailed error messages
     if (!io) {
@@ -308,14 +314,14 @@ const sendNotification = async (io, userId, notification, options = {}) => {
       result.error = error.message;
       return result;
     }
-    
+
     if (!userId) {
       const error = new Error('User ID not provided');
       logger.warn(error.message);
       result.error = error.message;
       return result;
     }
-    
+
     if (!notification || typeof notification !== 'object') {
       const error = new Error('Invalid notification object');
       logger.warn(error.message);
@@ -327,7 +333,7 @@ const sendNotification = async (io, userId, notification, options = {}) => {
     if (!notification._id) {
       notification._id = new Date().getTime().toString();
     }
-    
+
     if (!notification.createdAt) {
       notification.createdAt = new Date().toISOString();
     }
@@ -352,20 +358,26 @@ const sendNotification = async (io, userId, notification, options = {}) => {
       userId,
       notification: notificationSummary,
       priority,
-      retryAttempt: retryCount > 0 ? `${options.currentRetry || 0}/${retryCount}` : 'no-retry',
+      retryAttempt:
+        retryCount > 0
+          ? `${options.currentRetry || 0}/${retryCount}`
+          : 'no-retry',
     });
 
     // Check if user has any active connections
     const userRoom = `user:${userId}`;
     const sockets = await io.in(userRoom).fetchSockets();
     result.socketCount = sockets.length;
-    
+
     if (sockets.length === 0 && retryCount === 0) {
-      logger.info(`No active connections for user ${userId}, notification queued for database only`, {
-        userId,
-        notificationId: notification._id,
-      });
-      
+      logger.info(
+        `No active connections for user ${userId}, notification queued for database only`,
+        {
+          userId,
+          notificationId: notification._id,
+        }
+      );
+
       // Still mark as success if we're saving to database
       result.success = saveToDatabase;
       return result;
@@ -396,31 +408,39 @@ const sendNotification = async (io, userId, notification, options = {}) => {
       error: error.message,
       stack: error.stack,
     });
-    
+
     result.error = error.message;
-    
+
     // Handle retry logic if configured
-    if (options.retryCount > 0 && (!options.currentRetry || options.currentRetry < options.retryCount)) {
+    if (
+      options.retryCount > 0 &&
+      (!options.currentRetry || options.currentRetry < options.retryCount)
+    ) {
       const nextRetry = (options.currentRetry || 0) + 1;
-      logger.info(`Scheduling retry ${nextRetry}/${options.retryCount} for notification ${notification?._id}`);
-      
+      logger.info(
+        `Scheduling retry ${nextRetry}/${options.retryCount} for notification ${notification?._id}`
+      );
+
       // Schedule retry with exponential backoff
       const backoffMs = Math.min(1000 * Math.pow(2, nextRetry - 1), 30000);
-      
+
       setTimeout(() => {
         sendNotification(io, userId, notification, {
           ...options,
           currentRetry: nextRetry,
-        }).catch(err => {
-          logger.error(`Retry ${nextRetry} failed for notification ${notification?._id}`, {
-            error: err.message,
-          });
+        }).catch((err) => {
+          logger.error(
+            `Retry ${nextRetry} failed for notification ${notification?._id}`,
+            {
+              error: err.message,
+            }
+          );
         });
       }, backoffMs);
-      
+
       logger.info(`Retry scheduled in ${backoffMs}ms`);
     }
-    
+
     return result;
   }
 };
@@ -528,9 +548,9 @@ const broadcastLogEntry = () => {
  */
 const getUserConnections = (userId) => {
   if (!userId) return [];
-  
+
   const userConnections = [];
-  
+
   for (const [socketId, connectionInfo] of activeConnections.entries()) {
     if (connectionInfo.userId === userId) {
       userConnections.push({
@@ -541,7 +561,7 @@ const getUserConnections = (userId) => {
       });
     }
   }
-  
+
   return userConnections;
 };
 
@@ -558,20 +578,20 @@ const getConnectionStats = () => {
     connectionsByUserAgent: {},
     roomStats: {},
   };
-  
+
   // Process each connection
   for (const connectionInfo of activeConnections.values()) {
     // Count unique users
     if (connectionInfo.userId) {
       stats.uniqueUsers.add(connectionInfo.userId);
     }
-    
+
     // Count user agents
     const userAgent = connectionInfo.userAgent || 'unknown';
     const userAgentType = getUserAgentType(userAgent);
-    stats.connectionsByUserAgent[userAgentType] = 
+    stats.connectionsByUserAgent[userAgentType] =
       (stats.connectionsByUserAgent[userAgentType] || 0) + 1;
-    
+
     // Count rooms
     if (connectionInfo.rooms) {
       for (const room of connectionInfo.rooms) {
@@ -579,40 +599,50 @@ const getConnectionStats = () => {
       }
     }
   }
-  
+
   // Convert Set to count
   stats.uniqueUsers = stats.uniqueUsers.size;
-  
+
   return stats;
 };
 
 /**
  * Determine the type of user agent (browser, mobile, etc)
- * 
+ *
  * @param {string} userAgent - User agent string
  * @returns {string} Type of user agent
  */
 const getUserAgentType = (userAgent = '') => {
   const ua = userAgent.toLowerCase();
-  
+
   if (!ua) return 'unknown';
-  
-  if (ua.includes('mozilla') || ua.includes('firefox') || ua.includes('chrome') || 
-      ua.includes('safari') || ua.includes('edge') || ua.includes('opera')) {
+
+  if (
+    ua.includes('mozilla') ||
+    ua.includes('firefox') ||
+    ua.includes('chrome') ||
+    ua.includes('safari') ||
+    ua.includes('edge') ||
+    ua.includes('opera')
+  ) {
     if (ua.includes('mobile')) {
       return 'mobile-browser';
     }
     return 'desktop-browser';
   }
-  
+
   if (ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
     return 'mobile-app';
   }
-  
-  if (ua.includes('postman') || ua.includes('insomnia') || ua.includes('curl')) {
+
+  if (
+    ua.includes('postman') ||
+    ua.includes('insomnia') ||
+    ua.includes('curl')
+  ) {
     return 'api-client';
   }
-  
+
   return 'other';
 };
 
