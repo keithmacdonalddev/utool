@@ -1,15 +1,41 @@
 # PROJECTS FEATURE REORGANIZATION - MILESTONE 5
 
-## Advanced Analytics & Reporting (Week 11-12)
+## Essential Analytics & Reporting (Week 11-12) - SCOPED FOR DELIVERY
 
-**Risk:** Low | **Value:** Critical Business Intelligence  
-**Status:** Planning Phase
+**Risk:** Medium | **Value:** Critical Business Intelligence | **Complexity:** High  
+**Status:** Planning Phase - PRIORITIZED SCOPE
 
 ---
 
-### Overview
+### Overview - UPDATED SCOPE MANAGEMENT
 
-This milestone transforms raw project data into actionable insights through comprehensive analytics dashboards, custom report builders, and advanced data visualization. We'll provide teams with the tools to track performance, identify bottlenecks, and make data-driven decisions.
+This milestone delivers **essential analytics and basic reporting** with a **phased approach** to ensure realistic delivery within the 2-week timeframe. The full enterprise analytics system identified in the original scope will be implemented across M5 (core) and M6 (advanced).
+
+**CRITICAL SCOPE ADJUSTMENT:** The original implementation included enterprise-level features (worker threads, complex aggregation pipelines, advanced report builder, real-time analytics) that represent 4-6 weeks of work. This updated plan focuses on **core analytics first** with a clear path to enhancement.
+
+### Implementation Phases Within M5
+
+#### 🔴 MUST-HAVE (Week 11 - Core Analytics)
+
+- Basic project and task metrics calculation
+- Essential analytics dashboard with key KPIs
+- Simple data export functionality
+- Core analytics data model
+
+#### 🟡 SHOULD-HAVE (Week 12 - Enhanced Reporting)
+
+- Basic report generation
+- Simple chart visualizations (using recharts)
+- Time-based analytics (daily/weekly/monthly views)
+- Basic performance metrics
+
+#### 🟢 DEFERRED TO M6 (Weeks 13-16 - Enterprise Analytics)
+
+- Advanced report builder with drag-and-drop
+- Background processing with worker threads
+- Complex MongoDB aggregation pipelines
+- Real-time analytics updates
+- Advanced chart types and customization
 
 ### Integration with Existing Codebase
 

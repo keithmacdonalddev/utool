@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   getProjectNotes,
@@ -9,7 +9,7 @@ import {
   resetProjectNoteStatus,
 } from '../../features/projectNotes/projectNoteSlice';
 import { PlusCircle, Pin, Trash2, Edit2, Check } from 'lucide-react';
-import { useNotifications } from '../../context/NotificationContext';
+import { useNotification } from '../../context/NotificationContext';
 
 const colors = [
   { name: 'Default', value: '', displayColor: 'bg-card border-dark-600' },
@@ -42,11 +42,23 @@ const colors = [
 
 const ProjectNotes = ({ projectId }) => {
   const dispatch = useDispatch();
-  const { showNotification } = useNotifications();
+  const { showNotification } = useNotification();
+
+  // Memoized selector to prevent Redux rerender warnings
+  const selectProjectNotesState = useMemo(
+    () => (state) => ({
+      notes: state.projectNotes.notes,
+      isLoading: state.projectNotes.isLoading,
+      isError: state.projectNotes.isError,
+      isSuccess: state.projectNotes.isSuccess,
+      message: state.projectNotes.message,
+    }),
+    []
+  );
 
   // Get project notes state from Redux
   const { notes, isLoading, isError, isSuccess, message } = useSelector(
-    (state) => state.projectNotes
+    selectProjectNotesState
   );
 
   // Local state for form and UI

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
 import { Folder, FolderPlus, Star, Pencil } from 'lucide-react';
@@ -36,13 +36,18 @@ const BookmarksSidebar = ({ activeFolder, setActiveFolder }) => {
   const [newFolderName, setNewFolderName] = useState('');
   const [editingFolder, setEditingFolder] = useState(null);
 
-  // Get folders from Redux store
+  // Memoized selectors to prevent Redux rerender warnings
+  const selectBookmarkFolders = useMemo(
+    () => (state) => state.bookmarkFolders,
+    []
+  );
+
   const {
     folders,
     isLoading: foldersLoading,
     isError: foldersError,
     message: foldersMessage,
-  } = useSelector((state) => state.bookmarkFolders);
+  } = useSelector(selectBookmarkFolders);
 
   // Handle selecting a folder
   const handleSelectFolder = (folder) => {

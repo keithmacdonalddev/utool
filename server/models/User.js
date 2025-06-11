@@ -26,8 +26,9 @@ const UserSchema = new mongoose.Schema({
   // New username field
   username: {
     type: String,
-    required: [true, 'Please provide a username'],
+    required: false, // Changed: Username is now optional, will be auto-generated if not provided
     unique: true,
+    sparse: true, // This ensures unique constraint only applies to non-null values
     trim: true,
     lowercase: true, // Optional: enforce lowercase usernames
     minlength: [3, 'Username must be at least 3 characters'],

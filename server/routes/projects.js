@@ -8,6 +8,10 @@ import {
   getProject,
   updateProject,
   deleteProject,
+  addProjectMember,
+  removeProjectMember,
+  getProjectStats,
+  getProjectActivities,
 } from '../controllers/projectController.js';
 
 // Import task router to re-route all task operations
@@ -43,9 +47,23 @@ router
   // Deleting requires 'own' access (middleware handles ownership check)
   .delete(authorize('projects', ACCESS_LEVELS.OWN), deleteProject);
 
-// Routes for managing members (add later)
-// router.route('/:id/members')
-//     .post(addProjectMember)
-//     .delete(removeProjectMember);
+// Routes for managing members
+router
+  .route('/:id/members')
+  .post(authorize('projects', ACCESS_LEVELS.OWN), addProjectMember);
+
+router
+  .route('/:id/members/:userId')
+  .delete(authorize('projects', ACCESS_LEVELS.OWN), removeProjectMember);
+
+// Routes for project analytics and statistics
+router
+  .route('/:id/stats')
+  .get(authorize('projects', ACCESS_LEVELS.READ), getProjectStats);
+
+// Routes for project activity feed
+router
+  .route('/:id/activities')
+  .get(authorize('projects', ACCESS_LEVELS.READ), getProjectActivities);
 
 export default router;

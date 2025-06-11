@@ -25,7 +25,7 @@ const KbCreatePage = () => {
   const handleSubmit = async (formData) => {
     try {
       setIsSubmitting(true);
-      const response = await api.post('/api/kb', formData);
+      const response = await api.post('/kb', formData);
       navigate(`/kb/${response.data.data._id}`);
       toast.success('Article created successfully');
     } catch (error) {

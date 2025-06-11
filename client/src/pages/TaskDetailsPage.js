@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { ArrowLeft } from 'lucide-react';
@@ -17,18 +17,24 @@ const TaskDetailsPage = () => {
   const { id } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  // Memoized selectors to prevent Redux rerender warnings
+  const selectTasks = useMemo(() => (state) => state.tasks, []);
+  const selectProjects = useMemo(() => (state) => state.projects, []);
+
   const {
-    currentTask: task,
-    isLoading,
-    isError,
-    message,
-  } = useSelector((state) => state.tasks);
+    currentTask,
+    isLoading: taskLoading,
+    isError: taskError,
+    message: taskMessage,
+  } = useSelector(selectTasks);
+
   const {
     projects,
     isLoading: projectsLoading,
     isError: projectsError,
     message: projectsMessage,
-  } = useSelector((state) => state.projects);
+  } = useSelector(selectProjects);
 
   const [form, setForm] = useState({
     title: '',
@@ -52,19 +58,19 @@ const TaskDetailsPage = () => {
   }, [dispatch, id]);
 
   useEffect(() => {
-    if (task) {
+    if (currentTask) {
       setForm({
-        title: task.title || '',
-        description: task.description || '',
-        status: task.status || '',
-        priority: task.priority || '',
-        dueDate: task.dueDate
-          ? new Date(task.dueDate).toISOString().substr(0, 10)
+        title: currentTask.title || '',
+        description: currentTask.description || '',
+        status: currentTask.status || '',
+        priority: currentTask.priority || '',
+        dueDate: currentTask.dueDate
+          ? new Date(currentTask.dueDate).toISOString().substr(0, 10)
           : '',
-        project: task.project?._id || '', // Set the project ID if it exists
+        project: currentTask.project?._id || '', // Set the project ID if it exists
       });
     }
-  }, [task]);
+  }, [currentTask]);
 
   const onChange = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -87,13 +93,15 @@ const TaskDetailsPage = () => {
     }
   };
 
-  if (isLoading || projectsLoading)
+  if (taskLoading || projectsLoading)
     return <div className="container mx-auto p-4">Loading...</div>;
-  if (isError)
+  if (taskError)
     return (
-      <div className="container mx-auto p-4 text-red-600">Error: {message}</div>
+      <div className="container mx-auto p-4 text-red-600">
+        Error: {taskMessage}
+      </div>
     );
-  if (!task)
+  if (!currentTask)
     return <div className="container mx-auto p-4">Task not found.</div>;
 
   return (
@@ -219,19 +227,19 @@ const TaskDetailsPage = () => {
       </form>
 
       {/* Project Context Information */}
-      {task.project && (
+      {currentTask.project && (
         <div className="mt-8 p-4 bg-card rounded-lg border border-dark-700">
           <h3 className="text-lg font-medium mb-2">Project Information</h3>
           <p>
             This task is part of project:{' '}
             <span className="font-semibold text-primary">
-              {task.project.name}
+              {currentTask.project.name}
             </span>
           </p>
           <p className="text-sm text-gray-400 mt-1">
             Change the project using the dropdown above or click
             <Link
-              to={`/projects/${task.project._id}`}
+              to={`/projects/${currentTask.project._id}`}
               className="text-accent-purple hover:text-accent-blue ml-1"
             >
               here

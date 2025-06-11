@@ -22,6 +22,7 @@ import Sidebar from './Sidebar';
 import NavbarClockStockWeather from './NavbarClockStockWeather';
 import NotificationBell from './NotificationBell';
 import GuestNotificationBanner from '../ui/GuestNotificationBanner'; // Import guest banner
+
 import { Menu, X, LogOut } from 'lucide-react'; // Lucide provides icon components
 
 /**
@@ -122,17 +123,16 @@ const MainLayout = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [userMenuRef]); // Only re-run this effect if userMenuRef changes
-
   return (
-    <div className="min-h-screen flex bg-app-page">
+    <div className="min-h-screen bg-app-page flex">
       {/* Sidebar Component
           Props passed:
-          - isOpen: controls sidebar visibility on mobile
-          - isMinimized: controls sidebar width on desktop
-          - toggleSidebar: function to open/close sidebar
-          - toggleMinimize: function to expand/contract sidebar
-          - isGuest: indicates if the user is a guest
-      */}
+        - isOpen: controls sidebar visibility on mobile
+        - isMinimized: controls sidebar width on desktop
+        - toggleSidebar: function to open/close sidebar
+        - toggleMinimize: function to expand/contract sidebar
+        - isGuest: indicates if the user is a guest
+    */}
       <Sidebar
         isOpen={isSidebarOpen}
         isMinimized={isSidebarMinimized}
@@ -142,7 +142,8 @@ const MainLayout = () => {
       />
 
       {/* Main Content Area - Takes remaining space with flex-1 */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-app-page">
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
+        {' '}
         {/* Header/Navbar Section */}
         <header className="bg-app-navbar text-text shadow-md z-20 flex-shrink-0">
           <div className="px-4 py-3 flex justify-between items-center">
@@ -241,13 +242,10 @@ const MainLayout = () => {
             </div>
           </div>{' '}
         </header>
-
         {/* Guest Notification Banner */}
-        <GuestNotificationBanner />
-
-        {/* Main Content Area */}
-        <main className="flex-grow p-2 md:p-4 lg:p-6 overflow-auto bg-app-page">
-          {/* React Router's Outlet renders the child route components here */}
+        <GuestNotificationBanner /> {/* Main Content Area */}
+        <main className="flex-grow p-2 md:p-4 lg:p-6 overflow-auto">
+          {/* React Router's Outlet renders the child route components here */}{' '}
           <Outlet />
         </main>
       </div>

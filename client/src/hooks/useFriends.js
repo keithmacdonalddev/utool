@@ -11,16 +11,23 @@ import { formatGuestItemsArray } from '../utils/guestDataFormatters';
  */
 export function useFriends() {
   const dispatch = useDispatch();
-  const { friends, isLoading } = useSelector((state) => state.friends);
+
+  // Memoized selectors to prevent Redux rerender warnings
+  const selectFriends = useMemo(() => (state) => state.friends, []);
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+  const selectGuestFriends = useMemo(
+    () => (state) => selectGuestItemsByType(state, 'friends'),
+    []
+  );
+
+  const { friends, isLoading } = useSelector(selectFriends);
+
+  const { isGuest } = useSelector(selectAuth);
+
+  const guestFriends = useSelector(selectGuestFriends);
+
   const [error, setError] = useState(null);
 
-  // Get auth state to check if user is a guest
-  const { isGuest } = useSelector((state) => state.auth);
-
-  // Get guest friends data directly if the user is a guest
-  const guestFriends = useSelector((state) =>
-    isGuest ? selectGuestItemsByType(state, 'friends') : []
-  );
   // Format guest friends to match API structure
   const formattedGuestFriends = useMemo(() => {
     if (!isGuest) return [];

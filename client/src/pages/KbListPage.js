@@ -1,6 +1,6 @@
 // src/pages/KbListPage.jsx (or .js)
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux'; // Import useSelector
 import api from '../utils/api';
@@ -53,8 +53,11 @@ const KbListPage = () => {
   // View mode state with default from localStorage
   const [viewMode, setViewMode] = useState(defaultViewMode);
 
+  // Memoized selector to prevent Redux rerender warnings
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+
   // Get user from Redux store
-  const { user } = useSelector((state) => state.auth);
+  const { user } = useSelector(selectAuth);
   // Helper function to check if user is an admin
   const isAdmin = user && user.role === 'Admin';
 

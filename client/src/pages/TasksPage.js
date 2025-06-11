@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -30,7 +30,8 @@ const TasksPage = () => {
   const { tasks, isLoading, isError, message } = useSelector(
     (state) => state.tasks
   );
-  const { projects } = useSelector((state) => state.projects);
+  const selectProjects = useMemo(() => (state) => state.projects, []);
+  const { projects } = useSelector(selectProjects);
   const [statusFilter, setStatusFilter] = useState('All');
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);

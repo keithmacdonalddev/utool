@@ -4,27 +4,43 @@ import User from '../models/User.js';
 import { logger } from '../utils/logger.js';
 import mongoose from 'mongoose';
 import { logGuestWriteAttempt } from '../middleware/analyticsMiddleware.js';
+import projectService from '../services/projectService.js';
+import ErrorResponse from '../utils/errorResponse.js';
 
 // @desc    Get projects for logged-in user (member or owner)
 // @route   GET /api/v1/projects
 // @access  Private
 export const getProjects = async (req, res, next) => {
   try {
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required',
+      });
+    }
+
     logger.info(`Attempting to fetch projects for user`, {
       userId: req.user.id,
       action: 'get_projects',
     });
 
-    // Convert user ID to ObjectId safely using modern constructor syntax
-    const userId = new mongoose.Types.ObjectId(req.user.id);
-
     // Use MongoDB aggregation pipeline for better performance in a single query
     // This avoids multiple separate database calls that were causing slowness
     const projectsWithProgress = await Project.aggregate([
-      // Match projects where the user is a member
-      { $match: { members: userId } },
+      // Match projects where the user is owner OR a member (backward compatible with both old and new member structures)
+      {
+        $match: {
+          $or: [
+            { owner: userId },
+            { members: userId }, // Old format: members array contains ObjectId directly
+            { 'members.user': userId }, // New format: members array contains objects with user field
+          ],
+        },
+      },
 
-      // Look up project owner details
+      // Look up project owner details with error handling
       {
         $lookup: {
           from: 'users',
@@ -33,9 +49,25 @@ export const getProjects = async (req, res, next) => {
           as: 'ownerDetails',
         },
       },
-      { $unwind: '$ownerDetails' },
 
-      // Look up tasks for this project
+      // Add conditional unwind to handle missing owner
+      {
+        $addFields: {
+          ownerDetails: {
+            $cond: {
+              if: { $gt: [{ $size: '$ownerDetails' }, 0] },
+              then: { $arrayElemAt: ['$ownerDetails', 0] },
+              else: {
+                _id: '$owner',
+                name: 'Unknown User',
+                email: 'unknown@example.com',
+              },
+            },
+          },
+        },
+      },
+
+      // Look up tasks for this project with better error handling
       {
         $lookup: {
           from: 'tasks',
@@ -47,7 +79,26 @@ export const getProjects = async (req, res, next) => {
                 _id: null,
                 total: { $sum: 1 },
                 completed: {
-                  $sum: { $cond: [{ $eq: ['$status', 'Completed'] }, 1, 0] },
+                  $sum: {
+                    $cond: [
+                      {
+                        $in: ['$status', ['done', 'completed', 'Completed']],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                inProgress: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $in: ['$status', ['in-progress', 'In Progress']],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
                 },
               },
             },
@@ -56,39 +107,43 @@ export const getProjects = async (req, res, next) => {
         },
       },
 
-      // Calculate progress
+      // Calculate progress with better error handling
       {
         $addFields: {
-          taskStats: {
+          // First, extract the taskStats object from the array
+          taskStatsObj: {
             $ifNull: [
               { $arrayElemAt: ['$taskStats', 0] },
-              { total: 0, completed: 0 },
+              { total: 0, completed: 0, inProgress: 0 },
             ],
           },
+        },
+      },
+      {
+        $addFields: {
+          // Then calculate progress using the extracted object
           progress: {
             $cond: {
               if: {
-                $gt: [
-                  { $ifNull: [{ $arrayElemAt: ['$taskStats.total', 0] }, 0] },
-                  0,
+                $and: [
+                  { $gt: ['$taskStatsObj.total', 0] },
+                  { $gte: ['$taskStatsObj.completed', 0] },
                 ],
               },
               then: {
-                $multiply: [
+                $round: [
                   {
-                    $divide: [
+                    $multiply: [
                       {
-                        $ifNull: [
-                          { $arrayElemAt: ['$taskStats.completed', 0] },
-                          0,
+                        $divide: [
+                          '$taskStatsObj.completed',
+                          '$taskStatsObj.total',
                         ],
                       },
-                      {
-                        $ifNull: [{ $arrayElemAt: ['$taskStats.total', 0] }, 1],
-                      },
+                      100,
                     ],
                   },
-                  100,
+                  0,
                 ],
               },
               else: 0,
@@ -98,8 +153,8 @@ export const getProjects = async (req, res, next) => {
           // Format the owner object to match the previous structure
           owner: {
             _id: '$ownerDetails._id',
-            name: '$ownerDetails.name',
-            email: '$ownerDetails.email',
+            name: { $ifNull: ['$ownerDetails.name', 'Unknown User'] },
+            email: { $ifNull: ['$ownerDetails.email', 'unknown@example.com'] },
           },
         },
       },
@@ -118,13 +173,32 @@ export const getProjects = async (req, res, next) => {
           updatedAt: 1,
           owner: 1,
           members: 1,
-          progress: { $round: ['$progress', 0] }, // Round to integer
+          progress: {
+            percentage: '$progress',
+            metrics: {
+              totalTasks: { $ifNull: ['$taskStatsObj.total', 0] },
+              completedTasks: { $ifNull: ['$taskStatsObj.completed', 0] },
+              inProgressTasks: { $ifNull: ['$taskStatsObj.inProgress', 0] },
+              overdueTasks: { $literal: 0 },
+            },
+          },
         },
       },
 
       // Sort by most recent first
       { $sort: { createdAt: -1 } },
     ]);
+
+    logger.logDbOperation(
+      'aggregate',
+      'Project',
+      projectsWithProgress.length > 0,
+      null,
+      {
+        userId: req.user.id,
+        projectCount: projectsWithProgress.length,
+      }
+    );
 
     logger.info(
       `Successfully fetched ${projectsWithProgress.length} projects using optimized query`,
@@ -142,13 +216,31 @@ export const getProjects = async (req, res, next) => {
     });
   } catch (err) {
     logger.error('Failed to fetch projects', {
-      error: err,
+      error: {
+        name: err.name,
+        message: err.message,
+        stack: err.stack,
+        code: err.code,
+      },
       userId: req.user.id,
+      errorType: typeof err,
+      errorConstructor: err.constructor.name,
     });
 
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching projects' });
+    // Provide more specific error information in development
+    const errorMessage =
+      process.env.NODE_ENV === 'development'
+        ? `Server Error fetching projects: ${err.message}`
+        : 'Server Error fetching projects';
+
+    res.status(500).json({
+      success: false,
+      message: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && {
+        details: err.message,
+        stack: err.stack,
+      }),
+    });
   }
 };
 
@@ -180,10 +272,6 @@ export const createProject = async (req, res, next) => {
       action: 'create_project',
     });
 
-    // Add logged-in user as the owner
-    req.body.owner = req.user.id;
-    // The owner is automatically added to members by pre-save hook in model
-
     // Extract allowed fields
     const { name, description, status, startDate, endDate, priority, members } =
       req.body;
@@ -200,21 +288,41 @@ export const createProject = async (req, res, next) => {
       });
     }
 
+    const transformedMembers =
+      members && members.length > 0
+        ? members.map((memberId) => ({
+            user: memberId,
+            role: 'contributor', // Default role for invited members
+            permissions: {
+              canEditProject: false,
+              canDeleteProject: false,
+              canManageMembers: false,
+              canManageTasks: true,
+              canViewAnalytics: false,
+              canExportData: false,
+            },
+            joinedAt: new Date(),
+            invitedBy: req.user.id,
+          }))
+        : [];
+
     const projectData = {
       name,
-      owner: req.user.id,
       ...(description && { description }),
       ...(status && { status }),
       ...(startDate && { startDate }),
       ...(endDate && { endDate }),
-      ...(priority && { priority }), // Add priority
-      // If members are provided in request, ensure owner is included
-      members: members
-        ? [...new Set([req.user.id.toString(), ...members])]
-        : [req.user.id],
+      ...(priority && { priority }),
+      // Transform members from plain IDs to proper member objects
+      members: transformedMembers,
     };
 
-    const project = await Project.create(projectData);
+    // Use projectService to create the project with real-time notifications
+    const project = await projectService.createProject(
+      projectData,
+      req.user.id,
+      req
+    );
 
     logger.logCreate('project', project._id, req.user.id, {
       projectName: project.name,
@@ -232,12 +340,14 @@ export const createProject = async (req, res, next) => {
       memberCount: project.members.length,
     });
 
-    res.status(201).json({
+    const responseData = {
       success: true,
       data: project,
       message: `Project "${project.name}" created successfully`,
       notificationType: 'success',
-    });
+    };
+
+    res.status(201).json(responseData);
   } catch (err) {
     logger.error('Failed to create project', {
       error: err,
@@ -276,84 +386,191 @@ export const createProject = async (req, res, next) => {
   }
 };
 
-// --- Implementation of remaining CRUD operations ---
-
 // @desc    Get single project
 // @route   GET /api/v1/projects/:id
 // @access  Private
 export const getProject = async (req, res, next) => {
   try {
-    logger.verbose(`Attempting to fetch project with ID ${req.params.id}`, {
-      userId: req.user.id,
-      action: 'get_project',
-      projectId: req.params.id,
-    });
+    const projectIdParam = req.params.id;
+    logger.info(
+      `[GETPROJECT_CTRL] Attempting to find project with ID: ${projectIdParam}`,
+      { userId: req.user.id }
+    );
 
-    const project = await Project.findById(req.params.id)
-      .populate('owner', 'name email')
-      .populate('members', 'name email'); // Populate details
+    const project = await projectService.findProjectById(projectIdParam);
 
     if (!project) {
-      logger.warn(`Project not found with ID ${req.params.id}`, {
-        userId: req.user.id,
-        projectId: req.params.id,
-      });
-
-      return res.status(404).json({
-        success: false,
-        message: `Project not found with id of ${req.params.id}`,
-      });
+      logger.warn(
+        `[GETPROJECT_CTRL] Project not found in database with ID: ${projectIdParam}`
+      );
+      return next(
+        new ErrorResponse(`Project not found with id of ${projectIdParam}`, 404)
+      );
     }
 
-    // Check if the logged-in user is a member of the project
-    const isMember = project.members.some((member) =>
-      member._id.equals(req.user.id)
+    // DEBUG: Log the exact structure of the project object to understand the data format
+    logger.info(
+      `[GETPROJECT_CTRL] Project found. Analyzing structure for ID: ${projectIdParam}`
     );
-    if (!isMember) {
-      logger.warn(`Unauthorized project access attempt`, {
-        userId: req.user.id,
-        projectId: req.params.id,
-      });
+    console.log('----------------------------------------------------');
+    console.log('[DEBUG] SERVER getProject - Project Object Details:');
+    console.log(
+      '[DEBUG] Project ID from DB:',
+      project._id ? project._id.toString() : 'N/A'
+    );
+    console.log(
+      '[DEBUG] project.owner (type):',
+      typeof project.owner,
+      'Value:',
+      project.owner
+    );
+    if (project.owner) {
+      console.log('[DEBUG] project.owner._id (if exists):', project.owner._id);
+      console.log(
+        '[DEBUG] project.owner.toString() (if method exists):',
+        typeof project.owner.toString === 'function'
+          ? project.owner.toString()
+          : 'N/A'
+      );
+    }
+    console.log(
+      '[DEBUG] project.members (type):',
+      typeof project.members,
+      'Is Array:',
+      Array.isArray(project.members)
+    );
+    if (
+      project.members &&
+      Array.isArray(project.members) &&
+      project.members.length > 0
+    ) {
+      console.log(
+        '[DEBUG] First member (project.members[0]):',
+        project.members[0]
+      );
+      if (project.members[0] && project.members[0].user) {
+        console.log(
+          "[DEBUG] First member's user (project.members[0].user) (type):",
+          typeof project.members[0].user,
+          'Value:',
+          project.members[0].user
+        );
+        console.log(
+          "[DEBUG] First member's user._id (if exists):",
+          project.members[0].user._id
+        );
+      }
+    }
+    console.log(
+      '[DEBUG] req.user.id (type):',
+      typeof req.user.id,
+      'Value:',
+      req.user.id
+    );
+    console.log('----------------------------------------------------');
 
-      return res.status(403).json({
-        success: false,
-        message: 'User not authorized to access this project',
+    // Safe permission checks that handle both populated and non-populated data
+    const currentUserIdString = req.user.id.toString();
+    let isOwner = false;
+    let isMember = false;
+
+    logger.info(
+      `[GETPROJECT_CTRL] Performing permission checks for user: ${currentUserIdString} on project: ${project._id}`
+    );
+
+    // Check for Owner - handle multiple data structure possibilities
+    try {
+      if (project.owner) {
+        if (typeof project.owner === 'object' && project.owner._id) {
+          // Case 1: project.owner is a populated object (e.g., from .populate('owner'))
+          isOwner = project.owner._id.toString() === currentUserIdString;
+          logger.info(
+            `[GETPROJECT_CTRL] Owner check (populated object): ${project.owner._id.toString()} vs ${currentUserIdString}. Is Owner: ${isOwner}`
+          );
+        } else if (project.owner.toString) {
+          // Case 2: project.owner is an ObjectId or a string that can be converted
+          isOwner = project.owner.toString() === currentUserIdString;
+          logger.info(
+            `[GETPROJECT_CTRL] Owner check (ObjectId/string): ${project.owner.toString()} vs ${currentUserIdString}. Is Owner: ${isOwner}`
+          );
+        } else {
+          logger.warn(
+            `[GETPROJECT_CTRL] project.owner exists but is not an object with _id nor an ObjectId/string. Owner value: ${project.owner}`
+          );
+        }
+      } else {
+        logger.warn(`[GETPROJECT_CTRL] project.owner is null or undefined.`);
+      }
+    } catch (ownerCheckError) {
+      logger.error(`[GETPROJECT_CTRL] Error during owner permission check:`, {
+        error: ownerCheckError.message,
+        projectId: projectIdParam,
+        userId: currentUserIdString,
+        ownerValue: project.owner,
       });
     }
 
-    // Compute progress for this project
-    const totalTasks = await Task.countDocuments({ project: project._id });
-    const completedTasks = await Task.countDocuments({
-      project: project._id,
-      status: 'Completed',
-    });
-    project._doc.progress =
-      totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    // Check for Member - handle multiple member structure possibilities
+    try {
+      if (project.members && Array.isArray(project.members)) {
+        isMember = project.members.some((member) => {
+          if (member && member.user) {
+            if (typeof member.user === 'object' && member.user._id) {
+              // Case 1: member.user is a populated object
+              return member.user._id.toString() === currentUserIdString;
+            } else if (member.user.toString) {
+              // Case 2: member.user is an ObjectId or a string
+              return member.user.toString() === currentUserIdString;
+            }
+          } else if (member && (typeof member === 'string' || member._id)) {
+            // Case 3: Old structure where member is directly the user ObjectId
+            const memberId = member._id || member;
+            return memberId.toString() === currentUserIdString;
+          }
+          return false;
+        });
+        logger.info(
+          `[GETPROJECT_CTRL] Member check completed. Is Member: ${isMember}`
+        );
+      } else {
+        logger.info(
+          `[GETPROJECT_CTRL] project.members is null, undefined, or not an array.`
+        );
+      }
+    } catch (memberCheckError) {
+      logger.error(`[GETPROJECT_CTRL] Error during member permission check:`, {
+        error: memberCheckError.message,
+        projectId: projectIdParam,
+        userId: currentUserIdString,
+        membersValue: project.members,
+      });
+    }
 
-    logger.info(`Successfully fetched project data`, {
-      userId: req.user.id,
-      projectId: project._id,
-      projectName: project.name,
-    });
+    if (!isOwner && !isMember) {
+      logger.warn(
+        `[GETPROJECT_CTRL] Authorization failed for user ${currentUserIdString} to access project ${project._id}. isOwner: ${isOwner}, isMember: ${isMember}.`
+      );
+      return next(
+        new ErrorResponse(
+          `User ${req.user.id} is not authorized to access this project`,
+          403
+        )
+      );
+    }
 
-    res.status(200).json({ success: true, data: project });
+    logger.info(
+      `[GETPROJECT_CTRL] User ${currentUserIdString} authorized. Sending project data for ${project._id}.`
+    );
+    res.status(200).json({
+      success: true,
+      data: project,
+    });
   } catch (err) {
-    logger.error('Failed to fetch project', {
-      error: err,
+    logger.error(`Error in getProject for id: ${req.params.id}`, {
+      error: { message: err.message, stack: err.stack, name: err.name },
       userId: req.user.id,
-      projectId: req.params.id,
     });
-
-    // Handle invalid ObjectId format
-    if (err.name === 'CastError') {
-      return res.status(404).json({
-        success: false,
-        message: `Project not found with id of ${req.params.id}`,
-      });
-    }
-    res
-      .status(500)
-      .json({ success: false, message: 'Server Error fetching project' });
+    next(err);
   }
 };
 
@@ -573,6 +790,236 @@ export const updateProject = async (req, res, next) => {
 // @desc    Delete project
 // @route   DELETE /api/v1/projects/:id
 // @access  Private
+// @desc    Add member to project
+// @route   POST /api/v1/projects/:id/members
+// @access  Private
+export const addProjectMember = async (req, res, next) => {
+  try {
+    const { user, role = 'contributor', permissions = {} } = req.body;
+    const projectId = req.params.id;
+    const invitedBy = req.user.id;
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required',
+      });
+    }
+
+    // Validate user exists
+    const userExists = await User.findById(user);
+    if (!userExists) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    const project = await projectService.addMember(
+      projectId,
+      { user, role, permissions },
+      invitedBy,
+      req
+    );
+
+    logger.info(`Member added to project`, {
+      projectId,
+      newMember: user,
+      role,
+      invitedBy,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Member added successfully',
+      data: project,
+    });
+  } catch (error) {
+    logger.error('Error adding project member:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Remove member from project
+// @route   DELETE /api/v1/projects/:id/members/:userId
+// @access  Private
+export const removeProjectMember = async (req, res, next) => {
+  try {
+    const projectId = req.params.id;
+    const userIdToRemove = req.params.userId;
+    const removedBy = req.user.id;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found',
+      });
+    }
+
+    // Check permissions
+    if (!projectService.hasPermission(project, removedBy, 'canManageMembers')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions to manage members',
+      });
+    }
+
+    // Cannot remove the owner
+    if (project.owner.toString() === userIdToRemove) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot remove project owner',
+      });
+    }
+
+    // Remove the member
+    project.members = project.members.filter(
+      (member) => member.user.toString() !== userIdToRemove
+    );
+
+    await project.save();
+
+    logger.info(`Member removed from project`, {
+      projectId,
+      removedMember: userIdToRemove,
+      removedBy,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Member removed successfully',
+      data: project,
+    });
+  } catch (error) {
+    logger.error('Error removing project member:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Get project statistics and analytics
+// @route   GET /api/v1/projects/:id/stats
+// @access  Private
+export const getProjectStats = async (req, res, next) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found',
+      });
+    }
+
+    // Check if user has access to view project
+    if (!projectService.hasPermission(project, userId, 'canViewAnalytics')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions to view project statistics',
+      });
+    }
+
+    const stats = await projectService.getProjectStats(projectId);
+
+    logger.info(`Project stats retrieved`, {
+      projectId,
+      requestedBy: userId,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    logger.error('Error getting project stats:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Get project activity feed
+// @route   GET /api/v1/projects/:id/activities
+// @access  Private
+export const getProjectActivities = async (req, res, next) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+    const { limit = 20, offset = 0, type } = req.query;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: 'Project not found',
+      });
+    }
+
+    // Check if user has access to view project
+    if (!projectService.hasPermission(project, userId, 'canViewAnalytics')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions to view project activities',
+      });
+    }
+
+    // Build activity query
+    const query = {
+      'data.projectId': projectId,
+      ...(type && { type }),
+    };
+
+    // For now, return basic activity structure
+    // In a full implementation, this would query an Activity/AuditLog collection
+    const activities = [
+      {
+        _id: `activity_${Date.now()}`,
+        type: 'project_created',
+        title: 'Project Created',
+        description: `Project "${project.name}" was created`,
+        user: project.owner,
+        timestamp: project.createdAt,
+        data: {
+          projectId: project._id,
+          projectName: project.name,
+        },
+      },
+    ];
+
+    logger.info(`Project activities retrieved`, {
+      projectId,
+      activityCount: activities.length,
+      requestedBy: userId,
+    });
+
+    res.status(200).json({
+      success: true,
+      count: activities.length,
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: activities.length,
+      },
+      data: activities,
+    });
+  } catch (error) {
+    logger.error('Error getting project activities:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const deleteProject = async (req, res, next) => {
   // Check if the user is a guest
   if (req.user && req.user.isGuest) {

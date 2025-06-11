@@ -10,9 +10,9 @@
 
 import { useMemo } from 'react';
 import { useSelector } from 'react-redux';
-import useDataFetching from './useDataFetching';
 import { fetchNotes } from '../features/notes/noteSlice';
 import { selectGuestItemsByType } from '../features/guestSandbox/guestSandboxSlice';
+import useDataFetching from './useDataFetching';
 
 /**
  * Hook for efficient notes data fetching with caching
@@ -29,26 +29,42 @@ const useNotes = ({
   queryParams = {},
   cacheTimeout,
   skipInitialFetch = false,
-  backgroundRefresh = false,
-  smartRefresh = false,
+  backgroundRefresh = true,
+  smartRefresh = true,
 }) => {
-  // Selectors for accessing notes state from Redux
-  const selectNotes = (state) => state.notes.notes;
-  const selectNotesLastFetched = (state) => state.notes.lastFetched;
-  const selectNotesLoading = (state) => state.notes.isLoading;
-  const selectNotesError = (state) =>
-    state.notes.isError ? state.notes.message : null;
+  // Memoized selectors for accessing notes state from Redux
+  const selectNotes = useMemo(() => (state) => state.notes.notes, []);
+  const selectNotesLastFetched = useMemo(
+    () => (state) => state.notes.lastFetched,
+    []
+  );
+  const selectNotesLoading = useMemo(
+    () => (state) => state.notes.isLoading,
+    []
+  );
+
+  // PERFORMANCE FIX: Simplified error selector to prevent dependency issues
+  const selectNotesError = useMemo(
+    () => (state) => state.notes.isError ? state.notes.message : null,
+    []
+  );
+
+  // Memoized selectors for additional Redux state
+  const selectNotesFilter = useMemo(() => (state) => state.notes.filter, []);
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+  const selectGuestNotes = useMemo(
+    () => (state) => selectGuestItemsByType(state, 'notes'),
+    []
+  );
 
   // Get the current filter from Redux if needed for dependency tracking
-  const notesFilter = useSelector((state) => state.notes.filter);
+  const notesFilter = useSelector(selectNotesFilter);
 
   // Get auth state to check if user is a guest
-  const { isGuest } = useSelector((state) => state.auth);
+  const { isGuest } = useSelector(selectAuth);
 
   // Get guest note data directly if the user is a guest
-  const guestNotes = useSelector((state) =>
-    isGuest ? selectGuestItemsByType(state, 'notes') : []
-  );
+  const guestNotes = useSelector(selectGuestNotes);
 
   // Format guest notes to match API structure
   const formattedGuestNotes = useMemo(() => {

@@ -96,7 +96,7 @@ function FriendRequestList() {
                   <UserCheck size={16} className="mr-1" /> Accept
                 </Button>
                 <Button
-                  variant="destructive"
+                  variant="danger"
                   size="sm"
                   onClick={() => handleReject(userId)}
                   disabled={isLoading}

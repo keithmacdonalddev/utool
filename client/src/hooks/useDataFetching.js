@@ -12,9 +12,10 @@
  * This significantly reduces server load and improves performance.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { hasCollectionChanged } from '../utils/objectUtils';
+import { useRenderLoopDetection, useHookDebugger } from '../utils/hookSafety';
 
 /**
  * Default cache timeout of 5 minutes in milliseconds
@@ -78,6 +79,7 @@ const fetchRateLimiter = {
  * @param {number} options.cacheTimeout - Custom cache timeout in milliseconds (default: 5 minutes)
  * @param {boolean} options.skipInitialFetch - Whether to skip the initial fetch on mount
  * @param {boolean} options.priority - Higher priority requests skip the rate limiter
+ * @param {boolean} options.enabled - Whether to enable data fetching (default: true)
  * @returns {Object} Object containing { data, isLoading, error, refetch }
  */
 const useDataFetching = ({
@@ -94,10 +96,22 @@ const useDataFetching = ({
   backgroundRefresh = false,
   smartRefresh = true, // New parameter to control smart data comparison
   idField = '_id', // ID field to use for comparison
+  enabled = true, // Add enabled parameter
+  // Phase 3 Step 2: Optimistic Updates
+  enableOptimisticUpdates = false, // Enable optimistic update behavior
+  optimisticMutations = {}, // Object containing optimistic update functions
 }) => {
   const dispatch = useDispatch();
 
-  // Select relevant data from Redux store
+  // Global safety monitoring for development
+  useRenderLoopDetection('useDataFetching', 15);
+  // PERFORMANCE FIX: Simplified hook debugger to prevent re-render triggers
+  useHookDebugger('useDataFetching', [], {
+    enabled,
+    actionType: fetchAction.typePrefix || fetchAction.toString(),
+  });
+
+  // PERFORMANCE FIX: Use selectors directly to prevent memoization overhead
   const data = useSelector(selectData);
   const lastFetched = useSelector(selectLastFetched);
   const isLoading = useSelector(selectIsLoading);
@@ -106,6 +120,22 @@ const useDataFetching = ({
   // Local state to track if we've performed an initial fetch
   const [hasInitiallyFetched, setHasInitiallyFetched] =
     useState(skipInitialFetch);
+
+  // ** RENDER LOOP FIX **
+  // A ref to hold the isCacheStale function. This allows us to use the latest
+  // version of the function inside fetchData without adding it to fetchData's
+  // dependency array, which would create a new fetchData function on every render
+  // and trigger the infinite loop.
+  const isCacheStaleRef = useRef(null);
+
+  // Phase 3 Step 2: Optimistic Updates state
+  const [optimisticData, setOptimisticData] = useState(null);
+  const [pendingOperations, setPendingOperations] = useState(new Set());
+  const [backgroundRefreshState, setBackgroundRefreshState] = useState({
+    isRefreshing: false,
+    lastRefreshTime: null,
+    refreshCount: 0,
+  });
 
   // Get a stable reference to the action type for tracking
   const actionType = fetchAction.typePrefix || fetchAction.toString();
@@ -128,6 +158,12 @@ const useDataFetching = ({
     // Cache is stale if the time since last fetch exceeds timeout
     return timeSinceLastFetch > cacheTimeout;
   }, [lastFetched, cacheTimeout]);
+
+  // ** RENDER LOOP FIX **
+  // Keep the ref updated with the latest version of the function.
+  useEffect(() => {
+    isCacheStaleRef.current = isCacheStale;
+  }, [isCacheStale]);
 
   /**
    * Checks if there's already an ongoing request for this action type
@@ -156,117 +192,193 @@ const useDataFetching = ({
    * This is the main function that prevents redundant API calls
    *
    * @param {boolean} forceRefresh - Whether to bypass cache and force a refresh
-   * @returns {Promise} The dispatch promise for chaining
-   */ const fetchData = useCallback(
-    (forceRefresh = false) => {
-      // If backgroundRefresh is enabled and we have data, start a refresh in the background
-      // but immediately return existing data
-      if (backgroundRefresh && data && data.length > 0 && !forceRefresh) {
-        // Still trigger the refresh in the background if needed
-        if (isCacheStale()) {
-          setTimeout(() => {
-            dispatch(
-              fetchAction({
-                ...fetchParams,
-                forceRefresh: false,
-                cacheTimeout,
-              })
+   * @returns {Promise} The dispatch promise for chaining   */ const fetchData =
+    useCallback(
+      (forceRefresh = false) => {
+        // DEBUG: Development-only fetchData call logging
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔍 [useDataFetching] fetchData called:`, {
+            actionType,
+            forceRefresh,
+            data: data ? 'exists' : 'null',
+            hasData: !!data,
+            dataLength: Array.isArray(data) ? data.length : data ? 1 : 0,
+            backgroundRefresh,
+            isCacheStale: isCacheStaleRef.current(),
+            timestamp: new Date().toISOString(),
+          });
+        } // Phase 3 Step 2: Enhanced background refresh with state tracking
+        if (backgroundRefresh && data && data.length > 0 && !forceRefresh) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(
+              `🔍 [useDataFetching] Background refresh path - returning existing data`
             );
-          }, 0);
-        }
+          }
+          // Still trigger the refresh in the background if needed
+          if (isCacheStaleRef.current()) {
+            setBackgroundRefreshState((prev) => ({
+              isRefreshing: true,
+              lastRefreshTime: Date.now(),
+              refreshCount: prev.refreshCount + 1,
+            }));
+            setTimeout(() => {
+              // CRITICAL FIX: Handle primitive fetchParams for background refresh too
+              let actionPayload;
+              if (fetchParams === null || fetchParams === undefined) {
+                actionPayload = { forceRefresh: false, cacheTimeout };
+              } else if (
+                typeof fetchParams === 'object' &&
+                !Array.isArray(fetchParams)
+              ) {
+                actionPayload = {
+                  ...fetchParams,
+                  forceRefresh: false,
+                  cacheTimeout,
+                };
+              } else {
+                // fetchParams is a primitive - pass it directly
+                actionPayload = fetchParams;
+              }
 
-        // Immediately return existing data without waiting for the refresh
-        return Promise.resolve(data);
-      }
+              dispatch(fetchAction(actionPayload)).finally(() => {
+                setBackgroundRefreshState((prev) => ({
+                  ...prev,
+                  isRefreshing: false,
+                }));
+              });
+            }, 0);
+          }
 
-      // Check if cache is stale or force refresh is requested
-      if (forceRefresh || isCacheStale()) {
-        // Check for existing request - return its promise if found
-        const existingRequest = getOngoingRequest();
-        if (!forceRefresh && existingRequest) {
-          console.log(
-            `Reusing existing request for ${actionType} - already in progress`
-          );
-          return existingRequest;
-        }
-
-        // Check rate limiting - skip low priority requests if rate limited
-        if (!priority && !forceRefresh && !fetchRateLimiter.canFetch()) {
-          console.log(
-            `Rate limiting fetch for ${actionType} - too many requests in progress`
-          );
-          // Return a promise that resolves with current data
+          // Immediately return existing data without waiting for the refresh
           return Promise.resolve(data);
         }
 
-        // Register this fetch with the rate limiter
-        if (!forceRefresh) {
-          fetchRateLimiter.registerFetch();
-        }
+        // Check if cache is stale or force refresh is requested
+        if (forceRefresh || isCacheStaleRef.current()) {
+          // Check for existing request - return its promise if found
+          const existingRequest = getOngoingRequest();
+          if (!forceRefresh && existingRequest) {
+            console.log(
+              `Reusing existing request for ${actionType} - already in progress`
+            );
+            return existingRequest;
+          }
 
-        console.log(
-          `Fetching fresh data for ${actionType} - cache is stale or forced refresh`
-        ); // Create and store promise
-        const fetchPromise = dispatch(
-          fetchAction({
-            ...fetchParams,
-            forceRefresh,
-            cacheTimeout,
-            smartRefresh, // Pass the smartRefresh flag to the action
-            compareWithExisting: smartRefresh ? data : null, // Only send data for comparison if smartRefresh is enabled
-            idField, // Pass the ID field for comparison
-          })
-        );
+          // Check rate limiting - skip low priority requests if rate limited
+          if (!priority && !forceRefresh && !fetchRateLimiter.canFetch()) {
+            console.log(
+              `Rate limiting fetch for ${actionType} - too many requests in progress`
+            );
+            // Return a promise that resolves with current data
+            return Promise.resolve(data);
+          }
 
-        // Store the request in our tracking object
-        ongoingRequests[actionType] = {
-          timestamp: Date.now(),
-          promise: fetchPromise,
-        };
-
-        // Clean up after request completes
-        fetchPromise.finally(() => {
-          // Remove request entry after a delay to catch any near-simultaneous requests
-          setTimeout(() => {
-            if (ongoingRequests[actionType]?.promise === fetchPromise) {
-              delete ongoingRequests[actionType];
-            }
-          }, 2000);
-        });
-
-        return fetchPromise;
-      } else {
-        console.log(
-          `Using cached data for ${actionType} - cache is still fresh`
-        );
-
-        // Check if we're fetching a project and the data is null/undefined
-        // In this case, we'll force a refresh anyway despite the cache being fresh
-        const isProjectFetch = actionType.includes('projects/getOne');
-        if (isProjectFetch && (!data || !data._id)) {
+          // Register this fetch with the rate limiter
+          if (!forceRefresh) {
+            fetchRateLimiter.registerFetch();
+          }
           console.log(
-            `Cache hit, but project data is invalid or missing. Forcing refresh.`
+            `Fetching fresh data for ${actionType} - cache is stale or forced refresh`
           );
-          // Return a fresh fetch
-          return fetchData(true);
-        }
 
-        // Return resolved promise for consistent interface
-        return Promise.resolve(data);
-      }
-    },
-    [
-      dispatch,
-      fetchAction,
-      fetchParams,
-      isCacheStale,
-      cacheTimeout,
-      getOngoingRequest,
-      actionType,
-      data,
-      priority,
-    ]
-  );
+          // CRITICAL FIX: Handle primitive fetchParams (strings, numbers) vs objects
+          // For actions like fetchProjectById that expect a primitive parameter,
+          // don't spread fetchParams into an object
+          let actionPayload;
+          if (fetchParams === null || fetchParams === undefined) {
+            // No params needed
+            actionPayload = {
+              forceRefresh,
+              cacheTimeout,
+              smartRefresh,
+              idField,
+            };
+          } else if (
+            typeof fetchParams === 'object' &&
+            !Array.isArray(fetchParams)
+          ) {
+            // fetchParams is an object - spread it with other options
+            actionPayload = {
+              ...fetchParams,
+              forceRefresh,
+              cacheTimeout,
+              smartRefresh,
+              idField,
+            };
+          } else {
+            // fetchParams is a primitive (string, number, etc.) - pass it directly
+            // This is the case for fetchProjectById(projectId)
+            actionPayload = fetchParams;
+          } // DEBUG: Development-only action dispatch logging
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🔍 [useDataFetching] Dispatching action:`, {
+              actionType,
+              fetchParams,
+              fetchParamsType: typeof fetchParams,
+              actionPayload,
+              actionPayloadType: typeof actionPayload,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          // Create and store promise
+          const fetchPromise = dispatch(fetchAction(actionPayload));
+
+          // Store the request in our tracking object
+          ongoingRequests[actionType] = {
+            timestamp: Date.now(),
+            promise: fetchPromise,
+          };
+
+          // Clean up after request completes
+          fetchPromise.finally(() => {
+            // Remove request entry after a delay to catch any near-simultaneous requests
+            setTimeout(() => {
+              if (ongoingRequests[actionType]?.promise === fetchPromise) {
+                delete ongoingRequests[actionType];
+              }
+            }, 2000);
+          });
+
+          return fetchPromise;
+        } else {
+          console.log(
+            `Using cached data for ${actionType} - cache is still fresh, ensuring Redux state is updated.`
+          ); // **THE FIX**: Always dispatch the action. The thunk itself is smart enough
+          // to return cached data immediately without an API call. This ensures the
+          // Redux Toolkit lifecycle completes and the `.fulfilled` action is dispatched,
+          // which will in turn update the `currentProject` state via the reducer.
+
+          // CRITICAL FIX: Handle primitive fetchParams for cached path too
+          let actionPayload;
+          if (fetchParams === null || fetchParams === undefined) {
+            actionPayload = { forceRefresh: false };
+          } else if (
+            typeof fetchParams === 'object' &&
+            !Array.isArray(fetchParams)
+          ) {
+            actionPayload = { ...fetchParams, forceRefresh: false };
+          } else {
+            // fetchParams is a primitive - pass it directly
+            actionPayload = fetchParams;
+          }
+
+          return dispatch(fetchAction(actionPayload));
+        }
+      },
+      [
+        dispatch,
+        fetchAction,
+        JSON.stringify(fetchParams), // PERFORMANCE FIX: Stringify for stable comparison
+        actionType,
+        getOngoingRequest,
+        priority,
+        backgroundRefresh,
+        cacheTimeout,
+        smartRefresh,
+        idField,
+      ]
+    );
 
   /**
    * Refetch function exposed to components
@@ -281,24 +393,139 @@ const useDataFetching = ({
     },
     [fetchData]
   );
-
   /**
    * Effect to fetch data on initial render and when dependencies change
    * Implements the intelligent caching logic to prevent redundant calls
-   */
-  useEffect(() => {
+   */ useEffect(() => {
+    // DEBUG: Development-only useEffect trigger logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔍 [useDataFetching] useEffect triggered:`, {
+        enabled,
+        hasInitiallyFetched,
+        skipInitialFetch,
+        actionType,
+        fetchParams: JSON.stringify(fetchParams),
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Don't fetch if disabled
+    if (!enabled) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔍 [useDataFetching] Fetch skipped - disabled`);
+      }
+      return;
+    }
+
     // Skip initial fetch if requested
     if (!hasInitiallyFetched) {
       setHasInitiallyFetched(true);
-      if (skipInitialFetch) return;
+      if (skipInitialFetch) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(
+            `🔍 [useDataFetching] Initial fetch skipped per configuration`
+          );
+        }
+        return;
+      }
     }
 
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`🔍 [useDataFetching] Calling fetchData...`);
+    }
     fetchData(false); // Not forcing refresh, will check cache first
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...dependencies, fetchAction]); // Include all dependencies that should trigger a refetch
+    // PERFORMANCE FIX: Depend on stable fetchData reference
+  }, [enabled, fetchData]);
 
-  return { data, isLoading, error, refetch };
+  // Phase 3 Step 2: Optimistic Update Functions
+  const applyOptimisticUpdate = useCallback(
+    (operationId, updateFunction) => {
+      if (!enableOptimisticUpdates) return Promise.resolve();
+
+      // Apply optimistic update immediately
+      const currentData = optimisticData || data;
+      const updatedData = updateFunction(currentData);
+
+      setOptimisticData(updatedData);
+      setPendingOperations((prev) => new Set([...prev, operationId]));
+
+      // Return a promise that resolves when the real operation completes
+      return new Promise((resolve, reject) => {
+        // Simulate API delay for demo purposes
+        setTimeout(() => {
+          // In real implementation, this would be tied to actual API completion
+          setPendingOperations((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(operationId);
+            return newSet;
+          });
+
+          // If no more pending operations, clear optimistic data
+          if (pendingOperations.size <= 1) {
+            setOptimisticData(null);
+          }
+
+          resolve(updatedData);
+        }, 1000);
+      });
+    },
+    [enableOptimisticUpdates, optimisticData, data, pendingOperations]
+  );
+
+  const rollbackOptimisticUpdate = useCallback(
+    (operationId) => {
+      setPendingOperations((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(operationId);
+        return newSet;
+      });
+
+      // If no more pending operations, clear optimistic data
+      if (pendingOperations.size <= 1) {
+        setOptimisticData(null);
+      }
+    },
+    [pendingOperations]
+  );
+
+  // Enhanced background refresh with state tracking
+  const triggerBackgroundRefresh = useCallback(() => {
+    if (!backgroundRefresh) return;
+
+    setBackgroundRefreshState((prev) => ({
+      isRefreshing: true,
+      lastRefreshTime: Date.now(),
+      refreshCount: prev.refreshCount + 1,
+    }));
+
+    fetchData(false).finally(() => {
+      setBackgroundRefreshState((prev) => ({
+        ...prev,
+        isRefreshing: false,
+      }));
+    });
+  }, [backgroundRefresh, fetchData]);
+
+  // Determine final data to return (optimistic data takes precedence)
+  const finalData = useMemo(() => {
+    return optimisticData || data;
+  }, [optimisticData, data]);
+
+  // Enhanced return object with Phase 3 Step 2 features
+  return {
+    data: finalData,
+    isLoading,
+    error,
+    refetch,
+    // Phase 3 Step 2: Enhanced features
+    backgroundRefreshState,
+    applyOptimisticUpdate,
+    rollbackOptimisticUpdate,
+    triggerBackgroundRefresh,
+    pendingOperations: Array.from(pendingOperations),
+    hasOptimisticUpdates: optimisticData !== null,
+  };
 };
 
 export default useDataFetching;

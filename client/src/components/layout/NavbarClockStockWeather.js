@@ -5,7 +5,6 @@ import CompactStockDisplay from './CompactStockDisplay';
 
 /**
  * Navbar component that combines clock, stock, and weather information
- * Now uses the space-efficient CompactStockDisplay to reduce navbar clutter
  *
  * @returns {JSX.Element} - Rendered navbar component with clock, stock, and weather
  */

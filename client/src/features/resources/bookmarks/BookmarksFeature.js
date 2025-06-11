@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
 import { ExternalLink, Clipboard, Plus, Edit, Trash } from 'lucide-react';
@@ -50,13 +50,19 @@ const BookmarksFeature = ({ activeFolder, setActiveFolder }) => {
   });
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
-  // Get data from Redux store
+  // Memoized selectors to prevent Redux rerender warnings
+  const selectBookmarks = useMemo(() => (state) => state.bookmarks, []);
+
   const {
     bookmarks,
+    categories,
+    tags,
     isLoading: bookmarksLoading,
-    isError: bookmarksError,
+    error: bookmarksError,
     message: bookmarksMessage,
-  } = useSelector((state) => state.bookmarks);
+    searchResults,
+    isSearching,
+  } = useSelector(selectBookmarks);
 
   // Show add bookmark modal when custom event is triggered
   useEffect(() => {

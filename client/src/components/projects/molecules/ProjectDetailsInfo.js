@@ -329,9 +329,9 @@ const ProjectDetailsInfo = ({
       <div>
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold text-primary">
-            Progress: {project.progress || 0}%
+            Progress: {project.progress?.percentage || 0}%
           </h2>
-          {project.progress === 100 && (
+          {(project.progress?.percentage || 0) === 100 && (
             <span className="text-green-500 text-sm font-medium">
               Complete!
             </span>
@@ -340,7 +340,7 @@ const ProjectDetailsInfo = ({
         <div className="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
           <div
             className="bg-primary h-4 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${project.progress || 0}%` }}
+            style={{ width: `${project.progress?.percentage || 0}%` }}
           ></div>
         </div>
       </div>

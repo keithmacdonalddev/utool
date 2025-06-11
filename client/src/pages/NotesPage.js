@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import {
@@ -15,11 +15,27 @@ import FavoritesSection from '../components/notes/FavoritesSection';
 import ArchivedSection from '../components/notes/ArchivedSection';
 import Button from '../components/common/Button';
 import { ArrowLeft } from 'lucide-react';
+import { cn } from '../utils/cn';
 
 const NotesPage = () => {
   const dispatch = useDispatch();
+
+  // Memoized selector to prevent Redux rerender warnings
+  const selectNotesState = useMemo(
+    () => (state) => ({
+      notes: state.notes.notes,
+      pinned: state.notes.pinned,
+      favorites: state.notes.favorites,
+      archived: state.notes.archived,
+      isLoading: state.notes.isLoading,
+      isError: state.notes.isError,
+      message: state.notes.message,
+    }),
+    []
+  );
+
   const { notes, pinned, favorites, archived, isLoading, isError, message } =
-    useSelector((state) => state.notes);
+    useSelector(selectNotesState);
 
   // Get the saved view preference from localStorage or default to 'grid'
   const [view, setView] = useState(() => {

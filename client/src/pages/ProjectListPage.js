@@ -1,6 +1,6 @@
 import React, { memo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
-import ProjectCard from '../components/projects/ProjectCard';
+import ProjectCard from '../components/projects/molecules/ProjectCard';
 import { ArrowLeft, Grid, List, AlignJustify } from 'lucide-react';
 import Button from '../components/common/Button';
 import { isTaskOverdue, isTaskDueToday } from '../utils/taskUtils';

@@ -6,7 +6,7 @@
 // 3. Filtering: Allows filtering by time period, item type, and
 // 4. Data Comparison: Enables comparison between different time periods
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -99,8 +99,9 @@ const ArchivePage = () => {
 
   const { showNotification } = useNotifications();
 
-  // User data from Redux store
-  const { user } = useSelector((state) => state.auth);
+  // User data from Redux store - memoized to prevent rerender warnings
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+  const { user } = useSelector(selectAuth);
 
   /**
    * Restore an archived item back to its original collection

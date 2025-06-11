@@ -14,6 +14,7 @@ const AuditLogSchema = new mongoose.Schema(
         // Auth-related actions
         'login',
         'logout',
+        'register',
         'password_change',
         'email_verification',
         'account_lock',
@@ -39,6 +40,7 @@ const AuditLogSchema = new mongoose.Schema(
         'task_delete',
         'task_status_change',
         'task_retrieve',
+        'task_read',
 
         // Knowledge Base actions
         'kb_create',

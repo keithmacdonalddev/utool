@@ -8,6 +8,12 @@ import {
   updateComment,
   deleteComment,
 } from '../controllers/commentController.js';
+import {
+  getCommentsForEntity,
+  createCommentForEntity,
+  updateComment as updateProjectComment,
+  deleteComment as deleteProjectComment,
+} from '../controllers/projectCommentController.js';
 
 // Apply protect middleware to all comment routes
 router.use(protect);
@@ -26,10 +32,68 @@ router
 const commentActionsRouter = express.Router();
 commentActionsRouter.use(protect); // Protect these routes too
 
+// Routes for entity-specific comments (projects/tasks)
+// Format: /api/v1/comments/:entityType/:entityId
+commentActionsRouter
+  .route('/:entityType/:entityId')
+  .get(authorize('projects', ACCESS_LEVELS.READ), getCommentsForEntity)
+  .post(authorize('projects', ACCESS_LEVELS.READ), createCommentForEntity);
+
+// Routes for specific comment operations
+// Format: /api/v1/comments/:commentId
+// Handles both KB comments and project/task comments
 commentActionsRouter
   .route('/:commentId')
-  .put(updateComment) // Update a specific comment
-  .delete(deleteComment); // Delete a specific comment
+  .put(async (req, res, next) => {
+    try {
+      // Determine comment type by checking the comment
+      const Comment = await import('../models/Comment.js');
+      const comment = await Comment.default.findById(req.params.commentId);
+
+      if (!comment) {
+        return res
+          .status(404)
+          .json({ success: false, message: 'Comment not found' });
+      }
+
+      // Route to appropriate controller based on comment type
+      if (
+        comment.targetType &&
+        ['Project', 'Task'].includes(comment.targetType)
+      ) {
+        return updateProjectComment(req, res, next);
+      } else {
+        return updateComment(req, res, next);
+      }
+    } catch (error) {
+      next(error);
+    }
+  })
+  .delete(async (req, res, next) => {
+    try {
+      // Determine comment type by checking the comment
+      const Comment = await import('../models/Comment.js');
+      const comment = await Comment.default.findById(req.params.commentId);
+
+      if (!comment) {
+        return res
+          .status(404)
+          .json({ success: false, message: 'Comment not found' });
+      }
+
+      // Route to appropriate controller based on comment type
+      if (
+        comment.targetType &&
+        ['Project', 'Task'].includes(comment.targetType)
+      ) {
+        return deleteProjectComment(req, res, next);
+      } else {
+        return deleteComment(req, res, next);
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
 
 // Export both routers
 export { router as articleCommentsRouter, commentActionsRouter };

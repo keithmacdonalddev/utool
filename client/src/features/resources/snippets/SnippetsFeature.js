@@ -67,15 +67,23 @@ const SnippetsFeature = forwardRef(
       tags: [],
     });
 
-    // Get data from Redux store
+    // Memoized selectors to prevent Redux rerender warnings
+    const selectSnippets = useMemo(() => (state) => state.snippets, []);
+    const selectSnippetCategories = useMemo(
+      () => (state) => state.snippetCategories,
+      []
+    );
+
     const {
       snippets,
+      categories: snippetCategories,
+      tags: snippetTags,
       isLoading: snippetsLoading,
       isError: snippetsError,
       message: snippetsMessage,
-    } = useSelector((state) => state.snippets);
+    } = useSelector(selectSnippets);
 
-    const { categories } = useSelector((state) => state.snippetCategories);
+    const { categories } = useSelector(selectSnippetCategories);
 
     // Fetch categories when component mounts
     useEffect(() => {

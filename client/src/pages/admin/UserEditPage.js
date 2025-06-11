@@ -33,7 +33,7 @@ const UserEditPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState(''); // For both fetch and update errors
-  const { handleNotificationClick } = useNotifications();
+  const { showNotification } = useNotifications();
 
   // Track if there are form changes
   const hasChanges = () => {
@@ -52,17 +52,6 @@ const UserEditPage = () => {
       originalData.bio !== formData.bio ||
       (formData.resetPassword && formData.newPassword) // Consider password reset as a change only if new password is provided
     );
-  };
-
-  // Using handleNotificationClick as a replacement for showNotification
-  const showNotification = (message, type = 'info') => {
-    const notificationObj = {
-      _id: Date.now().toString(),
-      title: type === 'error' ? 'Error' : 'Success',
-      message,
-      type,
-    };
-    handleNotificationClick(notificationObj);
   };
 
   // Fetch user data

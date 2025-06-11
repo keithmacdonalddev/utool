@@ -38,10 +38,10 @@ async function addIpToUser(user, ip) {
 export const register = asyncHandler(async (req, res, next) => {
   // Extract firstName and lastName from request body instead of single 'name' field
   // This allows for better data granularity and consistent user identification
-  const { firstName, lastName, username, email, password } = req.body; // Added username
+  let { firstName, lastName, username, email, password } = req.body; // Added username
 
   try {
-    // Check if user already exists by email or username
+    // Check if user already exists by email
     const existingUserByEmail = await User.findOne({ email });
     if (existingUserByEmail) {
       const { auditLog } = await import('../middleware/auditLogMiddleware.js');
@@ -49,24 +49,53 @@ export const register = asyncHandler(async (req, res, next) => {
         email,
         reason: 'Email already exists',
       });
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: 'User with this email already exists',
-        });
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists',
+      });
     }
 
-    const existingUserByUsername = await User.findOne({ username });
-    if (existingUserByUsername) {
-      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
-      await auditLog(req, 'register', 'failed', {
-        username,
-        reason: 'Username already exists',
-      });
-      return res
-        .status(400)
-        .json({ success: false, message: 'Username is already taken' });
+    // Auto-generate username if not provided
+    if (!username || username.trim() === '') {
+      // Create a base username from firstName and lastName
+      const baseUsername = `${firstName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')}${lastName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')}`;
+
+      // Add a random suffix to ensure uniqueness
+      const randomSuffix = Math.floor(Math.random() * 10000)
+        .toString()
+        .padStart(4, '0');
+      username = `${baseUsername}${randomSuffix}`;
+
+      // Ensure the auto-generated username doesn't already exist (very unlikely but safety first)
+      let attempts = 0;
+      while ((await User.findOne({ username })) && attempts < 10) {
+        const newRandomSuffix = Math.floor(Math.random() * 10000)
+          .toString()
+          .padStart(4, '0');
+        username = `${baseUsername}${newRandomSuffix}`;
+        attempts++;
+      }
+
+      console.log(`Auto-generated username: ${username} for user: ${email}`);
+    } else {
+      // If username is provided, check if it already exists
+      const existingUserByUsername = await User.findOne({ username });
+      if (existingUserByUsername) {
+        const { auditLog } = await import(
+          '../middleware/auditLogMiddleware.js'
+        );
+        await auditLog(req, 'register', 'failed', {
+          username,
+          reason: 'Username already exists',
+        });
+        return res
+          .status(400)
+          .json({ success: false, message: 'Username is already taken' });
+      }
     }
 
     // Create user with separate firstName and lastName fields
@@ -146,6 +175,12 @@ export const login = asyncHandler(async (req, res, next) => {
 
     if (!user) {
       const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+      // Enhanced logging for debugging
+      console.warn(`LOGIN FAILED - User not found: ${email}`);
+      console.log(
+        `Database state: Connected=${mongoose.connection.readyState === 1}`
+      );
+
       // It's important to still log the attempt, even if the user doesn't exist.
       // The audit log function should be able to handle a null or undefined userId for 'login' actions.
       await auditLog(req, 'login', 'failed', {
@@ -589,7 +624,8 @@ export const logout = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/refresh-token
 // @access  Public (relies on HttpOnly cookie for refresh token)
 export const refreshToken = asyncHandler(async (req, res, next) => {
-  const { refreshToken } = req.cookies;
+  // Safely extract refreshToken from cookies, handling cases where cookies might be undefined
+  const refreshToken = req.cookies?.refreshToken;
 
   if (!refreshToken) {
     return next(new ErrorResponse('Refresh token not found', 401));

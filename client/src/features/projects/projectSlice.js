@@ -88,8 +88,6 @@ export const getProjects = createAsyncThunk(
 
     // Use cached data if available and not forcing refresh
     if (cacheIsValid && !forceRefresh && state.projects.length > 0) {
-      console.log('Using cached projects data');
-
       // If backgroundRefresh is enabled, trigger a refresh but return cached data immediately
       if (backgroundRefresh) {
         // We return cached data immediately, but dispatch a background refresh
@@ -122,7 +120,6 @@ export const getProjects = createAsyncThunk(
     }
 
     try {
-      console.log('Fetching fresh projects data from API');
       const response = await api.get(PROJECT_URL);
       return {
         projects: response.data.data,
@@ -212,7 +209,7 @@ export const getProject = createAsyncThunk(
       cacheTimeout = projectIdOrOptions.cacheTimeout || CACHE_TIMEOUT;
       backgroundRefresh = projectIdOrOptions.backgroundRefresh || false;
       smartRefresh = projectIdOrOptions.smartRefresh !== false; // Default to true
-    } // Validate project ID
+    }
     if (!projectId) {
       return thunkAPI.rejectWithValue('Project ID is required');
     }
@@ -246,100 +243,75 @@ export const getProject = createAsyncThunk(
 
     // For regular users, continue with normal flow
     const state = thunkAPI.getState().projects;
-    const now = Date.now(); // Check if this specific project is in cache and if cache is still valid
-    const projectCache = state.projectCache[projectId];
-    const cacheIsValid =
-      projectCache && now - projectCache.lastFetched < cacheTimeout;
+    const now = Date.now(); // Check if the project is already in the main list and if we should use it
+    const projectFromList = state.projects.find((p) => p._id === projectId);
 
-    // Check if we already have this project in the projects array
-    const projectInList = state.projects.find((p) => p._id === projectId);
-
-    // Add more detailed logging
-    console.log(`Project cache status check for ID ${projectId}:`, {
-      cacheExists: !!projectCache,
-      cacheIsValid,
-      projectInList: !!projectInList,
-      forceRefresh,
-      currentProjectMatch: state.currentProject?._id === projectId,
-    });
-
-    // Use cached project if conditions are met
-    if (!forceRefresh && cacheIsValid) {
-      // If we have a current project and it matches the requested ID
-      if (state.currentProject && state.currentProject._id === projectId) {
-        console.log(`Using cached current project data for ID: ${projectId}`);
-
-        // If backgroundRefresh is enabled, trigger a refresh but return cached data immediately
-        if (backgroundRefresh) {
-          setTimeout(() => {
-            api
-              .get(PROJECT_URL + projectId)
-              .then((response) => {
-                // Dispatch a special action for background update of a single project
-                thunkAPI.dispatch({
-                  type: 'projects/backgroundUpdateSingle',
-                  payload: {
-                    project: response.data.data,
-                    projectId,
-                    timestamp: Date.now(),
-                    smartRefresh,
-                  },
-                });
-              })
-              .catch((error) => {
-                console.error('Background refresh failed:', error);
-                // No need to notify user for background refresh failures
-              });
-          }, 0);
+    if (projectFromList && !forceRefresh) {
+      // If found in the main list and not forcing a refresh, use this data
+      // Optionally, trigger a background refresh if data might be stale
+      const BACKGROUND_REFRESH_THRESHOLD = 30 * 60 * 1000; // 30 minutes
+      if (
+        !state.projectCache[projectId]?.lastFetched ||
+        Date.now() - state.projectCache[projectId].lastFetched >
+          BACKGROUND_REFRESH_THRESHOLD
+      ) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(
+            `ProjectDetails: Project ${projectId} found in list, initiating background refresh.`
+          );
         }
-
-        return {
-          project: state.currentProject,
-          fromCache: true,
-          backgroundRefreshing: backgroundRefresh,
+        // No need to await, let it run in background
+        thunkAPI.dispatch(
+          getProject({ projectId, forceRefresh: true, isBackground: true })
+        );
+      } // Update the projectCache's lastFetched timestamp to now, as we are serving it.
+      // This helps useDataFetching recognize it as fresh.
+      if (state.projectCache[projectId]) {
+        state.projectCache[projectId].lastFetched = Date.now();
+        // Also update the data field to ensure cache consistency
+        state.projectCache[projectId].data = projectFromList;
+      } else {
+        state.projectCache[projectId] = {
+          lastFetched: Date.now(),
+          data: projectFromList, // Store the actual project data
+          fromAPI: true,
         };
       }
-
-      // If project is in projects list but not set as currentProject
-      if (projectInList) {
-        console.log(`Using cached project data from list for ID: ${projectId}`);
-
-        // Same background refresh logic for this case too
-        if (backgroundRefresh) {
-          setTimeout(() => {
-            api
-              .get(PROJECT_URL + projectId)
-              .then((response) => {
-                thunkAPI.dispatch({
-                  type: 'projects/backgroundUpdateSingle',
-                  payload: {
-                    project: response.data.data,
-                    projectId,
-                    timestamp: Date.now(),
-                    smartRefresh,
-                  },
-                });
-              })
-              .catch((error) => {
-                console.error('Background refresh failed:', error);
-              });
-          }, 0);
-        }
-
-        return {
-          project: projectInList,
-          fromCache: true,
-          backgroundRefreshing: backgroundRefresh,
-        };
-      } // If we get here, the cache is valid but neither currentProject nor projectInList match
-      // This is a special case where we should force a refresh
       console.log(
-        `Cache is valid but project ${projectId} not found in memory. Forcing API fetch.`
+        `projectSlice: Using cached project data from list for ID: ${projectId}`
       );
-    } // If we need to fetch from API
+      return {
+        project: projectFromList,
+        fromCache: true,
+        fromListCache: true,
+      };
+    }
+
+    // Check project-specific cache if not found in the main list or if forced refresh on list item
+    const projectCache = state.projectCache?.[projectId];
+    const cacheIsValid =
+      projectCache && now - projectCache.lastFetched < cacheTimeout; // Use specific project cache if it's valid
+    if (cacheIsValid && !forceRefresh) {
+      console.log(`Using cached current project data for ID: ${projectId}`);
+      // CRITICAL FIX: Return the actual cached project data instead of state.currentProject
+      // The cache now stores the actual project data, not just timestamps
+      return {
+        project: projectCache.data, // Return the cached project data
+        fromCache: true,
+        backgroundRefreshing: false,
+      };
+    } // If we need to fetch from API (not in any cache or forceRefresh is true)
     try {
       console.log(`Fetching fresh project data for ID: ${projectId}`);
       const response = await api.get(PROJECT_URL + projectId);
+
+      console.log(`✅ API response received for project ${projectId}:`, {
+        status: response.status,
+        hasData: !!response.data,
+        hasProject: !!response.data?.data,
+        projectId: response.data?.data?._id,
+        projectName: response.data?.data?.name,
+      });
 
       // Verify we have valid project data with an ID
       if (!response.data?.data || !response.data.data._id) {
@@ -349,17 +321,110 @@ export const getProject = createAsyncThunk(
         );
       }
 
-      return {
+      const returnValue = {
         project: response.data.data,
         fromCache: false,
         timestamp: now,
         projectId, // Include ID for updating projectCache
         smartRefresh,
       };
+      console.log(`✅ getProject thunk returning success:`, {
+        projectId,
+        projectName: returnValue.project.name,
+        returnStructure: Object.keys(returnValue),
+      });
+
+      // Add comprehensive validation before return to catch any potential issues
+      try {
+        // Validate that all required properties are present and valid
+        if (!returnValue.project) {
+          console.error('❌ CRITICAL: returnValue.project is null/undefined');
+          throw new Error('Project data is null');
+        }
+
+        if (!returnValue.project._id) {
+          console.error('❌ CRITICAL: returnValue.project._id is missing');
+          throw new Error('Project ID is missing');
+        }
+
+        // Ensure the return value is serializable (Redux requirement)
+        const serializedTest = JSON.stringify(returnValue);
+        const deserializedTest = JSON.parse(serializedTest);
+
+        console.log('✅ Return value serialization test passed');
+        console.log('🚀 About to return from getProject thunk...');
+
+        return returnValue;
+      } catch (serializationError) {
+        console.error(
+          '❌ CRITICAL: Return value serialization failed:',
+          serializationError
+        );
+        console.error('❌ Return value that failed:', returnValue);
+
+        // Return a simplified, guaranteed-serializable version
+        return {
+          project: {
+            _id: returnValue.project._id,
+            name: returnValue.project.name,
+            // Add other essential fields manually to ensure serialization
+            description: returnValue.project.description || '',
+            tasks: returnValue.project.tasks || [],
+            members: returnValue.project.members || [],
+            isCompleted: returnValue.project.isCompleted || false,
+            createdAt: returnValue.project.createdAt,
+            updatedAt: returnValue.project.updatedAt,
+          },
+          fromCache: false,
+          timestamp: now,
+          projectId,
+          smartRefresh,
+        };
+      }
     } catch (error) {
-      const message =
-        error.response?.data?.message || error.message || error.toString();
-      return thunkAPI.rejectWithValue(message);
+      console.error(`Failed to fetch project ${projectId}:`, error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        projectId,
+        userInfo: {
+          userId: auth.user?.id || auth.user?._id,
+          isGuest: auth.isGuest,
+          userName: auth.user?.name,
+        },
+      });
+
+      // Enhanced error handling based on status code
+      let errorMessage = 'Failed to fetch project';
+
+      if (error.response?.status === 404) {
+        errorMessage = `Project with ID "${projectId}" could not be found, or you may not have permission to view it.`;
+        console.error('⚠️ 404 Error Analysis:', {
+          possibleCauses: [
+            'Project exists in list but user lacks individual access permissions',
+            'Project was deleted between dashboard load and detail request',
+            'User is not owner or member of this project',
+            'Database inconsistency between getProjects and getProject queries',
+          ],
+          troubleshooting: [
+            'Check if user is owner or member in project.members array',
+            'Verify project exists in database with this exact ID',
+            'Check if there are permission differences between list and detail access',
+          ],
+        });
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have permission to access this project.';
+        console.error('⚠️ 403 Permission Error:', {
+          explanation: 'User is not authorized to view this project',
+          checkRequired: 'User must be project owner or member',
+        });
+      } else if (error.response?.status >= 500) {
+        errorMessage = 'Server error while fetching project. Please try again.';
+      }
+
+      return thunkAPI.rejectWithValue(errorMessage);
     }
   }
 );
@@ -508,12 +573,11 @@ export const projectSlice = createSlice({
           }
 
           // Update both the global lastFetched and individual project cache entries
-          state.lastFetched = action.payload.timestamp; // Update last fetched timestamp
-
-          // Also update cache entries for each project
+          state.lastFetched = action.payload.timestamp; // Update last fetched timestamp          // Also update cache entries for each project
           action.payload.projects.forEach((project) => {
             state.projectCache[project._id] = {
               lastFetched: action.payload.timestamp,
+              data: project, // Store the actual project data
               fromAPI: true,
             };
           });
@@ -554,13 +618,12 @@ export const projectSlice = createSlice({
           // If smart refresh is disabled, always update
           state.projects = action.payload.projects;
           console.log('Background refresh completed - projects updated');
-        }
-
-        // Update timestamp and project cache entries
+        } // Update timestamp and project cache entries
         state.lastFetched = action.payload.timestamp;
         action.payload.projects.forEach((project) => {
           state.projectCache[project._id] = {
             lastFetched: action.payload.timestamp,
+            data: project, // Store the actual project data
             fromAPI: true,
           };
         });
@@ -575,11 +638,10 @@ export const projectSlice = createSlice({
       .addCase(createProject.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
-        state.projects.push(action.payload); // Add new project to the list
-
-        // Add to project cache
+        state.projects.push(action.payload); // Add new project to the list        // Add to project cache
         state.projectCache[action.payload._id] = {
           lastFetched: Date.now(),
+          data: action.payload, // Store the actual project data
           fromAPI: true,
         };
       })
@@ -605,12 +667,32 @@ export const projectSlice = createSlice({
         state.isError = false;
         state.message = '';
         state.isSuccess = false; // Reset success state as well
-        // state.currentProject = null; // Keep existing currentProject during background refresh, clear only on non-background pending
-        if (!isBackground) {
+
+        // CRITICAL FIX: Don't clear currentProject if we're loading the same project
+        // Only clear if we're switching to a different project or have no project at all
+        const currentProjectId = state.currentProject?._id;
+        const willClearProject =
+          !isBackground &&
+          state.currentProject &&
+          currentProjectId !== projectId;
+
+        if (willClearProject) {
           state.currentProject = null;
         }
+
+        // Add logging to verify the fix (Teammate 2's diagnostic addition)
+        console.log('getProject.pending:', {
+          currentProjectId,
+          requestedProjectId: projectId,
+          willClearProject,
+          isBackground,
+          hasCurrentProject: !!state.currentProject,
+        });
       })
       .addCase(getProject.fulfilled, (state, action) => {
+        console.log('🎉 getProject.fulfilled reducer called!');
+        console.log('🎉 Action payload received:', action.payload);
+
         state.isLoading = false;
         state.isSuccess = true;
         state.isError = false; // Ensure isError is false on success
@@ -619,28 +701,41 @@ export const projectSlice = createSlice({
         const { project, fromCache, timestamp, smartRefresh, projectId } =
           action.payload;
 
+        console.log('✅ getProject.fulfilled reducer:', {
+          payload: action.payload,
+        });
+
+        // **THE FIX - REINFORCED**: Always set the current project right away.
+        // This ensures the UI has data immediately, especially when loading from cache.
+        if (project && project._id) {
+          state.currentProject = project;
+        } else if (fromCache && !project) {
+          console.error(
+            'getProject.fulfilled: fromCache is true but project data is missing from payload!'
+          );
+        } else if (!project) {
+          console.error(
+            'getProject.fulfilled: Project data is missing from payload!'
+          );
+        }
+
         // If this is not from cache (i.e., it's a fresh fetch or background update)
         if (!fromCache) {
           // Apply smart refresh logic if enabled and data is available
           if (smartRefresh && project) {
-            // Compare with existing currentProject or project in list
-            const existingProject =
-              state.currentProject?._id === project._id
-                ? state.currentProject
-                : state.projects.find((p) => p._id === project._id);
+            // Compare with the project in the main list
+            const projectIndex = state.projects.findIndex(
+              (p) => p._id === project._id
+            );
 
             if (
-              !existingProject ||
-              deepCompareObjects(existingProject, project)
+              projectIndex === -1 ||
+              !deepCompareObjects(state.projects[projectIndex], project)
             ) {
-              state.currentProject = project;
               console.log(
                 `Project data for ${project._id} updated - meaningful changes detected`
               );
               // Update the project in the main projects list as well
-              const projectIndex = state.projects.findIndex(
-                (p) => p._id === project._id
-              );
               if (projectIndex !== -1) {
                 state.projects[projectIndex] = project;
               } else {
@@ -649,40 +744,30 @@ export const projectSlice = createSlice({
               }
             } else {
               console.log(
-                `No meaningful changes in project data for ${project._id}, skipping update`
+                `No meaningful changes in project data for ${project._id}, skipping list update`
               );
-              // If no changes, but currentProject was null, set it from payload
-              if (!state.currentProject && project) {
-                state.currentProject = project;
-              }
             }
           } else if (project) {
-            // Without smart refresh, or if project is null (should not happen on fulfilled), always update
-            state.currentProject = project;
-            // Update the project in the main projects list as well
+            // Without smart refresh, always update the list
             const projectIndex = state.projects.findIndex(
               (p) => p._id === project._id
             );
             if (projectIndex !== -1) {
               state.projects[projectIndex] = project;
             } else if (project._id) {
-              // If project was not in the list (e.g. direct fetch by ID), add it
               state.projects.push(project);
             }
-          }
-
-          // Update cache timestamp for this specific project if projectId is available
+          } // Update cache timestamp for this specific project if projectId is available
           if (projectId && timestamp && project) {
             state.projectCache[projectId] = {
               lastFetched: timestamp,
+              data: project, // Store the actual project data
               fromAPI: true,
             };
           }
-        } else if (project && !state.currentProject) {
-          // If fromCache is true, but currentProject is null, set it.
-          // This handles the case where ProjectDetailsPage loads and project is in list cache but not currentProject
-          state.currentProject = project;
         }
+        // No 'else' block needed here anymore because we set currentProject at the top.
+        // The logic for handling 'fromCache' is now implicitly handled.
 
         // If this was a background refresh, reset the flag
         if (action.payload.backgroundRefreshing) {
@@ -691,6 +776,11 @@ export const projectSlice = createSlice({
         }
       })
       .addCase(getProject.rejected, (state, action) => {
+        console.log('❌ getProject.rejected reducer called!');
+        console.log('❌ Rejection payload:', action.payload);
+        console.log('❌ Rejection error:', action.error);
+        console.log('❌ Full rejection action:', action);
+
         state.isLoading = false;
         state.isError = true;
         state.message = action.payload || 'Failed to fetch project';
@@ -719,7 +809,7 @@ export const projectSlice = createSlice({
         // Only do comparison if smart refresh is enabled and we have an existing project
         if (smartRefresh && existingProject) {
           // Deep compare objects to see if there are meaningful changes
-          shouldUpdate = deepCompareObjects(existingProject, project);
+          shouldUpdate = !deepCompareObjects(existingProject, project);
 
           if (!shouldUpdate) {
             console.log(
@@ -729,11 +819,10 @@ export const projectSlice = createSlice({
         }
 
         if (shouldUpdate) {
-          console.log(`Background refresh - updating project ${projectId}`);
-
-          // Update project cache entry
+          console.log(`Background refresh - updating project ${projectId}`); // Update project cache entry
           state.projectCache[projectId] = {
             lastFetched: timestamp,
+            data: project, // Store the actual project data
             fromAPI: true,
           };
 
@@ -776,7 +865,7 @@ export const projectSlice = createSlice({
           // Only update if there are meaningful changes or it's not an optimistic update
           if (
             !isOptimistic ||
-            deepCompareObjects(state.projects[index], action.payload)
+            !deepCompareObjects(state.projects[index], action.payload)
           ) {
             state.projects[index] = action.payload;
           }
@@ -787,15 +876,14 @@ export const projectSlice = createSlice({
           // Only update if there are meaningful changes or it's not an optimistic update
           if (
             !isOptimistic ||
-            deepCompareObjects(state.currentProject, action.payload)
+            !deepCompareObjects(state.currentProject, action.payload)
           ) {
             state.currentProject = action.payload;
           }
-        }
-
-        // Update project cache
+        } // Update project cache
         state.projectCache[action.payload._id] = {
           lastFetched: Date.now(),
+          data: action.payload, // Store the actual project data
           fromAPI: !isOptimistic, // Mark as not from API if optimistic
         };
       })

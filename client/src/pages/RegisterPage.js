@@ -10,6 +10,7 @@ const RegisterPage = () => {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -22,7 +23,8 @@ const RegisterPage = () => {
     (state) => state.auth
   );
 
-  const { firstName, lastName, email, password, confirmPassword } = formData;
+  const { firstName, lastName, username, email, password, confirmPassword } =
+    formData;
 
   useEffect(() => {
     // Handle redirection or display messages after registration attempt
@@ -53,6 +55,7 @@ const RegisterPage = () => {
       const userData = {
         firstName: firstName || undefined,
         lastName: lastName || undefined,
+        username: username || undefined,
         email,
         password,
       };
@@ -110,6 +113,21 @@ const RegisterPage = () => {
               required
             />
           </div>
+
+          <FormInput
+            id="username"
+            label="Username (Optional)"
+            type="text"
+            placeholder="Enter a custom username"
+            name="username"
+            value={username}
+            onChange={onChange}
+            disabled={isLoading}
+            required={false}
+            helpText="Optional: If left empty, a username will be automatically generated for you based on your name."
+            minLength="3"
+            maxLength="30"
+          />
 
           <FormInput
             id="email"

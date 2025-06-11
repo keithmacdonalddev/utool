@@ -1,15 +1,15 @@
 # PROJECTS FEATURE REORGANIZATION - MILESTONE 2
 
-## Essential Task Management System (Week 3-4)
+## Advanced Task Management System (Week 5-6)
 
-**Risk:** Low | **Value:** High - Core User Needs  
+**Risk:** Medium | **Value:** Core Feature Enhancement
 **Status:** Planning Phase
 
 ---
 
 ### Overview
 
-This milestone focuses on building practical, user-friendly task management features that solve real problems for small teams. We'll enhance the existing task infrastructure with essential features like improved task views, basic task relationships, and simple progress tracking - avoiding over-engineering for future needs.
+This milestone transforms the basic task functionality into a comprehensive task management system that rivals dedicated task management platforms. We'll build upon the existing task infrastructure while adding advanced features like subtasks, dependencies, time tracking, and multiple view modes.
 
 ### Integration with Existing Codebase
 
@@ -28,6 +28,44 @@ This milestone focuses on building practical, user-friendly task management feat
 - Redux Toolkit for state management
 - Existing API patterns and authentication
 - Current notification system integration
+
+---
+
+## 🎯 PHASED IMPLEMENTATION STRATEGY
+
+### 🔴 Critical Features (Weeks 5-6) - Essential Delivery
+
+**Must-Have for Core Functionality:**
+
+- Enhanced Task.js schema (backend foundation)
+- Basic TaskBoard.js with drag-and-drop status changes
+- Essential TaskDetail.js modal for viewing/editing core task properties
+- Basic TaskListView.js with simple filtering and sorting
+- Core taskController.js CRUD operations with basic validation
+- Essential tasksSlice.js for Redux state management
+- Basic time tracking UI (start/stop functionality)
+
+### 🟡 Important Features (Weeks 7-8) - Enhanced Experience
+
+**Should-Have for Improved UX:**
+
+- Advanced filtering and search capabilities in TaskListView.js
+- Task dependency UI in TaskDetail.js (basic linking, not complex validation)
+- Enhanced TaskCard.js with rich information display
+- Basic task templates functionality
+- Improved bulk operations
+- Enhanced progress tracking and visualization
+
+### 🟢 Enhanced Features (Future M6) - Enterprise Polish
+
+**Could-Have for Advanced Scenarios:**
+
+- Complex dependency validation and cycle detection
+- Advanced recurring task patterns
+- Comprehensive time tracking reports
+- Custom field builders
+- Advanced automation triggers
+- Enterprise bulk operations utilities
 
 ---
 
@@ -1452,7 +1490,7 @@ export const TaskDetail = ({
 
 **File: `client/src/components/projects/organisms/TaskListView.js`**
 
-````javascript
+```javascript
 import React, { useState, useMemo } from 'react';
 import { useDispatch } from 'react-redux';
 import {
@@ -1467,14 +1505,17 @@ import {
   Flag,
   Clock,
   CheckSquare,
-  Square
+  Square,
 } from 'lucide-react';
 import { TaskRow } from '../molecules/TaskRow';
 import { TaskFilters } from '../molecules/TaskFilters';
 import { BulkTaskActions } from '../molecules/BulkTaskActions';
 import { QuickAddTask } from '../molecules/QuickAddTask';
 import { cn } from '../../../utils/cn';
-import { updateTask, bulkUpdateTasks } from '../../../features/tasks/tasksSlice';
+import {
+  updateTask,
+  bulkUpdateTasks,
+} from '../../../features/tasks/tasksSlice';
 
 /**
  * TaskListView - Table/list view for project tasks
@@ -1492,7 +1533,12 @@ import { updateTask, bulkUpdateTasks } from '../../../features/tasks/tasksSlice'
  * @param {Function} props.onTaskClick - Handler for task click
  * @param {boolean} props.readOnly - Whether the list is read-only
  */
-export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = false }) => {
+export const TaskListView = ({
+  project,
+  tasks = [],
+  onTaskClick,
+  readOnly = false,
+}) => {
   const dispatch = useDispatch();
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [sortBy, setSortBy] = useState('order');
@@ -1505,7 +1551,7 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
     assignee: 'all',
     priority: 'all',
     dueDate: 'all',
-    tags: []
+    tags: [],
   });
 
   /**
@@ -1544,7 +1590,7 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
 
     const groups = {};
 
-    sortedTasks.forEach(task => {
+    sortedTasks.forEach((task) => {
       let groupKey;
 
       switch (groupBy) {
@@ -1572,7 +1618,9 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
               groupKey = 'Today';
             } else if (date.toDateString() === tomorrow.toDateString()) {
               groupKey = 'Tomorrow';
-            } else if (date < new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)) {
+            } else if (
+              date < new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)
+            ) {
               groupKey = 'This Week';
             } else {
               groupKey = 'Later';
@@ -1609,7 +1657,7 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
    */
   const handleSelectAll = (checked) => {
     if (checked) {
-      setSelectedTasks(tasks.map(t => t._id));
+      setSelectedTasks(tasks.map((t) => t._id));
     } else {
       setSelectedTasks([]);
     }
@@ -1622,7 +1670,7 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
     if (checked) {
       setSelectedTasks([...selectedTasks, taskId]);
     } else {
-      setSelectedTasks(selectedTasks.filter(id => id !== taskId));
+      setSelectedTasks(selectedTasks.filter((id) => id !== taskId));
     }
   };
 
@@ -1633,11 +1681,13 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
     if (selectedTasks.length === 0) return;
 
     try {
-      await dispatch(bulkUpdateTasks({
-        taskIds: selectedTasks,
-        action,
-        data
-      })).unwrap();
+      await dispatch(
+        bulkUpdateTasks({
+          taskIds: selectedTasks,
+          action,
+          data,
+        })
+      ).unwrap();
 
       // Clear selection after successful action
       setSelectedTasks([]);
@@ -1667,7 +1717,7 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
     { key: 'priority', label: 'Priority', sortable: true, width: 'w-24' },
     { key: 'dueDate', label: 'Due Date', sortable: true, width: 'w-32' },
     { key: 'progress', label: 'Progress', sortable: false, width: 'w-24' },
-    { key: 'actions', label: '', sortable: false, width: 'w-20' }
+    { key: 'actions', label: '', sortable: false, width: 'w-20' },
   ];
 
   return (
@@ -1701,669 +1751,7 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              "inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm",
-              showFilters
-                ? "bg-blue-50 text-blue-700 border-blue-200"
-                : "text-gray-700 border-gray-300 hover:bg-gray-50"
-            )}
-          >
-            <Filter className="w-4 h-4" />
-            <span>Filters</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Export/Import */}
-          <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-            <Download className="w-5 h-5" />
-          </button>
-          <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
-            <Upload className="w-5 h-5" />
-          </button>
-
-          {/* Add Task */}
-          {!readOnly && (
-            <QuickAddTask
-              projectId={project._id}
-              trigger={
-                <button className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                  <Plus className="w-4 h-4" />
-                  <span>Add Task</span>
-                </button>
-              }
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Filters */}
-      {showFilters && (
-        <TaskFilters
-          filters={filters}
-          onChange={setFilters}
-          project={project}
-          className="mb-4"
-        />
-      )}
-
-      {/* Task Table */}
-      <div className="flex-1 overflow-auto bg-white rounded-lg border">
-        <table className="w-full">
-          <thead className="bg-gray-50 sticky top-0 z-10">
-            <tr>
-              <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={selectedTasks.length === tasks.length && tasks.length > 0}
-                  indeterminate={selectedTasks.length > 0 && selectedTasks.length < tasks.length}
-                  onChange={(e) => handleSelectAll(e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-              </th>
-              {columns.map(column => (
-                <th
-                  key={column.key}
-                  className={cn(
-                    "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider",
-                    column.width,
-                    column.sortable && "cursor-pointer hover:bg-gray-100"
-                  )}
-                  onClick={() => column.sortable && handleSort(column.key)}
-                >
-                  <div className="flex items-center gap-1">
-                    {column.label}
-                    {column.sortable && sortBy === column.key && (
-                      <span className="text-blue-600">
-                        {sortOrder === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody className="divide-y divide-gray-200">
-            {Object.entries(groupedTasks).map(([groupKey, groupTasks]) => (
-              <React.Fragment key={groupKey}>
-                {/* Group Header */}
-                {groupBy !== 'none' && (
-                  <tr className="bg-gray-50">
-                    <td colSpan={columns.length + 1} className="<!-- filepath: c:\Users\macdo\Documents\Cline\utool\PROJECTS_MILESTONE_2.md -->
-# PROJECTS FEATURE REORGANIZATION - MILESTONE 2
-
-## Advanced Task Management System (Week 5-6)
-
-**Risk:** Medium | **Value:** Core Feature Enhancement
-**Status:** Planning Phase
-
----
-
-### Overview
-
-This milestone transforms the basic task functionality into a comprehensive task management system that rivals dedicated task management platforms. We'll build upon the existing task infrastructure while adding advanced features like subtasks, dependencies, time tracking, and multiple view modes.
-
-### Integration with Existing Codebase
-
-**Existing Files to Enhance/Modify:**
-- `client/src/components/TaskList.js` - Current basic task list component
-- `client/src/pages/ProjectDetailsPage.js` - Project view containing tasks
-- `server/models/Task.js` - Current task schema
-- `server/controllers/taskController.js` - Task CRUD operations
-- `client/src/features/tasks/tasksSlice.js` - Redux state (if exists)
-
-**Patterns We'll Maintain:**
-- Tailwind CSS for all styling
-- Lucide React icons consistently
-- Redux Toolkit for state management
-- Existing API patterns and authentication
-- Current notification system integration
-
----
-
-## 📊 DELIVERABLES
-
-### 1. Enhanced Task Schema
-
-**File: `server/models/Task.js`**
-
-```javascript
-import mongoose from 'mongoose';
-const { Schema } = mongoose;
-
-const taskSchema = new Schema({
-  // Core Information
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-    maxLength: 500,
-    index: true
-  },
-  description: {
-    type: String,
-    maxLength: 5000
-  },
-
-  // Project & Organization
-  project: {
-    type: Schema.Types.ObjectId,
-    ref: 'Project',
-    required: true,
-    index: true
-  },
-  parentTask: {
-    type: Schema.Types.ObjectId,
-    ref: 'Task',
-    default: null // null means it's a top-level task
-  },
-  subtasks: [{
-    type: Schema.Types.ObjectId,
-    ref: 'Task'
-  }],
-
-  // Assignment & Ownership
-  createdBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  assignee: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    index: true
-  },
-  assignedBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  assignedAt: { type: Date },
-
-  // Status & Progress
-  status: {
-    type: String,
-    enum: ['todo', 'in-progress', 'in-review', 'blocked', 'done', 'cancelled'],
-    default: 'todo',
-    index: true
-  },
-  progress: {
-    percentage: { type: Number, default: 0, min: 0, max: 100 },
-    automatic: { type: Boolean, default: true }, // Auto-calculate from subtasks
-    lastUpdated: { type: Date, default: Date.now }
-  },
-  completedAt: { type: Date },
-  completedBy: { type: Schema.Types.ObjectId, ref: 'User' },
-
-  // Priority & Categorization
-  priority: {
-    type: String,
-    enum: ['low', 'medium', 'high', 'urgent'],
-    default: 'medium',
-    index: true
-  },
-  category: {
-    type: String,
-    default: 'General',
-    index: true
-  },
-  tags: [{
-    type: String,
-    trim: true,
-    lowercase: true
-  }],
-
-  // Time Management
-  dueDate: {
-    type: Date,
-    index: true
-  },
-  startDate: { type: Date },
-  estimatedHours: { type: Number, min: 0 },
-  actualHours: { type: Number, default: 0, min: 0 },
-
-  // Time Tracking
-  timeEntries: [{
-    user: { type: Schema.Types.ObjectId, ref: 'User' },
-    startTime: { type: Date, required: true },
-    endTime: { type: Date },
-    duration: { type: Number }, // in minutes
-    description: { type: String },
-    createdAt: { type: Date, default: Date.now }
-  }],
-
-  // Dependencies
-  dependencies: {
-    blockedBy: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
-    blocks: [{ type: Schema.Types.ObjectId, ref: 'Task' }]
-  },
-
-  // Attachments & Comments
-  attachments: [{
-    filename: { type: String, required: true },
-    originalName: { type: String, required: true },
-    mimetype: { type: String, required: true },
-    size: { type: Number, required: true },
-    uploadedBy: { type: Schema.Types.ObjectId, ref: 'User' },
-    uploadedAt: { type: Date, default: Date.now },
-    url: { type: String, required: true }
-  }],
-
-  commentsCount: { type: Number, default: 0 },
-
-  // Recurring Task Settings
-  recurring: {
-    enabled: { type: Boolean, default: false },
-    pattern: {
-      type: String,
-      enum: ['daily', 'weekly', 'monthly', 'custom']
-    },
-    interval: { type: Number, default: 1 },
-    daysOfWeek: [{ type: Number, min: 0, max: 6 }], // 0 = Sunday
-    dayOfMonth: { type: Number, min: 1, max: 31 },
-    endDate: { type: Date },
-    nextDueDate: { type: Date }
-  },
-
-  // Activity & Engagement
-  activity: {
-    lastActivityAt: { type: Date, default: Date.now },
-    lastActivityBy: { type: Schema.Types.ObjectId, ref: 'User' },
-    viewCount: { type: Number, default: 0 },
-    updateCount: { type: Number, default: 0 }
-  },
-
-  // Custom Fields
-  customFields: {
-    type: Map,
-    of: Schema.Types.Mixed
-  },
-
-  // Metadata
-  order: { type: Number, default: 0 }, // For manual sorting
-  archived: { type: Boolean, default: false },
-  archivedAt: { type: Date },
-  archivedBy: { type: Schema.Types.ObjectId, ref: 'User' }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-// Indexes for performance
-taskSchema.index({ project: 1, status: 1 });
-taskSchema.index({ assignee: 1, status: 1 });
-taskSchema.index({ dueDate: 1, status: 1 });
-taskSchema.index({ '$**': 'text' }); // Full-text search
-
-// Virtual for overdue status
-taskSchema.virtual('isOverdue').get(function() {
-  return this.dueDate &&
-         new Date(this.dueDate) < new Date() &&
-         !['done', 'cancelled'].includes(this.status);
-});
-
-// Virtual for blocking status
-taskSchema.virtual('isBlocked').get(function() {
-  return this.dependencies.blockedBy.length > 0 || this.status === 'blocked';
-});
-
-// Methods
-taskSchema.methods.calculateProgress = async function() {
-  /**
-   * Calculate task progress based on subtasks
-   * If task has subtasks, progress = average of subtask progress
-   * Otherwise, progress is manually set or based on status
-   */
-  if (!this.progress.automatic) return this.progress.percentage;
-
-  if (this.subtasks.length > 0) {
-    const subtasks = await this.model('Task').find({ _id: { $in: this.subtasks } });
-    const totalProgress = subtasks.reduce((sum, task) => sum + task.progress.percentage, 0);
-    this.progress.percentage = Math.round(totalProgress / subtasks.length);
-  } else {
-    // Status-based progress for tasks without subtasks
-    const statusProgress = {
-      'todo': 0,
-      'in-progress': 50,
-      'in-review': 75,
-      'blocked': this.progress.percentage, // Keep current
-      'done': 100,
-      'cancelled': this.progress.percentage // Keep current
-    };
-    this.progress.percentage = statusProgress[this.status] ?? this.progress.percentage;
-  }
-
-  this.progress.lastUpdated = new Date();
-  return this.progress.percentage;
-};
-
-taskSchema.methods.addTimeEntry = async function(userId, startTime, endTime, description) {
-  /**
-   * Add a time tracking entry to the task
-   */
-  const duration = endTime ? Math.round((endTime - startTime) / 60000) : 0; // Convert to minutes
-
-  this.timeEntries.push({
-    user: userId,
-    startTime,
-    endTime,
-    duration,
-    description
-  });
-
-  // Update actual hours
-  this.actualHours = this.timeEntries.reduce((total, entry) => {
-    return total + (entry.duration / 60);
-  }, 0);
-
-  await this.save();
-};
-
-// Middleware to handle subtask relationship
-taskSchema.pre('save', async function(next) {
-  if (this.isModified('parentTask') && this.parentTask) {
-    // Add this task to parent's subtasks array
-    await this.model('Task').findByIdAndUpdate(
-      this.parentTask,
-      { $addToSet: { subtasks: this._id } }
-    );
-  }
-  next();
-});
-
-export default mongoose.model('Task', taskSchema);
-````
-
-### 2. Task Board Component (Kanban View)
-
-**File: `client/src/components/projects/organisms/TaskBoard.js`**
-
-```javascript
-import React, { useState, useCallback } from 'react';
-import {
-  DndContext,
-  DragOverlay,
-  closestCorners,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { useDispatch } from 'react-redux';
-import {
-  Plus,
-  Filter,
-  Search,
-  MoreHorizontal,
-  Users,
-  Calendar,
-  Clock,
-} from 'lucide-react';
-import { TaskColumn } from '../molecules/TaskColumn';
-import { TaskCard } from '../molecules/TaskCard';
-import { QuickAddTask } from '../molecules/QuickAddTask';
-import { TaskFilters } from '../molecules/TaskFilters';
-import { cn } from '../../../utils/cn';
-import {
-  updateTaskStatus,
-  reorderTasks,
-} from '../../../features/tasks/tasksSlice';
-
-/**
- * TaskBoard - Kanban board view for project tasks
- *
- * This component provides a drag-and-drop Kanban board interface for managing tasks.
- * It supports multiple columns (status-based), task filtering, quick task creation,
- * and real-time updates. The board is fully responsive and accessible.
- *
- * Features:
- * - Drag and drop tasks between columns
- * - Customizable columns based on project settings
- * - Quick task creation within columns
- * - Advanced filtering and search
- * - Bulk operations on selected tasks
- * - Real-time updates via socket connection
- *
- * @param {Object} props.project - The current project object
- * @param {Array} props.tasks - Array of task objects
- * @param {Function} props.onTaskUpdate - Callback for task updates
- * @param {boolean} props.readOnly - Whether the board is read-only
- */
-export const TaskBoard = ({
-  project,
-  tasks = [],
-  onTaskUpdate,
-  readOnly = false,
-}) => {
-  const dispatch = useDispatch();
-  const [activeId, setActiveId] = useState(null);
-  const [showFilters, setShowFilters] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState({
-    assignee: 'all',
-    priority: 'all',
-    dueDate: 'all',
-    tags: [],
-  });
-
-  // Column configuration - can be customized per project
-  const columns = project?.settings?.kanbanColumns || [
-    { id: 'todo', title: 'To Do', color: 'gray' },
-    { id: 'in-progress', title: 'In Progress', color: 'blue' },
-    { id: 'in-review', title: 'In Review', color: 'yellow' },
-    { id: 'blocked', title: 'Blocked', color: 'red' },
-    { id: 'done', title: 'Done', color: 'green' },
-  ];
-
-  // Configure drag sensors for better UX
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // Prevent accidental drags
-      },
-    })
-  );
-
-  /**
-   * Filter tasks based on current filters and search
-   */
-  const filteredTasks = useCallback(() => {
-    return tasks.filter((task) => {
-      // Search filter
-      if (
-        searchQuery &&
-        !task.title.toLowerCase().includes(searchQuery.toLowerCase())
-      ) {
-        return false;
-      }
-
-      // Assignee filter
-      if (
-        filters.assignee !== 'all' &&
-        task.assignee?._id !== filters.assignee
-      ) {
-        return false;
-      }
-
-      // Priority filter
-      if (filters.priority !== 'all' && task.priority !== filters.priority) {
-        return false;
-      }
-
-      // Due date filter
-      if (filters.dueDate !== 'all') {
-        const today = new Date();
-        const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-
-        switch (filters.dueDate) {
-          case 'overdue':
-            if (!dueDate || dueDate >= today) return false;
-            break;
-          case 'today':
-            if (!dueDate || dueDate.toDateString() !== today.toDateString())
-              return false;
-            break;
-          case 'week':
-            const weekFromNow = new Date(
-              today.getTime() + 7 * 24 * 60 * 60 * 1000
-            );
-            if (!dueDate || dueDate > weekFromNow) return false;
-            break;
-          default:
-            break;
-        }
-      }
-
-      // Tags filter
-      if (filters.tags.length > 0) {
-        const hasMatchingTag = filters.tags.some((tag) =>
-          task.tags.includes(tag)
-        );
-        if (!hasMatchingTag) return false;
-      }
-
-      return true;
-    });
-  }, [tasks, searchQuery, filters]);
-
-  /**
-   * Group tasks by status for columns
-   */
-  const tasksByStatus = useCallback(() => {
-    const grouped = {};
-    columns.forEach((column) => {
-      grouped[column.id] = [];
-    });
-
-    filteredTasks().forEach((task) => {
-      if (grouped[task.status]) {
-        grouped[task.status].push(task);
-      }
-    });
-
-    // Sort tasks within each column by order
-    Object.keys(grouped).forEach((status) => {
-      grouped[status].sort((a, b) => a.order - b.order);
-    });
-
-    return grouped;
-  }, [filteredTasks, columns]);
-
-  /**
-   * Handle drag start
-   */
-  const handleDragStart = (event) => {
-    setActiveId(event.active.id);
-  };
-
-  /**
-   * Handle drag end - update task status and order
-   */
-  const handleDragEnd = async (event) => {
-    const { active, over } = event;
-
-    if (!over) {
-      setActiveId(null);
-      return;
-    }
-
-    const activeTask = tasks.find((t) => t._id === active.id);
-    const overColumn = columns.find((col) => col.id === over.id);
-    const overTask = tasks.find((t) => t._id === over.id);
-
-    if (!activeTask) {
-      setActiveId(null);
-      return;
-    }
-
-    // Determine new status and position
-    let newStatus = activeTask.status;
-    let newOrder = activeTask.order;
-
-    if (overColumn) {
-      // Dropped on a column
-      newStatus = overColumn.id;
-      const tasksInColumn = tasksByStatus()[newStatus];
-      newOrder =
-        tasksInColumn.length > 0
-          ? Math.max(...tasksInColumn.map((t) => t.order)) + 1
-          : 0;
-    } else if (overTask) {
-      // Dropped on a task
-      newStatus = overTask.status;
-      newOrder = overTask.order;
-    }
-
-    // Only update if something changed
-    if (activeTask.status !== newStatus || activeTask.order !== newOrder) {
-      dispatch(
-        updateTaskStatus({
-          taskId: activeTask._id,
-          status: newStatus,
-          order: newOrder,
-        })
-      );
-
-      // Notify parent component
-      if (onTaskUpdate) {
-        onTaskUpdate({
-          ...activeTask,
-          status: newStatus,
-          order: newOrder,
-        });
-      }
-    }
-
-    setActiveId(null);
-  };
-
-  // Find active task for drag overlay
-  const activeTask = activeId ? tasks.find((t) => t._id === activeId) : null;
-
-  // Calculate column statistics
-  const columnStats = columns.map((column) => {
-    const columnTasks = tasksByStatus()[column.id] || [];
-    const totalHours = columnTasks.reduce(
-      (sum, task) => sum + (task.estimatedHours || 0),
-      0
-    );
-    const overdueCount = columnTasks.filter((task) => task.isOverdue).length;
-
-    return {
-      ...column,
-      taskCount: columnTasks.length,
-      totalHours,
-      overdueCount,
-    };
-  });
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Board Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <h3 className="text-lg font-semibold text-gray-900">Task Board</h3>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search tasks..."
-              className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Filter Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              'inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors',
+              'inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm',
               showFilters
                 ? 'bg-blue-50 text-blue-700 border-blue-200'
                 : 'text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -2371,1104 +1759,6 @@ export const TaskBoard = ({
           >
             <Filter className="w-4 h-4" />
             <span>Filters</span>
-            {Object.values(filters).some(
-              (v) => v !== 'all' && v.length > 0
-            ) && (
-              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
-                {
-                  Object.values(filters).filter(
-                    (v) => v !== 'all' && v.length > 0
-                  ).length
-                }
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Board Stats */}
-        <div className="flex items-center gap-6 text-sm text-gray-600">
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            <span>
-              {new Set(tasks.map((t) => t.assignee?._id).filter(Boolean)).size}{' '}
-              assignees
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4" />
-            <span>
-              {tasks.reduce((sum, t) => sum + (t.estimatedHours || 0), 0)}h
-              estimated
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            <span>{tasks.filter((t) => t.isOverdue).length} overdue</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      {showFilters && (
-        <TaskFilters
-          filters={filters}
-          onChange={setFilters}
-          project={project}
-          className="mb-4"
-        />
-      )}
-
-      {/* Kanban Board */}
-      <div className="flex-1 overflow-x-auto">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex gap-4 h-full min-w-max">
-            {columnStats.map((column) => (
-              <TaskColumn
-                key={column.id}
-                column={column}
-                tasks={tasksByStatus()[column.id] || []}
-                project={project}
-                readOnly={readOnly}
-              />
-            ))}
-          </div>
-
-          {/* Drag Overlay */}
-          <DragOverlay>
-            {activeId && activeTask ? (
-              <div className="transform rotate-3 opacity-90">
-                <TaskCard task={activeTask} isDragging />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </div>
-    </div>
-  );
-};
-```
-
-### 3. Task Card Component
-
-**File: `client/src/components/projects/molecules/TaskCard.js`**
-
-```javascript
-import React, { useState } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import {
-  Calendar,
-  Clock,
-  Flag,
-  MoreVertical,
-  Paperclip,
-  MessageSquare,
-  CheckCircle2,
-  AlertCircle,
-  Users,
-  GitBranch,
-} from 'lucide-react';
-import { cn } from '../../../utils/cn';
-import { formatDistanceToNow } from '../../../utils/dateHelpers';
-import { TaskBadge } from '../atoms/TaskBadge';
-import { UserAvatar } from '../atoms/UserAvatar';
-import { ProgressBar } from '../atoms/ProgressBar';
-
-/**
- * TaskCard - Individual task card component for Kanban board
- *
- * Displays comprehensive task information in a card format with drag-and-drop support.
- * Shows key task details including assignee, due date, priority, progress, and counts
- * for subtasks, comments, and attachments.
- *
- * @param {Object} props.task - Task object containing all task data
- * @param {boolean} props.isDragging - Whether the card is currently being dragged
- * @param {Function} props.onClick - Handler for card click
- * @param {Function} props.onMenuClick - Handler for menu button click
- * @param {boolean} props.readOnly - Whether the card is in read-only mode
- */
-export const TaskCard = ({
-  task,
-  isDragging = false,
-  onClick,
-  onMenuClick,
-  readOnly = false,
-}) => {
-  const [showMenu, setShowMenu] = useState(false);
-
-  // Set up sortable functionality
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging: isSortableDragging,
-  } = useSortable({
-    id: task._id,
-    disabled: readOnly,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  // Determine card styling based on task properties
-  const isOverdue = task.isOverdue;
-  const isBlocked = task.isBlocked;
-  const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-
-  // Priority colors
-  const priorityColors = {
-    low: 'text-gray-500',
-    medium: 'text-blue-500',
-    high: 'text-orange-500',
-    urgent: 'text-red-500',
-  };
-
-  /**
-   * Handle card click - navigate to task details
-   */
-  const handleCardClick = (e) => {
-    // Don't trigger if clicking on interactive elements
-    if (e.target.closest('button') || e.target.closest('a')) {
-      return;
-    }
-    if (onClick) {
-      onClick(task);
-    }
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClick={handleCardClick}
-      className={cn(
-        'bg-white rounded-lg border p-4 cursor-pointer transition-all',
-        'hover:shadow-md hover:border-gray-300',
-        isDragging || isSortableDragging ? 'opacity-50 shadow-lg' : '',
-        isBlocked && 'border-l-4 border-l-red-500',
-        isOverdue && 'border-l-4 border-l-orange-500',
-        'select-none' // Prevent text selection during drag
-      )}
-    >
-      {/* Card Header */}
-      <div className="flex items-start justify-between mb-2">
-        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 flex-1 pr-2">
-          {task.title}
-        </h4>
-
-        {!readOnly && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onMenuClick && onMenuClick(task);
-            }}
-            className="p-1 hover:bg-gray-100 rounded transition-colors"
-          >
-            <MoreVertical className="w-4 h-4 text-gray-400" />
-          </button>
-        )}
-      </div>
-
-      {/* Task Description Preview */}
-      {task.description && (
-        <p className="text-xs text-gray-600 line-clamp-2 mb-3">
-          {task.description}
-        </p>
-      )}
-
-      {/* Progress Bar (if task has subtasks or manual progress) */}
-      {(hasSubtasks || task.progress.percentage > 0) && (
-        <div className="mb-3">
-          <ProgressBar
-            percentage={task.progress.percentage}
-            size="sm"
-            showLabel
-          />
-        </div>
-      )}
-
-      {/* Task Metadata */}
-      <div className="space-y-2">
-        {/* Assignee and Priority */}
-        <div className="flex items-center justify-between">
-          {task.assignee ? (
-            <UserAvatar
-              user={task.assignee}
-              size="sm"
-              showName={false}
-              className="ring-2 ring-white"
-            />
-          ) : (
-            <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center">
-              <Users className="w-3 h-3 text-gray-500" />
-            </div>
-          )}
-
-          <Flag className={cn('w-4 h-4', priorityColors[task.priority])} />
-        </div>
-
-        {/* Due Date */}
-        {task.dueDate && (
-          <div
-            className={cn(
-              'flex items-center gap-1 text-xs',
-              isOverdue ? 'text-red-600 font-medium' : 'text-gray-600'
-            )}
-          >
-            <Calendar className="w-3 h-3" />
-            <span>
-              {isOverdue ? 'Overdue' : 'Due'}{' '}
-              {formatDistanceToNow(task.dueDate)}
-            </span>
-          </div>
-        )}
-
-        {/* Time Tracking */}
-        {(task.estimatedHours || task.actualHours > 0) && (
-          <div className="flex items-center gap-1 text-xs text-gray-600">
-            <Clock className="w-3 h-3" />
-            <span>
-              {task.actualHours > 0 && `${task.actualHours}h / `}
-              {task.estimatedHours ? `${task.estimatedHours}h` : 'No estimate'}
-            </span>
-          </div>
-        )}
-
-        {/* Task Indicators */}
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          {/* Subtasks */}
-          {hasSubtasks && (
-            <div className="flex items-center gap-1">
-              <GitBranch className="w-3 h-3" />
-              <span>
-                {task.subtasks.filter((st) => st.status === 'done').length}/
-                {task.subtasks.length}
-              </span>
-            </div>
-          )}
-
-          {/* Comments */}
-          {task.commentsCount > 0 && (
-            <div className="flex items-center gap-1">
-              <MessageSquare className="w-3 h-3" />
-              <span>{task.commentsCount}</span>
-            </div>
-          )}
-
-          {/* Attachments */}
-          {task.attachments?.length > 0 && (
-            <div className="flex items-center gap-1">
-              <Paperclip className="w-3 h-3" />
-              <span>{task.attachments.length}</span>
-            </div>
-          )}
-
-          {/* Blocked Indicator */}
-          {isBlocked && (
-            <div className="flex items-center gap-1 text-red-600">
-              <AlertCircle className="w-3 h-3" />
-              <span>Blocked</span>
-            </div>
-          )}
-        </div>
-
-        {/* Tags */}
-        {task.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {task.tags.slice(0, 2).map((tag, index) => (
-              <span
-                key={index}
-                className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded"
-              >
-                {tag}
-              </span>
-            ))}
-            {task.tags.length > 2 && (
-              <span className="px-1.5 py-0.5 text-gray-500 text-xs">
-                +{task.tags.length - 2}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-```
-
-### 4. Task Detail Modal/Page
-
-**File: `client/src/components/projects/organisms/TaskDetail.js`**
-
-```javascript
-import React, { useState, useEffect, useRef } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import {
-  X,
-  Flag,
-  Calendar,
-  Clock,
-  User,
-  Paperclip,
-  MessageSquare,
-  GitBranch,
-  Link2,
-  MoreVertical,
-  Edit3,
-  Trash2,
-  Archive,
-  Play,
-  Pause,
-  CheckCircle2,
-  AlertCircle,
-  Activity,
-} from 'lucide-react';
-import { updateTask, deleteTask } from '../../../features/tasks/tasksSlice';
-import { TaskComments } from '../molecules/TaskComments';
-import { TaskAttachments } from '../molecules/TaskAttachments';
-import { TaskActivity } from '../molecules/TaskActivity';
-import { TaskTimeTracking } from '../molecules/TaskTimeTracking';
-import { SubtaskList } from '../molecules/SubtaskList';
-import { TaskDependencies } from '../molecules/TaskDependencies';
-import { EditableText } from '../atoms/EditableText';
-import { UserSelect } from '../atoms/UserSelect';
-import { PrioritySelect } from '../atoms/PrioritySelect';
-import { StatusSelect } from '../atoms/StatusSelect';
-import { DatePicker } from '../atoms/DatePicker';
-import { cn } from '../../../utils/cn';
-
-/**
- * TaskDetail - Comprehensive task detail view component
- *
- * This component provides a full-featured task management interface including:
- * - Inline editing of all task fields
- * - Time tracking with start/stop functionality
- * - Subtask management
- * - File attachments
- * - Comments and activity feed
- * - Task dependencies
- * - Real-time updates
- *
- * Can be used as a modal or embedded in a page
- *
- * @param {Object} props.task - The task object to display
- * @param {Function} props.onClose - Handler for closing the detail view
- * @param {boolean} props.isModal - Whether to render as a modal
- * @param {boolean} props.readOnly - Whether the task is read-only
- */
-export const TaskDetail = ({
-  task: initialTask,
-  onClose,
-  isModal = true,
-  readOnly = false,
-}) => {
-  const dispatch = useDispatch();
-  const { user } = useSelector((state) => state.auth);
-  const [task, setTask] = useState(initialTask);
-  const [activeTab, setActiveTab] = useState('comments');
-  const [isTracking, setIsTracking] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const trackingStartRef = useRef(null);
-
-  // Check if user has active time tracking
-  useEffect(() => {
-    const activeEntry = task.timeEntries?.find(
-      (entry) => entry.user === user.id && !entry.endTime
-    );
-    if (activeEntry) {
-      setIsTracking(true);
-      trackingStartRef.current = new Date(activeEntry.startTime);
-    }
-  }, [task, user.id]);
-
-  /**
-   * Handle field updates with optimistic updates
-   */
-  const handleFieldUpdate = async (field, value) => {
-    // Optimistic update
-    setTask((prev) => ({ ...prev, [field]: value }));
-
-    try {
-      await dispatch(
-        updateTask({
-          taskId: task._id,
-          updates: { [field]: value },
-        })
-      ).unwrap();
-    } catch (error) {
-      // Revert on error
-      setTask((prev) => ({ ...prev, [field]: initialTask[field] }));
-      console.error('Failed to update task:', error);
-    }
-  };
-
-  /**
-   * Handle time tracking toggle
-   */
-  const handleTimeTracking = async () => {
-    if (isTracking) {
-      // Stop tracking
-      const duration = Math.round(
-        (Date.now() - trackingStartRef.current) / 60000
-      );
-      await dispatch(
-        updateTask({
-          taskId: task._id,
-          updates: {
-            timeEntries: [
-              ...task.timeEntries,
-              {
-                user: user.id,
-                startTime: trackingStartRef.current,
-                endTime: new Date(),
-                duration,
-              },
-            ],
-          },
-        })
-      ).unwrap();
-      setIsTracking(false);
-      trackingStartRef.current = null;
-    } else {
-      // Start tracking
-      trackingStartRef.current = new Date();
-      await dispatch(
-        updateTask({
-          taskId: task._id,
-          updates: {
-            timeEntries: [
-              ...task.timeEntries,
-              {
-                user: user.id,
-                startTime: trackingStartRef.current,
-                endTime: null,
-              },
-            ],
-          },
-        })
-      ).unwrap();
-      setIsTracking(true);
-    }
-  };
-
-  /**
-   * Handle task deletion
-   */
-  const handleDelete = async () => {
-    try {
-      await dispatch(deleteTask(task._id)).unwrap();
-      onClose();
-    } catch (error) {
-      console.error('Failed to delete task:', error);
-    }
-  };
-
-  // Calculate task metrics
-  const completedSubtasks =
-    task.subtasks?.filter((st) => st.status === 'done').length || 0;
-  const totalSubtasks = task.subtasks?.length || 0;
-  const isBlocked =
-    task.dependencies?.blockedBy?.length > 0 || task.status === 'blocked';
-
-  const content = (
-    <div className="flex flex-col h-full bg-white">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b">
-        <div className="flex items-center gap-4 flex-1">
-          {/* Status Indicator */}
-          <StatusSelect
-            value={task.status}
-            onChange={(status) => handleFieldUpdate('status', status)}
-            disabled={readOnly}
-            size="sm"
-          />
-
-          {/* Task ID */}
-          <span className="text-sm text-gray-500">#{task._id.slice(-6)}</span>
-
-          {/* Blocked Indicator */}
-          {isBlocked && (
-            <div className="flex items-center gap-1 text-red-600 text-sm">
-              <AlertCircle className="w-4 h-4" />
-              <span>Blocked</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Time Tracking Button */}
-          {!readOnly && (
-            <button
-              onClick={handleTimeTracking}
-              className={cn(
-                'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                isTracking
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-              )}
-            >
-              {isTracking ? (
-                <>
-                  <Pause className="w-4 h-4" />
-                  <span>Stop Timer</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4" />
-                  <span>Start Timer</span>
-                </>
-              )}
-            </button>
-          )}
-
-          {/* Action Menu */}
-          <div className="relative group">
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <MoreVertical className="w-5 h-5 text-gray-500" />
-            </button>
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-              <button className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2">
-                <Archive className="w-4 h-4" />
-                Archive Task
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-red-600"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete Task
-              </button>
-            </div>
-          </div>
-
-          {/* Close Button */}
-          {isModal && (
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-hidden flex">
-        {/* Left Column - Task Details */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {/* Title */}
-          <EditableText
-            value={task.title}
-            onChange={(title) => handleFieldUpdate('title', title)}
-            disabled={readOnly}
-            className="text-2xl font-semibold text-gray-900 mb-4"
-            placeholder="Task title..."
-          />
-
-          {/* Meta Information Grid */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            {/* Assignee */}
-            <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
-                <User className="w-4 h-4" />
-                Assignee
-              </label>
-              <UserSelect
-                value={task.assignee?._id}
-                onChange={(userId) => handleFieldUpdate('assignee', userId)}
-                projectId={task.project}
-                disabled={readOnly}
-              />
-            </div>
-
-            {/* Priority */}
-            <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
-                <Flag className="w-4 h-4" />
-                Priority
-              </label>
-              <PrioritySelect
-                value={task.priority}
-                onChange={(priority) => handleFieldUpdate('priority', priority)}
-                disabled={readOnly}
-              />
-            </div>
-
-            {/* Due Date */}
-            <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
-                <Calendar className="w-4 h-4" />
-                Due Date
-              </label>
-              <DatePicker
-                value={task.dueDate}
-                onChange={(date) => handleFieldUpdate('dueDate', date)}
-                disabled={readOnly}
-              />
-            </div>
-
-            {/* Time Estimate */}
-            <div>
-              <label className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-1">
-                <Clock className="w-4 h-4" />
-                Time Estimate
-              </label>
-              <input
-                type="number"
-                value={task.estimatedHours || ''}
-                onChange={(e) =>
-                  handleFieldUpdate(
-                    'estimatedHours',
-                    parseFloat(e.target.value)
-                  )
-                }
-                disabled={readOnly}
-                placeholder="Hours"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                min="0"
-                step="0.5"
-              />
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <EditableText
-              value={task.description || ''}
-              onChange={(description) =>
-                handleFieldUpdate('description', description)
-              }
-              disabled={readOnly}
-              multiline
-              className="w-full min-h-[100px] p-3 border border-gray-300 rounded-lg"
-              placeholder="Add a description..."
-            />
-          </div>
-
-          {/* Subtasks */}
-          {task.subtasks?.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <GitBranch className="w-4 h-4" />
-                  Subtasks ({completedSubtasks}/{totalSubtasks})
-                </h3>
-              </div>
-              <SubtaskList
-                parentTask={task}
-                subtasks={task.subtasks}
-                onUpdate={() => {
-                  /* Refresh task */
-                }}
-                readOnly={readOnly}
-              />
-            </div>
-          )}
-
-          {/* Dependencies */}
-          {(task.dependencies?.blockedBy?.length > 0 ||
-            task.dependencies?.blocks?.length > 0) && (
-            <div className="mb-6">
-              <h3 className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-                <Link2 className="w-4 h-4" />
-                Dependencies
-              </h3>
-              <TaskDependencies
-                task={task}
-                onUpdate={() => {
-                  /* Refresh task */
-                }}
-                readOnly={readOnly}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Right Column - Activity */}
-        <div className="w-96 border-l bg-gray-50 flex flex-col">
-          {/* Tabs */}
-          <div className="flex border-b bg-white">
-            <button
-              onClick={() => setActiveTab('comments')}
-              className={cn(
-                'flex-1 px-4 py-3 text-sm font-medium transition-colors',
-                activeTab === 'comments'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              )}
-            >
-              Comments ({task.commentsCount || 0})
-            </button>
-            <button
-              onClick={() => setActiveTab('attachments')}
-              className={cn(
-                'flex-1 px-4 py-3 text-sm font-medium transition-colors',
-                activeTab === 'attachments'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              )}
-            >
-              Files ({task.attachments?.length || 0})
-            </button>
-            <button
-              onClick={() => setActiveTab('activity')}
-              className={cn(
-                'flex-1 px-4 py-3 text-sm font-medium transition-colors',
-                activeTab === 'activity'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-900'
-              )}
-            >
-              Activity
-            </button>
-          </div>
-
-          {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto">
-            {activeTab === 'comments' && (
-              <TaskComments taskId={task._id} readOnly={readOnly} />
-            )}
-            {activeTab === 'attachments' && (
-              <TaskAttachments
-                task={task}
-                onUpdate={(attachments) =>
-                  handleFieldUpdate('attachments', attachments)
-                }
-                readOnly={readOnly}
-              />
-            )}
-            {activeTab === 'activity' && <TaskActivity taskId={task._id} />}
-          </div>
-
-          {/* Time Tracking Summary */}
-          <div className="p-4 border-t bg-white">
-            <TaskTimeTracking task={task} isTracking={isTracking} />
-          </div>
-        </div>
-      </div>
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Delete Task?
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete "{task.title}"? This action cannot
-              be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg"
-              >
-                Delete Task
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-
-  // Render as modal or embedded
-  if (isModal) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-xl shadow-xl max-w-6xl w-full h-[90vh] overflow-hidden">
-          {content}
-        </div>
-      </div>
-    );
-  }
-
-  return content;
-};
-```
-
-### 5. Task List View Component
-
-**File: `client/src/components/projects/organisms/TaskListView.js`**
-
-```javascript
-import React, { useState, useMemo } from 'react';
-import { useDispatch } from 'react-redux';
-import {
-  ChevronDown,
-  ChevronRight,
-  Plus,
-  Filter,
-  Download,
-  Upload,
-  Calendar,
-  User,
-  Flag,
-  Clock,
-  CheckSquare,
-  Square
-} from 'lucide-react';
-import { TaskRow } from '../molecules/TaskRow';
-import { TaskFilters } from '../molecules/TaskFilters';
-import { BulkTaskActions } from '../molecules/BulkTaskActions';
-import { QuickAddTask } from '../molecules/QuickAddTask';
-import { cn } from '../../../utils/cn';
-import { updateTask, bulkUpdateTasks } from '../../../features/tasks/tasksSlice';
-
-/**
- * TaskListView - Table/list view for project tasks
- *
- * Provides a comprehensive list view with features:
- * - Sortable columns
- * - Inline editing
- * - Bulk selection and actions
- * - Grouping by status/assignee/date
- * - Export/import functionality
- * - Keyboard navigation
- *
- * @param {Object} props.project - Current project object
- * @param {Array} props.tasks - Array of task objects
- * @param {Function} props.onTaskClick - Handler for task click
- * @param {boolean} props.readOnly - Whether the list is read-only
- */
-export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = false }) => {
-  const dispatch = useDispatch();
-  const [selectedTasks, setSelectedTasks] = useState([]);
-  const [sortBy, setSortBy] = useState('order');
-  const [sortOrder, setSortOrder] = useState('asc');
-  const [groupBy, setGroupBy] = useState('none'); // none, status, assignee, priority, dueDate
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    status: 'all',
-    assignee: 'all',
-    priority: 'all',
-    dueDate: 'all',
-    tags: []
-  });
-
-  /**
-   * Sort tasks based on current sort settings
-   */
-  const sortedTasks = useMemo(() => {
-    const sorted = [...tasks].sort((a, b) => {
-      let aVal = a[sortBy];
-      let bVal = b[sortBy];
-
-      // Handle special cases
-      if (sortBy === 'assignee') {
-        aVal = a.assignee?.name || '';
-        bVal = b.assignee?.name || '';
-      } else if (sortBy === 'dueDate') {
-        aVal = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
-        bVal = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-      }
-
-      // Compare values
-      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return sorted;
-  }, [tasks, sortBy, sortOrder]);
-
-  /**
-   * Group tasks based on groupBy setting
-   */
-  const groupedTasks = useMemo(() => {
-    if (groupBy === 'none') {
-      return { 'All Tasks': sortedTasks };
-    }
-
-    const groups = {};
-
-    sortedTasks.forEach(task => {
-      let groupKey;
-
-      switch (groupBy) {
-        case 'status':
-          groupKey = task.status;
-          break;
-        case 'assignee':
-          groupKey = task.assignee?.name || 'Unassigned';
-          break;
-        case 'priority':
-          groupKey = task.priority;
-          break;
-        case 'dueDate':
-          if (!task.dueDate) {
-            groupKey = 'No Due Date';
-          } else {
-            const date = new Date(task.dueDate);
-            const today = new Date();
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-
-            if (date < today) {
-              groupKey = 'Overdue';
-            } else if (date.toDateString() === today.toDateString()) {
-              groupKey = 'Today';
-            } else if (date.toDateString() === tomorrow.toDateString()) {
-              groupKey = 'Tomorrow';
-            } else if (date < new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)) {
-              groupKey = 'This Week';
-            } else {
-              groupKey = 'Later';
-            }
-          }
-          break;
-        default:
-          groupKey = 'Other';
-      }
-
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-      groups[groupKey].push(task);
-    });
-
-    return groups;
-  }, [sortedTasks, groupBy]);
-
-  /**
-   * Handle column sort
-   */
-  const handleSort = (column) => {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(column);
-      setSortOrder('asc');
-    }
-  };
-
-  /**
-   * Handle select all
-   */
-  const handleSelectAll = (checked) => {
-    if (checked) {
-      setSelectedTasks(tasks.map(t => t._id));
-    } else
-      setSelectedTasks([]);
-    }
-  };
-
-  /**
-   * Handle task selection
-   */
-  const handleTaskSelect = (taskId, checked) => {
-    if (checked) {
-      setSelectedTasks([...selectedTasks, taskId]);
-    } else {
-      setSelectedTasks(selectedTasks.filter(id => id !== taskId));
-    }
-  };
-
-  /**
-   * Handle bulk actions
-   */
-  const handleBulkAction = async (action, data) => {
-    if (selectedTasks.length === 0) return;
-
-    try {
-      await dispatch(bulkUpdateTasks({
-        taskIds: selectedTasks,
-        action,
-        data
-      })).unwrap();
-
-      // Clear selection after successful action
-      setSelectedTasks([]);
-    } catch (error) {
-      console.error('Bulk action failed:', error);
-    }
-  };
-
-  /**
-   * Toggle group expansion
-   */
-  const toggleGroup = (groupKey) => {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(groupKey)) {
-      newExpanded.delete(groupKey);
-    } else {
-      newExpanded.add(groupKey);
-    }
-    setExpandedGroups(newExpanded);
-  };
-
-  // Column configuration
-  const columns = [
-    { key: 'title', label: 'Task', sortable: true, width: 'flex-1' },
-    { key: 'assignee', label: 'Assignee', sortable: true, width: 'w-32' },
-    { key: 'status', label: 'Status', sortable: true, width: 'w-32' },
-    { key: 'priority', label: 'Priority', sortable: true, width: 'w-24' },
-    { key: 'dueDate', label: 'Due Date', sortable: true, width: 'w-32' },
-    { key: 'progress', label: 'Progress', sortable: false, width: 'w-24' },
-    { key: 'actions', label: '', sortable: false, width: 'w-20' }
-  ];
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header Controls */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          {/* Bulk Actions */}
-          {selectedTasks.length > 0 && (
-            <BulkTaskActions
-              selectedCount={selectedTasks.length}
-              onAction={handleBulkAction}
-              onClear={() => setSelectedTasks([])}
-            />
-          )}
-
-          {/* Group By */}
-          <select
-            value={groupBy}
-            onChange={(e) => setGroupBy(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="none">No Grouping</option>
-            <option value="status">Group by Status</option>
-            <option value="assignee">Group by Assignee</option>
-            <option value="priority">Group by Priority</option>
-            <option value="dueDate">Group by Due Date</option>
-          </select>
-
-          {/* Filter Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              "inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm",
-              showFilters
-                ? "bg-blue-50 text-blue-700 border-blue-200"
-                : "text-gray-700 border-gray-300 hover:bg-gray-50"
-            )}
-          >
-            <Filter className="w-4 h-4" />
-            <span>Filters</span>
           </button>
         </div>
 
@@ -3514,19 +1804,24 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
-                  checked={selectedTasks.length === tasks.length && tasks.length > 0}
-                  indeterminate={selectedTasks.length > 0 && selectedTasks.length < tasks.length}
+                  checked={
+                    selectedTasks.length === tasks.length && tasks.length > 0
+                  }
+                  indeterminate={
+                    selectedTasks.length > 0 &&
+                    selectedTasks.length < tasks.length
+                  }
                   onChange={(e) => handleSelectAll(e.target.checked)}
                   className="rounded border-gray-300"
                 />
               </th>
-              {columns.map(column => (
+              {columns.map((column) => (
                 <th
                   key={column.key}
                   className={cn(
-                    "px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider",
+                    'px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider',
                     column.width,
-                    column.sortable && "cursor-pointer hover:bg-gray-100"
+                    column.sortable && 'cursor-pointer hover:bg-gray-100'
                   )}
                   onClick={() => column.sortable && handleSort(column.key)}
                 >
@@ -3560,23 +1855,28 @@ export const TaskListView = ({ project, tasks = [], onTaskClick, readOnly = fals
                           <ChevronRight className="w-4 h-4" />
                         )}
                         <span>{groupKey}</span>
-                        <span className="text-sm text-gray-500">({groupTasks.length})</span>
+                        <span className="text-sm text-gray-500">
+                          ({groupTasks.length})
+                        </span>
                       </button>
                     </td>
                   </tr>
                 )}
 
                 {/* Task Rows */}
-                {(groupBy === 'none' || expandedGroups.has(groupKey)) && groupTasks.map(task => (
-                  <TaskRow
-                    key={task._id}
-                    task={task}
-                    isSelected={selectedTasks.includes(task._id)}
-                    onSelect={(checked) => handleTaskSelect(task._id, checked)}
-                    onClick={() => onTaskClick(task)}
-                    readOnly={readOnly}
-                  />
-                ))}
+                {(groupBy === 'none' || expandedGroups.has(groupKey)) &&
+                  groupTasks.map((task) => (
+                    <TaskRow
+                      key={task._id}
+                      task={task}
+                      isSelected={selectedTasks.includes(task._id)}
+                      onSelect={(checked) =>
+                        handleTaskSelect(task._id, checked)
+                      }
+                      onClick={() => onTaskClick(task)}
+                      readOnly={readOnly}
+                    />
+                  ))}
               </React.Fragment>
             ))}
           </tbody>
@@ -4508,7 +2808,7 @@ export default router;
 **File: `client/src/components/projects/molecules/TaskColumn.js`**
 
 ```javascript
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -4709,410 +3009,219 @@ const featureFlags = {
 
 ---
 
-### 9. Task Dependency Management System
+### 9. Simple Task Dependencies
 
-**File:** `server/utils/taskDependencyManager.js`
+**File:** `server/utils/taskDependencies.js`
 
-Advanced dependency management system that prevents circular dependencies, calculates critical paths, and ensures proper task ordering in complex project hierarchies.
+Simple dependency system that provides basic parent/child task relationships with circular dependency prevention and integration with existing caching.
 
 ```javascript
 /**
- * Task Dependency Management System
+ * Simple Task Dependencies System
  *
- * Provides advanced dependency tracking, circular dependency detection,
- * critical path analysis, and dependency graph traversal algorithms
- * for complex project management workflows.
- *
- * Key Features:
- * - Circular dependency detection using graph algorithms
- * - Critical path method (CPM) calculation
- * - Dependency impact analysis
- * - Bulk dependency operations
- * - Performance-optimized graph traversal
+ * Provides basic task dependency management for small teams:
+ * - Parent/child task relationships
+ * - Simple circular dependency prevention
+ * - Integration with existing Redis caching
+ * - Basic task ordering
  */
 
-class TaskDependencyManager {
+class TaskDependencies {
   constructor(mongoClient, redisClient) {
     this.mongoClient = mongoClient;
     this.redisClient = redisClient;
-    this.dependencyCache = new Map();
   }
 
   /**
-   * Detect circular dependencies in task graph using depth-first search
+   * Add a dependency relationship between tasks
+   * Prevents circular dependencies with simple checks
    *
-   * This algorithm uses a color-based DFS approach to detect cycles:
-   * - White (0): Unvisited nodes
-   * - Gray (1): Currently being processed (in the DFS stack)
-   * - Black (2): Completely processed
-   *
-   * A back edge from a gray node indicates a cycle.
-   *
-   * @param {string} projectId - Project to analyze
-   * @returns {Promise<Object>} Analysis result with cycle detection
+   * @param {string} taskId - The task that depends on another
+   * @param {string} dependencyId - The task that must be completed first
+   * @returns {Promise<Object>} Operation result
    */
-  async detectCircularDependencies(projectId) {
-    const tasks = await this.getAllProjectTasks(projectId);
-    const graph = this.buildDependencyGraph(tasks);
-
-    // Initialize node colors: 0=white, 1=gray, 2=black
-    const colors = new Map();
-    const cycles = [];
-    const path = [];
-
-    // Initialize all nodes as white (unvisited)
-    for (const taskId of Object.keys(graph)) {
-      colors.set(taskId, 0);
+  async addDependency(taskId, dependencyId) {
+    // Prevent self-dependency
+    if (taskId === dependencyId) {
+      throw new Error('Task cannot depend on itself');
     }
 
-    // DFS traversal to detect cycles
-    const dfsVisit = (nodeId) => {
-      // Mark current node as gray (being processed)
-      colors.set(nodeId, 1);
-      path.push(nodeId);
-
-      // Visit all adjacent nodes
-      for (const adjacentId of graph[nodeId] || []) {
-        if (colors.get(adjacentId) === 1) {
-          // Back edge found - cycle detected
-          const cycleStart = path.indexOf(adjacentId);
-          const cycle = path.slice(cycleStart).concat([adjacentId]);
-          cycles.push(cycle);
-        } else if (colors.get(adjacentId) === 0) {
-          // Continue DFS if node is unvisited
-          dfsVisit(adjacentId);
-        }
-      }
-
-      // Mark node as black (completely processed)
-      colors.set(nodeId, 2);
-      path.pop();
-    };
-
-    // Start DFS from all unvisited nodes
-    for (const taskId of Object.keys(graph)) {
-      if (colors.get(taskId) === 0) {
-        dfsVisit(taskId);
-      }
+    // Check for direct circular dependency (A depends on B, B depends on A)
+    const wouldCreateCircle = await this.checkCircularDependency(
+      taskId,
+      dependencyId
+    );
+    if (wouldCreateCircle) {
+      throw new Error(
+        'Adding this dependency would create a circular dependency'
+      );
     }
 
-    return {
-      hasCycles: cycles.length > 0,
-      cycles,
-      cycleCount: cycles.length,
-      affectedTasks: [...new Set(cycles.flat())],
-      recommendations: this.generateCycleResolutionRecommendations(
-        cycles,
-        tasks
-      ),
-    };
+    // Add the dependency
+    const result = await this.mongoClient
+      .db()
+      .collection('tasks')
+      .updateOne(
+        { _id: new ObjectId(taskId) },
+        { $addToSet: { dependencies: new ObjectId(dependencyId) } }
+      );
+
+    // Clear cache for this project
+    const task = await this.getTask(taskId);
+    await this.clearProjectCache(task.project);
+
+    return { success: true, taskId, dependencyId };
   }
 
   /**
-   * Calculate critical path using Critical Path Method (CPM)
+   * Remove a dependency relationship
    *
-   * CPM identifies the longest sequence of dependent tasks that determines
-   * the minimum project duration. Tasks on the critical path have zero slack time.
-   *
-   * Algorithm steps:
-   * 1. Forward pass: Calculate earliest start/finish times
-   * 2. Backward pass: Calculate latest start/finish times
-   * 3. Calculate slack time for each task
-   * 4. Identify critical path (tasks with zero slack)
-   *
-   * @param {string} projectId - Project to analyze
-   * @returns {Promise<Object>} Critical path analysis
+   * @param {string} taskId - The task to remove dependency from
+   * @param {string} dependencyId - The dependency to remove
+   * @returns {Promise<Object>} Operation result
    */
-  async calculateCriticalPath(projectId) {
-    const tasks = await this.getAllProjectTasks(projectId);
-    const graph = this.buildDependencyGraph(tasks);
-    const taskMap = new Map(tasks.map((task) => [task._id.toString(), task]));
+  async removeDependency(taskId, dependencyId) {
+    const result = await this.mongoClient
+      .db()
+      .collection('tasks')
+      .updateOne(
+        { _id: new ObjectId(taskId) },
+        { $pull: { dependencies: new ObjectId(dependencyId) } }
+      );
 
-    // Step 1: Topological sort to get proper ordering
-    const sortedTasks = this.topologicalSort(graph);
+    // Clear cache for this project
+    const task = await this.getTask(taskId);
+    await this.clearProjectCache(task.project);
 
-    // Step 2: Forward pass - calculate earliest start/finish times
-    const earlyTimes = new Map();
+    return { success: true, taskId, dependencyId };
+  }
 
-    for (const taskId of sortedTasks) {
-      const task = taskMap.get(taskId);
-      const duration = task.estimatedTime || 1; // Default 1 day if no estimate
+  /**
+   * Get all dependencies for a task (direct only)
+   *
+   * @param {string} taskId - Task to get dependencies for
+   * @returns {Promise<Array>} Array of dependency task objects
+   */
+  async getTaskDependencies(taskId) {
+    const cacheKey = `task_deps_${taskId}`;
+    const cached = await this.redisClient.get(cacheKey);
 
-      // Calculate earliest start time
-      let earlyStart = 0;
-      const dependencies = this.getDependencies(taskId, graph);
-
-      for (const depId of dependencies) {
-        const depTimes = earlyTimes.get(depId);
-        if (depTimes) {
-          earlyStart = Math.max(earlyStart, depTimes.earlyFinish);
-        }
-      }
-
-      const earlyFinish = earlyStart + duration;
-      earlyTimes.set(taskId, {
-        earlyStart,
-        earlyFinish,
-        duration,
-      });
+    if (cached) {
+      return JSON.parse(cached);
     }
 
-    // Step 3: Backward pass - calculate latest start/finish times
-    const lateTimes = new Map();
-    const projectDuration = Math.max(
-      ...Array.from(earlyTimes.values()).map((t) => t.earlyFinish)
+    const task = await this.getTask(taskId);
+    if (!task.dependencies || task.dependencies.length === 0) {
+      return [];
+    }
+
+    const dependencies = await this.mongoClient
+      .db()
+      .collection('tasks')
+      .find({ _id: { $in: task.dependencies } })
+      .toArray();
+
+    // Cache for 5 minutes
+    await this.redisClient.setex(cacheKey, 300, JSON.stringify(dependencies));
+
+    return dependencies;
+  }
+
+  /**
+   * Get tasks that depend on a given task
+   *
+   * @param {string} taskId - Task to find dependents for
+   * @returns {Promise<Array>} Array of dependent task objects
+   */
+  async getTaskDependents(taskId) {
+    const dependents = await this.mongoClient
+      .db()
+      .collection('tasks')
+      .find({ dependencies: new ObjectId(taskId) })
+      .toArray();
+
+    return dependents;
+  }
+
+  /**
+   * Check if adding a dependency would create a circular dependency
+   * Simple two-level check (good enough for small teams)
+   *
+   * @param {string} taskId - Task that would get the new dependency
+   * @param {string} dependencyId - Proposed dependency
+   * @returns {Promise<boolean>} True if circular dependency would be created
+   */
+  async checkCircularDependency(taskId, dependencyId) {
+    // Check if dependencyId already depends on taskId
+    const dependency = await this.getTask(dependencyId);
+
+    if (dependency.dependencies && dependency.dependencies.length > 0) {
+      const dependencyIds = dependency.dependencies.map((id) => id.toString());
+      return dependencyIds.includes(taskId);
+    }
+
+    return false;
+  }
+
+  /**
+   * Get tasks in a simple order (tasks with no dependencies first)
+   *
+   * @param {string} projectId - Project to get ordered tasks for
+   * @returns {Promise<Array>} Tasks in dependency order
+   */
+  async getTasksInOrder(projectId) {
+    const cacheKey = `project_task_order_${projectId}`;
+    const cached = await this.redisClient.get(cacheKey);
+
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    const allTasks = await this.mongoClient
+      .db()
+      .collection('tasks')
+      .find({ project: new ObjectId(projectId) })
+      .toArray();
+
+    // Simple ordering: tasks with no dependencies first, then others
+    const noDependencies = allTasks.filter(
+      (task) => !task.dependencies || task.dependencies.length === 0
     );
 
-    // Start from tasks with no successors
-    for (const taskId of sortedTasks.reverse()) {
-      const earlyTime = earlyTimes.get(taskId);
-      const successors = this.getSuccessors(taskId, graph);
-
-      let lateFinish = projectDuration;
-      if (successors.length > 0) {
-        lateFinish = Math.min(
-          ...successors.map(
-            (succId) => lateTimes.get(succId)?.lateStart || projectDuration
-          )
-        );
-      }
-
-      const lateStart = lateFinish - earlyTime.duration;
-      const slack = lateStart - earlyTime.earlyStart;
-
-      lateTimes.set(taskId, {
-        lateStart,
-        lateFinish,
-        slack,
-        isCritical: slack === 0,
-      });
-    }
-
-    // Step 4: Identify critical path
-    const criticalTasks = Array.from(lateTimes.entries())
-      .filter(([_, times]) => times.isCritical)
-      .map(([taskId, _]) => taskId);
-
-    const criticalPath = this.findLongestPath(criticalTasks, graph);
-
-    return {
-      projectDuration,
-      criticalPath,
-      criticalTasks,
-      taskTimings: this.mergeTimes(earlyTimes, lateTimes, taskMap),
-      slackAnalysis: this.calculateSlackDistribution(lateTimes),
-      riskFactors: this.identifyRiskFactors(criticalTasks, taskMap),
-    };
-  }
-
-  /**
-   * Analyze dependency impact for what-if scenarios
-   *
-   * This method calculates how changes to task duration or dependencies
-   * affect the overall project timeline and other tasks.
-   *
-   * @param {string} taskId - Task to analyze
-   * @param {Object} changes - Proposed changes to analyze
-   * @returns {Promise<Object>} Impact analysis
-   */
-  async analyzeDependencyImpact(taskId, changes) {
-    const task = await this.getTaskById(taskId);
-    const projectId = task.project;
-
-    // Get current critical path baseline
-    const baseline = await this.calculateCriticalPath(projectId);
-
-    // Apply changes and recalculate
-    const modifiedTask = { ...task, ...changes };
-    const tasks = await this.getAllProjectTasks(projectId);
-    const modifiedTasks = tasks.map((t) =>
-      t._id.toString() === taskId ? modifiedTask : t
+    const withDependencies = allTasks.filter(
+      (task) => task.dependencies && task.dependencies.length > 0
     );
 
-    // Recalculate with changes
-    const withChanges = await this.calculateCriticalPathForTasks(modifiedTasks);
+    const orderedTasks = [...noDependencies, ...withDependencies];
 
-    // Calculate impact metrics
-    const durationImpact =
-      withChanges.projectDuration - baseline.projectDuration;
-    const criticalPathChanged = !this.arraysEqual(
-      baseline.criticalPath,
-      withChanges.criticalPath
-    );
+    // Cache for 10 minutes
+    await this.redisClient.setex(cacheKey, 600, JSON.stringify(orderedTasks));
 
-    const affectedTasks = this.findAffectedTasks(taskId, modifiedTasks);
-    const cascadeEffect = this.calculateCascadeEffect(
-      affectedTasks,
-      baseline,
-      withChanges
-    );
-
-    return {
-      durationImpact,
-      criticalPathChanged,
-      newCriticalPath: withChanges.criticalPath,
-      affectedTasks,
-      cascadeEffect,
-      riskAssessment: this.assessChangeRisk(durationImpact, cascadeEffect),
-      recommendations: this.generateChangeRecommendations(
-        durationImpact,
-        affectedTasks
-      ),
-    };
+    return orderedTasks;
   }
 
   /**
-   * Build dependency graph from task array
-   * Graph structure: { taskId: [dependentTaskId1, dependentTaskId2, ...] }
+   * Clear project cache when dependencies change
    */
-  buildDependencyGraph(tasks) {
-    const graph = {};
-
-    // Initialize empty adjacency lists
-    for (const task of tasks) {
-      graph[task._id.toString()] = [];
+  async clearProjectCache(projectId) {
+    const keys = await this.redisClient.keys(`*${projectId}*`);
+    if (keys.length > 0) {
+      await this.redisClient.del(...keys);
     }
-
-    // Build edges based on dependencies
-    for (const task of tasks) {
-      const taskId = task._id.toString();
-      if (task.dependencies && task.dependencies.length > 0) {
-        for (const depId of task.dependencies) {
-          const depIdStr = depId.toString();
-          if (graph[depIdStr]) {
-            graph[depIdStr].push(taskId);
-          }
-        }
-      }
-    }
-
-    return graph;
   }
 
   /**
-   * Topological sort using Kahn's algorithm
-   * Returns tasks in dependency-respecting order
+   * Get a task by ID
    */
-  topologicalSort(graph) {
-    const inDegree = new Map();
-    const queue = [];
-    const result = [];
-
-    // Calculate in-degrees
-    for (const node of Object.keys(graph)) {
-      inDegree.set(node, 0);
-    }
-
-    for (const node of Object.keys(graph)) {
-      for (const neighbor of graph[node]) {
-        inDegree.set(neighbor, (inDegree.get(neighbor) || 0) + 1);
-      }
-    }
-
-    // Add nodes with no incoming edges to queue
-    for (const [node, degree] of inDegree) {
-      if (degree === 0) {
-        queue.push(node);
-      }
-    }
-
-    // Process queue
-    while (queue.length > 0) {
-      const current = queue.shift();
-      result.push(current);
-
-      // Remove edges and update in-degrees
-      for (const neighbor of graph[current]) {
-        const newDegree = inDegree.get(neighbor) - 1;
-        inDegree.set(neighbor, newDegree);
-
-        if (newDegree === 0) {
-          queue.push(neighbor);
-        }
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Performance-optimized bulk dependency operations
-   * Handles multiple dependency changes atomically
-   */
-  async performBulkDependencyOperations(operations) {
-    const session = await this.mongoClient.startSession();
-
-    try {
-      await session.withTransaction(async () => {
-        const validationResults = [];
-
-        // Phase 1: Validate all operations
-        for (const operation of operations) {
-          const validation = await this.validateDependencyOperation(operation);
-          validationResults.push(validation);
-
-          if (!validation.isValid) {
-            throw new Error(`Invalid operation: ${validation.error}`);
-          }
-        }
-
-        // Phase 2: Check for circular dependencies after all operations
-        const hypotheticalState = this.simulateOperations(operations);
-        const circularCheck = await this.detectCircularDependenciesInState(
-          hypotheticalState
-        );
-
-        if (circularCheck.hasCycles) {
-          throw new Error(
-            `Operations would create circular dependencies: ${circularCheck.cycles.join(
-              ', '
-            )}`
-          );
-        }
-
-        // Phase 3: Execute all operations atomically
-        const results = [];
-        for (const operation of operations) {
-          const result = await this.executeDependencyOperation(
-            operation,
-            session
-          );
-          results.push(result);
-        }
-
-        // Phase 4: Update cache and indexes
-        await this.updateDependencyCache(operations);
-
-        return results;
-      });
-    } finally {
-      await session.endSession();
-    }
-  }
-
-  // Helper methods for dependency management
-  async getAllProjectTasks(projectId) {
+  async getTask(taskId) {
     return await this.mongoClient
       .db()
       .collection('tasks')
-      .find({ project: projectId })
-      .toArray();
-  }
-
-  generateCycleResolutionRecommendations(cycles, tasks) {
-    return cycles.map((cycle) => ({
-      cycle,
-      suggestions: [
-        'Remove one dependency from the cycle',
-        'Split tasks to break dependency chain',
-        'Add milestone task to break cycle',
-        'Reorder task execution sequence',
-      ],
-    }));
+      .findOne({ _id: new ObjectId(taskId) });
   }
 }
 
-module.exports = TaskDependencyManager;
+module.exports = TaskDependencies;
 ```
 
 ---

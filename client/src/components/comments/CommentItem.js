@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSelector } from 'react-redux'; // Import useSelector
 import { ThumbsUp, MessageSquare, Edit3, Trash2 } from 'lucide-react';
 import api from '../../utils/api';
+import { formatDistanceToNow } from 'date-fns';
 
 // Placeholder for the form to add/edit replies
 const CommentForm = ({
@@ -102,8 +103,9 @@ const CommentForm = ({
 const CommentItem = ({ comment, articleId, onCommentAction }) => {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
-  // Get current user from auth state
-  const { user: currentUser } = useSelector((state) => state.auth);
+  // Memoized selector to prevent Redux rerender warnings
+  const selectCurrentUser = useMemo(() => (state) => state.auth.user, []);
+  const currentUser = useSelector(selectCurrentUser);
 
   const currentUserId = currentUser?._id;
   const isAdmin = currentUser?.role === 'Admin';

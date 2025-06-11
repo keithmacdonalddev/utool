@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import PropTypes from 'prop-types';
 import {
@@ -56,12 +56,18 @@ const BookmarksList = ({ activeFolder }) => {
     folderId: activeFolder?._id || '',
   });
 
+  // Memoized selectors to prevent Redux rerender warnings
+  const selectBookmarkFolders = useMemo(
+    () => (state) => state.bookmarkFolders,
+    []
+  );
+
+  const { folders } = useSelector(selectBookmarkFolders);
+
   // Get data from Redux store
   const { bookmarks, isLoading, isError, message } = useSelector(
     (state) => state.bookmarks
   );
-
-  const { folders } = useSelector((state) => state.bookmarkFolders);
 
   // Load bookmarks when component mounts or active folder changes
   useEffect(() => {

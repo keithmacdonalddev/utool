@@ -6,7 +6,7 @@ import { useSelector } from 'react-redux'; // Import useSelector
 import api from '../utils/api';
 import FormInput from '../components/common/FormInput';
 import LexicalEditor from '../components/Editor/LexicalEditor';
-import socket from '../utils/socket'; // Import the socket utility
+import { getSocket, connectSocket, disconnectSocket } from '../utils/socket'; // Import the specific socket functions
 
 const KbEditPage = () => {
   const { id } = useParams();
@@ -33,7 +33,7 @@ const KbEditPage = () => {
   // Separate state for the editor's JSON content string
   const [editorContent, setEditorContent] = useState(null);
   const [isEditorReady, setIsEditorReady] = useState(false);
-  const [isSocketConnected, setIsSocketConnected] = useState(socket.connected); // Track socket connection
+  const [isSocketConnected, setIsSocketConnected] = useState(false); // Initialize based on actual connection later
 
   // Ref to prevent emitting changes received from socket
   const isRemoteUpdate = useRef(false);
@@ -104,46 +104,66 @@ const KbEditPage = () => {
 
     // --- Socket Connection Lifecycle ---
     if (id && !socketInitialized.current) {
+      const socket = getSocket(); // Get the existing socket instance
+
       // Connect socket and join room only once per ID
-      socket.connect();
-      socket.emit('join_document', id);
-      setIsSocketConnected(socket.connected);
-      socketInitialized.current = true;
+      // If App.js manages global connection, this might only need to join the room
+      // For now, let's assume KbEditPage can initiate if needed or use existing.
+      if (!socket || !socket.connected) {
+        // Assuming connectSocket now handles the token internally or is called by App.js
+        // If App.js handles global connection, this explicit connectSocket() might be redundant
+        // or should be a lightweight check/ensure connection.
+        // For simplicity, if NotificationContext/App.js handles global, this might not be needed.
+        // However, if a specific token is needed here, it has to be passed.
+        // Let's rely on the global connection established by App.js for now.
+        // connectSocket(); // Potentially redundant if App.js connects globally
+      }
 
-      // Listener for receiving changes from others
-      const handleReceiveChanges = (receivedState) => {
-        isRemoteUpdate.current = true; // Flag that this is a remote update
-        setEditorContent(receivedState);
-        // Reset the flag shortly after, allowing local changes again
-        // Use setTimeout to ensure it happens after the current render cycle
-        setTimeout(() => {
-          isRemoteUpdate.current = false;
-        }, 0);
-      };
+      const currentSocket = getSocket(); // Re-fetch after potential connection attempt
 
-      // Listen for connection status changes
-      const handleConnect = () => {
-        setIsSocketConnected(true);
-        // Rejoin room when reconnected
-        socket.emit('join_document', id);
-      };
+      if (currentSocket) {
+        currentSocket.emit('join_document', id);
+        setIsSocketConnected(currentSocket.connected);
+        socketInitialized.current = true;
 
-      const handleDisconnect = () => setIsSocketConnected(false);
+        // Listener for receiving changes from others
+        const handleReceiveChanges = (receivedState) => {
+          isRemoteUpdate.current = true; // Flag that this is a remote update
+          setEditorContent(receivedState);
+          setTimeout(() => {
+            isRemoteUpdate.current = false;
+          }, 0);
+        };
 
-      socket.on('receive_changes', handleReceiveChanges);
-      socket.on('connect', handleConnect);
-      socket.on('disconnect', handleDisconnect);
+        // Listen for connection status changes
+        const handleConnect = () => {
+          setIsSocketConnected(true);
+          currentSocket.emit('join_document', id); // Rejoin room when reconnected
+        };
 
-      // Cleanup on component unmount or ID change
-      return () => {
-        socket.off('receive_changes', handleReceiveChanges);
-        socket.off('connect', handleConnect);
-        socket.off('disconnect', handleDisconnect);
-        socket.emit('leave_document', id); // Explicitly leave the room
-        socket.disconnect();
+        const handleDisconnect = () => setIsSocketConnected(false);
+
+        currentSocket.on('receive_changes', handleReceiveChanges);
+        currentSocket.on('connect', handleConnect);
+        currentSocket.on('disconnect', handleDisconnect);
+
+        // Cleanup on component unmount or ID change
+        return () => {
+          currentSocket.off('receive_changes', handleReceiveChanges);
+          currentSocket.off('connect', handleConnect);
+          currentSocket.off('disconnect', handleDisconnect);
+          currentSocket.emit('leave_document', id); // Explicitly leave the room
+          // Do not disconnect the global socket here, App.js manages its lifecycle.
+          // disconnectSocket(); // This would disconnect the global socket
+          socketInitialized.current = false;
+          // setIsSocketConnected(false); // State will update via listeners if socket disconnects globally
+        };
+      } else {
+        console.warn(
+          'KbEditPage: Socket instance not available for document collaboration.'
+        );
         setIsSocketConnected(false);
-        socketInitialized.current = false;
-      };
+      }
     }
 
     // --- End Socket Connection Lifecycle ---
@@ -170,8 +190,9 @@ const KbEditPage = () => {
       }
 
       // Emit local changes via socket if connected
-      if (socket.connected && id) {
-        socket.emit('send_changes', {
+      const currentSocket = getSocket();
+      if (currentSocket && currentSocket.connected && id) {
+        currentSocket.emit('send_changes', {
           documentId: id,
           editorState: newContent,
         });

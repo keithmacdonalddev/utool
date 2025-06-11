@@ -12,6 +12,7 @@ import { store } from '../app/store'; // Import the Redux store
 import { refreshToken, logoutUser } from '../features/auth/authSlice'; // Import actions
 import { toast } from 'react-toastify';
 import { isLogoutInProgress } from './authState'; // Import the global logout state checker
+import logger from './logger'; // Import the new logging utility
 
 /**
  * AXIOS INSTANCE PATTERN
@@ -49,6 +50,14 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+
+  /**
+   * CREDENTIALS CONFIGURATION
+   *
+   * withCredentials: true enables the browser to send cookies with requests
+   * This is essential for refresh token functionality which uses HTTP-only cookies
+   */
+  withCredentials: true,
 });
 
 /**
@@ -107,7 +116,7 @@ api.interceptors.request.use(
   (config) => {
     // IMPORTANT: Check if logout is in progress - block ALL requests except logout itself
     if (isLogoutInProgress() && !config.url.includes('/auth/logout')) {
-      console.log(`Request blocked during logout: ${config.url}`);
+      logger.auth(`Request blocked during logout: ${config.url}`);
       const error = new Error('Request canceled - logout in progress');
       error.isLogoutError = true;
       return Promise.reject(error);
@@ -119,23 +128,89 @@ api.interceptors.request.use(
      * This pattern automatically adds the JWT token to every request,
      * eliminating the need to manually add auth headers throughout the app.
      *
-     * It uses the Redux store directly to access the current auth state,
-     * demonstrating how to integrate Redux with API requests.
+     * Enhanced with auth restoration awareness to prevent race conditions
+     * during app initialization.
      */
-    const token = store.getState().auth.token;
-    // If we're making an authenticated request (to a protected endpoint)
-    // but we don't have a token, AND it's not a refresh token request itself,
-    // reject the request immediately.
-    const isRefreshTokenRequest = config.url.includes('/auth/refresh-token');
+    const reduxAuthState = store.getState().auth;
+    const {
+      token: reduxToken,
+      isAuthRestored,
+      authRestorationAttempted,
+    } = reduxAuthState;
 
+    // Fallback to localStorage if Redux hasn't been restored yet (handles page refresh)
+    const storageToken = !reduxToken ? localStorage.getItem('token') : null;
+    const effectiveToken = reduxToken || storageToken; // Enhanced logging for auth state during requests
+    logger.apiCall(config.method.toUpperCase(), config.url, 0, 'REQUEST_SENT', {
+      fullURL: `${api.defaults.baseURL}${config.url}`,
+      reduxToken: !!reduxToken,
+      storageToken: !!storageToken,
+      effectiveToken: !!effectiveToken,
+      isAuthRestored,
+      authRestorationAttempted,
+      authState: {
+        hasUser: !!reduxAuthState.user,
+        hasToken: !!reduxAuthState.token,
+        isGuest: reduxAuthState.isGuest,
+      },
+    }); // ENHANCED DEBUG: Additional console logging for project-related requests
+    if (
+      config.url.includes('/projects/') &&
+      process.env.NODE_ENV === 'development'
+    ) {
+      console.log(`🚀 [API] Project Request:`, {
+        method: config.method.toUpperCase(),
+        url: config.url,
+        fullURL: `${api.defaults.baseURL}${config.url}`,
+        hasToken: !!effectiveToken,
+        isAuthRestored,
+        authRestorationAttempted,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Determine if this is a protected endpoint
+    const isRefreshTokenRequest = config.url.includes('/auth/refresh-token');
     const isProtectedEndpoint =
       !config.url.includes('/auth/login') &&
       !config.url.includes('/auth/register') &&
       !config.url.includes('/auth/verify-email') &&
       !config.url.includes('/settings/guest-access-status'); // Add guest access status endpoint as public
 
-    if (isProtectedEndpoint && !token && !isRefreshTokenRequest) {
-      // Create a canceled request error
+    // CRITICAL: Enhanced auth checking with restoration awareness
+    if (isProtectedEndpoint && !effectiveToken && !isRefreshTokenRequest) {
+      // If auth restoration hasn't been attempted yet, this is likely an initialization race condition
+      if (!authRestorationAttempted) {
+        logger.auth('REJECTING REQUEST: Auth restoration not yet attempted', {
+          url: config.url,
+          reason: 'Authentication restoration in progress',
+          isProtectedEndpoint,
+          authRestorationAttempted,
+          isAuthRestored,
+        });
+        const error = new Error(
+          'Request canceled - authentication restoration in progress'
+        );
+        error.isAuthError = true;
+        error.isRestorationError = true; // Flag for specific handling
+        return Promise.reject(error);
+      }
+
+      // If restoration was attempted but still no token, this is a genuine auth failure
+      logger.auth(
+        'REJECTING REQUEST: No authentication token after restoration',
+        {
+          url: config.url,
+          reason: 'No authentication token available after restoration',
+          isProtectedEndpoint,
+          reduxToken: !!reduxToken,
+          storageToken: !!storageToken,
+          effectiveToken: !!effectiveToken,
+          isAuthRestored,
+          authRestorationAttempted,
+        }
+      );
+
       const error = new Error(
         'Request canceled - no authentication token available'
       );
@@ -143,10 +218,10 @@ api.interceptors.request.use(
       return Promise.reject(error);
     }
 
-    if (token && !isRefreshTokenRequest) {
+    if (effectiveToken && !isRefreshTokenRequest) {
       // Do not add Auth header to refresh token requests if it uses cookies
       // Add Authorization header if token exists (Bearer token pattern)
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers['Authorization'] = `Bearer ${effectiveToken}`;
     }
     return config;
   },
@@ -187,7 +262,7 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     // Check if logout is in progress - if so, don't attempt refresh
     if (isLogoutInProgress()) {
-      console.log('Logout in progress, refresh attempt skipped.');
+      logger.auth('Logout in progress, refresh attempt skipped.');
       return Promise.reject(error);
     }
 
@@ -204,7 +279,7 @@ api.interceptors.response.use(
     ) {
       // Prevent retrying refresh token requests themselves if they fail with 401
       if (originalRequest.url.includes('/auth/refresh-token')) {
-        console.error(
+        logger.error(
           'Refresh token request itself failed with 401. Logging out.'
         );
         store.dispatch(logoutUser()); // Dispatch logoutUser thunk
@@ -238,7 +313,7 @@ api.interceptors.response.use(
           return api(originalRequest); // Retry the original request with the new token
         } else {
           // Refresh token failed (e.g., it was invalid or expired)
-          console.error('Token refresh failed:', resultAction.payload);
+          logger.error('Token refresh failed:', resultAction.payload);
           processQueue(
             resultAction.payload || new Error('Token refresh failed'),
             null
@@ -249,7 +324,7 @@ api.interceptors.response.use(
           );
         }
       } catch (refreshError) {
-        console.error('Exception during token refresh:', refreshError);
+        logger.error('Exception during token refresh:', refreshError);
         processQueue(refreshError, null);
         store.dispatch(logoutUser()); // Dispatch logoutUser thunk on critical error
         return Promise.reject(refreshError);
@@ -262,7 +337,7 @@ api.interceptors.response.use(
       originalRequest._retry
     ) {
       // If retry already happened and still 401, logout
-      console.error('Token refresh retry failed. Logging out.');
+      logger.error('Token refresh retry failed. Logging out.');
       store.dispatch(logoutUser());
       return Promise.reject(error);
     }
@@ -274,7 +349,7 @@ api.interceptors.response.use(
      * redirecting to an unauthorized page.
      */
     if (error.response && error.response.status === 403) {
-      console.log('Permission denied:', error.response.data.message);
+      logger.auth('Permission denied:', error.response.data.message);
 
       // Prevent redirect loops
       if (!window.location.pathname.includes('/unauthorized')) {

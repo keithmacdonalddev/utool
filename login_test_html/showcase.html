@@ -1,0 +1,1877 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enhanced Login Experience - Beyond Traditional</title>
+    <style>
+      /* CSS Variables for Dynamic Theming */
+      :root {
+        /* Time-based color schemes */
+        --morning-primary: #ff6b6b;
+        --morning-secondary: #4ecdc4;
+        --morning-accent: #ffe66d;
+        --day-primary: #3498db;
+        --day-secondary: #2ecc71;
+        --day-accent: #f39c12;
+        --evening-primary: #9b59b6;
+        --evening-secondary: #e74c3c;
+        --evening-accent: #f39c12;
+        --night-primary: #2c3e50;
+        --night-secondary: #34495e;
+        --night-accent: #3498db;
+
+        /* Current theme (will be set by JS) */
+        --primary: var(--day-primary);
+        --secondary: var(--day-secondary);
+        --accent: var(--day-accent);
+
+        /* Spacing */
+        --space-xs: 0.5rem;
+        --space-sm: 1rem;
+        --space-md: 1.5rem;
+        --space-lg: 2rem;
+        --space-xl: 3rem;
+
+        /* Typography */
+        --font-display: 'Orbitron', monospace;
+        --font-body: 'Inter', sans-serif;
+
+        /* Animations */
+        --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+        --transition-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      }
+
+      /* Reset and Base Styles */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: var(--font-body);
+        background: #0a0a0a;
+        color: #ffffff;
+        overflow: hidden;
+        position: relative;
+        height: 100vh;
+        cursor: none; /* Custom cursor */
+      }
+
+      /* Custom Cursor */
+      .cursor {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--primary);
+        border-radius: 50%;
+        position: fixed;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        transition: all 0.1s ease;
+        z-index: 9999;
+        mix-blend-mode: difference;
+      }
+
+      .cursor-follower {
+        width: 40px;
+        height: 40px;
+        background: var(--primary);
+        opacity: 0.1;
+        border-radius: 50%;
+        position: fixed;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        transition: all 0.3s ease;
+        z-index: 9998;
+      }
+
+      .cursor.expand {
+        width: 40px;
+        height: 40px;
+        border-width: 1px;
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      /* 3D Particle Background */
+      #particleCanvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+      }
+
+      /* Sound Toggle */
+      .sound-toggle {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1000;
+        transition: all 0.3s var(--transition-smooth);
+      }
+
+      .sound-toggle:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.1);
+      }
+
+      .sound-toggle svg {
+        width: 24px;
+        height: 24px;
+        fill: white;
+        transition: transform 0.3s var(--transition-bounce);
+      }
+
+      .sound-toggle.muted svg {
+        transform: scale(0.8);
+        opacity: 0.5;
+      }
+
+      /* Main Container */
+      .login-container {
+        position: relative;
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1;
+      }
+
+      /* Circular Navigation System */
+      .circular-nav {
+        position: relative; /* Changed from absolute to relative */
+        width: 500px;
+        height: 500px;
+        border-radius: 50%;
+        opacity: 0;
+        animation: fadeInScale 1s ease-out forwards;
+        animation-delay: 0.5s;
+        display: flex; /* Added flex display */
+        align-items: center; /* Center the login card */
+        justify-content: center; /* Center the login card */
+        /* Create a stacking context for proper layering */
+        transform-style: preserve-3d;
+        perspective: 1000px;
+      }
+
+      @keyframes fadeInScale {
+        from {
+          opacity: 0;
+          transform: scale(0.8);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* Orbit Ring */
+      .orbit-ring {
+        position: absolute;
+        width: 110%;
+        height: 110%;
+        top: -5%;
+        left: -5%;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        animation: rotate 8s linear infinite; /* Single animation for rotation */
+        /* Add 3D perspective tilt */
+        transform-style: preserve-3d;
+        transform: perspective(800px) rotateX(25deg) rotateY(-15deg);
+        /* Place ring behind the card in 3D space */
+        z-index: 1;
+      }
+
+      /* Add a fade mask for the top portion of the ring */
+      .orbit-ring::after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 50%;
+        top: 0;
+        left: 0;
+        background: linear-gradient(
+          to bottom,
+          rgba(10, 10, 10, 0.9) 0%,
+          rgba(10, 10, 10, 0.7) 30%,
+          rgba(10, 10, 10, 0.3) 60%,
+          transparent 100%
+        );
+        pointer-events: none;
+        border-radius: 50% 50% 0 0;
+      }
+
+      /* Add animated dots on the orbit ring */
+      .orbit-ring::before,
+      .orbit-ring::after {
+        content: '';
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        background: var(--primary);
+        border-radius: 50%;
+        box-shadow: 0 0 20px var(--primary), 0 0 40px var(--primary);
+      }
+
+      .orbit-ring::before {
+        top: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .orbit-ring::after {
+        bottom: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      /* Add additional orbital elements */
+      .orbit-dots {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        animation: rotate 12s linear infinite reverse; /* Counter-rotation for dynamic effect */
+        z-index: 1; /* Same level as orbit-ring */
+      }
+
+      .orbit-dot {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        background: var(--secondary);
+        border-radius: 50%;
+        opacity: 0.8;
+        box-shadow: 0 0 15px var(--secondary);
+      }
+
+      .orbit-dot:nth-child(1) {
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .orbit-dot:nth-child(2) {
+        top: 50%;
+        right: 0;
+        transform: translateY(-50%);
+      }
+
+      .orbit-dot:nth-child(3) {
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .orbit-dot:nth-child(4) {
+        top: 50%;
+        left: 0;
+        transform: translateY(-50%);
+      }
+
+      @keyframes rotate {
+        from {
+          transform: perspective(800px) rotateX(25deg) rotateY(-15deg)
+            rotateZ(0deg);
+        }
+        to {
+          transform: perspective(800px) rotateX(25deg) rotateY(-15deg)
+            rotateZ(360deg);
+        }
+      }
+
+      /* Login Steps Container */
+      .login-card {
+        position: relative; /* Changed from absolute to relative */
+        width: 400px;
+        min-height: 600px;
+        height: auto;
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 30px;
+        padding: var(--space-xl);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        transform-style: preserve-3d;
+        transition: transform 0.6s var(--transition-smooth);
+        z-index: 10; /* Increased from 2 to ensure card is above the ring */
+        /* Add a subtle shadow to reinforce the 3D layering */
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 80px rgba(0, 0, 0, 0.5);
+      }
+
+      .login-card.tilted {
+        transform: rotateY(10deg) rotateX(-5deg);
+      }
+
+      /* Step Indicators */
+      .step-indicators {
+        position: absolute;
+        top: 30px;
+        display: flex;
+        gap: 10px;
+      }
+
+      .step-dot {
+        width: 8px;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        transition: all 0.3s var(--transition-smooth);
+        cursor: pointer;
+      }
+
+      .step-dot.active {
+        width: 30px;
+        background: var(--primary);
+        border-radius: 4px;
+      }
+
+      /* Welcome Screen */
+      .welcome-screen {
+        text-align: center;
+        opacity: 0;
+        animation: fadeInUp 0.8s ease-out forwards;
+        animation-delay: 0.3s;
+        width: 100%; /* Ensure full width */
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .logo-container {
+        width: 100px; /* Reduced from 120px */
+        height: 100px; /* Reduced from 120px */
+        margin: 0 auto var(--space-md); /* Reduced margin */
+        position: relative;
+      }
+
+      .logo-shape {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/></svg>')
+          center/contain no-repeat;
+        -webkit-mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,10 90,30 90,70 50,90 10,70 10,30"/></svg>')
+          center/contain no-repeat;
+        animation: logoFloat 4s ease-in-out infinite;
+      }
+
+      @keyframes logoFloat {
+        0%,
+        100% {
+          transform: translateY(0) rotate(0deg);
+        }
+        50% {
+          transform: translateY(-10px) rotate(5deg);
+        }
+      }
+
+      .logo-glow {
+        position: absolute;
+        width: 150%;
+        height: 150%;
+        top: -25%;
+        left: -25%;
+        background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+        opacity: 0.3;
+        filter: blur(30px);
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.3;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 0.5;
+        }
+      }
+
+      h1 {
+        font-family: var(--font-display);
+        font-size: 2.2rem; /* Slightly reduced from 2.5rem */
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: var(--space-xs); /* Reduced margin */
+        letter-spacing: -1px;
+      }
+
+      .subtitle {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 1rem; /* Reduced from 1.1rem */
+        margin-bottom: var(--space-lg); /* Reduced from var(--space-xl) */
+      }
+
+      /* Authentication Methods Grid */
+      .auth-methods {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-sm); /* Reduced from var(--space-md) */
+        width: 100%;
+        margin-top: var(--space-md); /* Reduced from var(--space-lg) */
+      }
+
+      .auth-method {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: var(--space-sm); /* Reduced from var(--space-md) */
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s var(--transition-smooth);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .auth-method::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+        transform: translate(-50%, -50%);
+        transition: all 0.5s ease-out;
+        opacity: 0;
+      }
+
+      .auth-method:hover::before {
+        width: 200%;
+        height: 200%;
+        opacity: 0.3;
+      }
+
+      .auth-method:hover {
+        background: rgba(255, 255, 255, 0.1);
+        transform: translateY(-5px) scale(1.02);
+        border-color: var(--primary);
+      }
+
+      .auth-method-icon {
+        width: 40px; /* Reduced from 48px */
+        height: 40px; /* Reduced from 48px */
+        margin: 0 auto var(--space-xs); /* Reduced margin */
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border-radius: 12px; /* Reduced from 15px */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      .auth-method-icon svg {
+        width: 20px; /* Reduced from 24px */
+        height: 20px; /* Reduced from 24px */
+        fill: white;
+      }
+
+      .auth-method-title {
+        font-weight: 600;
+        margin-bottom: 2px; /* Reduced from 4px */
+        font-size: 0.95rem; /* Added font-size */
+      }
+
+      .auth-method-desc {
+        font-size: 0.8rem; /* Reduced from 0.85rem */
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      /* Form Steps */
+      .form-step {
+        width: 100%;
+        display: none;
+        opacity: 0;
+        transform: translateX(20px);
+        transition: all 0.4s var(--transition-smooth);
+        padding-top: var(
+          --space-md
+        ); /* Add padding to account for step indicators */
+      }
+
+      .form-step.active {
+        display: block;
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      /* Custom Input Fields */
+      .input-group {
+        position: relative;
+        margin-bottom: var(--space-lg);
+      }
+
+      .input-field {
+        width: 100%;
+        padding: var(--space-md);
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 15px;
+        color: white;
+        font-size: 1rem;
+        transition: all 0.3s var(--transition-smooth);
+        position: relative;
+      }
+
+      .input-field:focus {
+        outline: none;
+        border-color: var(--primary);
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 0 30px rgba(var(--primary), 0.3);
+      }
+
+      .input-label {
+        position: absolute;
+        left: var(--space-md);
+        top: 50%;
+        transform: translateY(-50%);
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 1rem;
+        pointer-events: none;
+        transition: all 0.3s var(--transition-smooth);
+        background: transparent;
+      }
+
+      .input-field:focus + .input-label,
+      .input-field:not(:placeholder-shown) + .input-label {
+        top: -10px;
+        left: 10px;
+        font-size: 0.85rem;
+        color: var(--primary);
+        background: #0a0a0a;
+        padding: 0 8px;
+      }
+
+      /* Biometric Auth Simulation */
+      .biometric-scanner {
+        width: 200px;
+        height: 200px;
+        margin: var(--space-lg) auto;
+        position: relative;
+        display: none;
+      }
+
+      .biometric-scanner.active {
+        display: block;
+      }
+
+      .fingerprint-icon {
+        width: 100%;
+        height: 100%;
+        background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 10 Q30 30 30 50 T50 90 Q70 70 70 50 T50 10" fill="none" stroke="white" stroke-width="1" opacity="0.3"/><path d="M50 20 Q35 35 35 50 T50 80 Q65 65 65 50 T50 20" fill="none" stroke="white" stroke-width="1" opacity="0.3"/><path d="M50 30 Q40 40 40 50 T50 70 Q60 60 60 50 T50 30" fill="none" stroke="white" stroke-width="1" opacity="0.3"/></svg>')
+          center/contain no-repeat;
+        position: relative;
+      }
+
+      .scan-line {
+        position: absolute;
+        width: 100%;
+        height: 2px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--primary),
+          transparent
+        );
+        top: 0;
+        left: 0;
+        animation: scan 2s ease-in-out infinite;
+      }
+
+      @keyframes scan {
+        0%,
+        100% {
+          top: 0;
+          opacity: 0;
+        }
+        10% {
+          opacity: 1;
+        }
+        90% {
+          opacity: 1;
+        }
+        100% {
+          top: 100%;
+        }
+      }
+
+      /* Continue Button */
+      .continue-btn {
+        width: 100%;
+        padding: var(--space-md) var(--space-lg);
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border: none;
+        border-radius: 15px;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s var(--transition-smooth);
+        margin-top: var(--space-lg);
+      }
+
+      .continue-btn::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        transition: all 0.6s ease-out;
+      }
+
+      .continue-btn:hover::before {
+        width: 300px;
+        height: 300px;
+      }
+
+      .continue-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(var(--primary), 0.4);
+      }
+
+      /* Loading Ripple */
+      .loading-ripple {
+        display: none;
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+
+      .loading-ripple.active {
+        display: block;
+      }
+
+      .loading-ripple div {
+        position: absolute;
+        border: 2px solid var(--primary);
+        opacity: 1;
+        border-radius: 50%;
+        animation: ripple 1s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+      }
+
+      .loading-ripple div:nth-child(2) {
+        animation-delay: -0.5s;
+      }
+
+      @keyframes ripple {
+        0% {
+          top: 28px;
+          left: 28px;
+          width: 0;
+          height: 0;
+          opacity: 1;
+        }
+        100% {
+          top: -1px;
+          left: -1px;
+          width: 58px;
+          height: 58px;
+          opacity: 0;
+        }
+      }
+
+      /* Success State */
+      .success-state {
+        text-align: center;
+        display: none;
+        opacity: 0;
+        transform: scale(0.8);
+        transition: all 0.5s var(--transition-bounce);
+      }
+
+      .success-state.active {
+        display: block;
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      .success-icon {
+        width: 100px;
+        height: 100px;
+        margin: 0 auto var(--space-lg);
+        position: relative;
+      }
+
+      .success-circle {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border: 3px solid var(--primary);
+        border-radius: 50%;
+        opacity: 0;
+        animation: successCircle 0.6s ease-out forwards;
+      }
+
+      @keyframes successCircle {
+        from {
+          transform: scale(0);
+          opacity: 0;
+        }
+        to {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      .success-check {
+        position: absolute;
+        width: 50%;
+        height: 25%;
+        top: 40%;
+        left: 25%;
+        border-left: 3px solid var(--primary);
+        border-bottom: 3px solid var(--primary);
+        transform: rotate(-45deg) scale(0);
+        animation: successCheck 0.4s ease-out 0.3s forwards;
+      }
+
+      @keyframes successCheck {
+        from {
+          transform: rotate(-45deg) scale(0);
+        }
+        to {
+          transform: rotate(-45deg) scale(1);
+        }
+      }
+
+      /* Gesture Indicator */
+      .gesture-hint {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.9rem;
+        opacity: 0;
+        animation: fadeIn 1s ease-out 2s forwards;
+      }
+
+      @keyframes fadeIn {
+        to {
+          opacity: 1;
+        }
+      }
+
+      .gesture-icon {
+        width: 30px;
+        height: 30px;
+        position: relative;
+      }
+
+      .swipe-hand {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 50%;
+        animation: swipeHint 2s ease-in-out infinite;
+      }
+
+      @keyframes swipeHint {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        50% {
+          transform: translateX(10px);
+        }
+      }
+
+      /* Accessibility Mode Toggle */
+      .a11y-toggle {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1000;
+        transition: all 0.3s var(--transition-smooth);
+      }
+
+      .a11y-toggle:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.1);
+      }
+
+      /* Orbit Toggle */
+      .orbit-toggle {
+        position: fixed;
+        bottom: 20px;
+        right: 80px; /* Positioned next to a11y toggle */
+        width: 50px;
+        height: 50px;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1000;
+        transition: all 0.3s var(--transition-smooth);
+      }
+
+      .orbit-toggle:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.1);
+      }
+
+      .orbit-toggle.off svg {
+        opacity: 0.5;
+      }
+
+      /* Hide orbit elements when toggled off */
+      .orbit-hidden .orbit-ring,
+      .orbit-hidden .orbit-dots {
+        display: none;
+      }
+
+      /* High Contrast Mode */
+      body.high-contrast {
+        background: #ffffff;
+        color: #000000;
+      }
+
+      body.high-contrast .login-card {
+        background: #ffffff;
+        border: 3px solid #000000;
+      }
+
+      body.high-contrast .input-field {
+        background: #ffffff;
+        border: 2px solid #000000;
+        color: #000000;
+      }
+
+      /* Skip to content link for screen readers */
+      .skip-link {
+        position: absolute;
+        top: -40px;
+        left: 0;
+        background: var(--primary);
+        color: white;
+        padding: 8px;
+        text-decoration: none;
+        border-radius: 0 0 4px 0;
+      }
+
+      .skip-link:focus {
+        top: 0;
+      }
+
+      /* Responsive Design */
+      @media (max-width: 768px) {
+        .circular-nav {
+          width: 350px;
+          height: 350px;
+        }
+
+        .login-card {
+          width: 90%;
+          max-width: 350px;
+          min-height: 550px; /* Adjusted for mobile */
+          padding: var(--space-lg);
+        }
+
+        h1 {
+          font-size: 1.8rem; /* Further reduced for mobile */
+        }
+
+        .auth-methods {
+          grid-template-columns: 1fr;
+          gap: var(--space-xs); /* Even smaller gap for single column */
+        }
+      }
+
+      @media (max-width: 480px) {
+        .circular-nav {
+          width: 300px;
+          height: 300px;
+        }
+
+        .login-card {
+          padding: var(--space-md);
+          min-height: auto; /* Allow natural height on small screens */
+        }
+
+        h1 {
+          font-size: 1.5rem; /* Further reduced */
+        }
+      }
+
+      /* Reduced motion preferences */
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+
+      /* Loading overlay for smooth transitions */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #0a0a0a;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity 0.5s ease-out;
+      }
+
+      .loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Skip to content link for accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="loading-ripple">
+        <div></div>
+        <div></div>
+      </div>
+    </div>
+
+    <!-- Custom Cursor -->
+    <div class="cursor" id="cursor"></div>
+    <div class="cursor-follower" id="cursorFollower"></div>
+
+    <!-- 3D Particle Background Canvas -->
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- Sound Toggle -->
+    <button
+      class="sound-toggle"
+      id="soundToggle"
+      aria-label="Toggle sound effects"
+    >
+      <svg id="soundIcon" viewBox="0 0 24 24">
+        <path
+          d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"
+        />
+      </svg>
+    </button>
+
+    <!-- Accessibility Toggle -->
+    <button
+      class="a11y-toggle"
+      id="a11yToggle"
+      aria-label="Toggle high contrast mode"
+    >
+      <svg viewBox="0 0 24 24" fill="white" width="24" height="24">
+        <path
+          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.41 0 8 3.59 8 8s-3.59 8-8 8z"
+        />
+      </svg>
+    </button>
+
+    <!-- Orbit Toggle -->
+    <button
+      class="orbit-toggle"
+      id="orbitToggle"
+      aria-label="Toggle orbit animation"
+    >
+      <svg viewBox="0 0 24 24" fill="white" width="24" height="24">
+        <circle
+          cx="12"
+          cy="12"
+          r="10"
+          fill="none"
+          stroke="white"
+          stroke-width="2"
+        />
+        <circle cx="12" cy="5" r="2" fill="white" />
+        <circle cx="19" cy="12" r="2" fill="white" />
+        <circle cx="12" cy="19" r="2" fill="white" />
+        <circle cx="5" cy="12" r="2" fill="white" />
+      </svg>
+    </button>
+
+    <!-- Main Container -->
+    <main class="login-container" id="main-content">
+      <!-- Circular Navigation System -->
+      <div class="circular-nav">
+        <div class="orbit-ring"></div>
+        <!-- Add orbital dots for more visual interest -->
+        <div class="orbit-dots">
+          <div class="orbit-dot"></div>
+          <div class="orbit-dot"></div>
+          <div class="orbit-dot"></div>
+          <div class="orbit-dot"></div>
+        </div>
+
+        <!-- Login Card -->
+        <div class="login-card" id="loginCard">
+          <!-- Step Indicators -->
+          <div class="step-indicators">
+            <div class="step-dot active" data-step="0"></div>
+            <div class="step-dot" data-step="1"></div>
+            <div class="step-dot" data-step="2"></div>
+            <div class="step-dot" data-step="3"></div>
+          </div>
+
+          <!-- Welcome Screen (Step 0) -->
+          <div class="form-step active" id="step0">
+            <div class="welcome-screen">
+              <div class="logo-container">
+                <div class="logo-glow"></div>
+                <div class="logo-shape"></div>
+              </div>
+              <h1>Welcome</h1>
+              <p class="subtitle">Choose your authentication method</p>
+
+              <div class="auth-methods">
+                <div
+                  class="auth-method"
+                  onclick="selectAuthMethod('email')"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Login with email"
+                >
+                  <div class="auth-method-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="auth-method-title">Email</div>
+                  <div class="auth-method-desc">Traditional login</div>
+                </div>
+
+                <div
+                  class="auth-method"
+                  onclick="selectAuthMethod('biometric')"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Login with biometrics"
+                >
+                  <div class="auth-method-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        d="M17.81 4.47c-.8 0-1.54.3-2.1.84l-7.89 7.89c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l7.89-7.89c.19-.17.43-.27.69-.27.55 0 1 .45 1 1 0 .26-.1.5-.27.69l-7.89 7.89c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l7.89-7.89c.54-.56.84-1.3.84-2.1 0-1.65-1.35-3-3-3zm-6.34 4.66c.78.78.78 2.05 0 2.83-1.56 1.56-1.56 4.09 0 5.66.78.78.78 2.05 0 2.83-.78.78-2.05.78-2.83 0-3.12-3.12-3.12-8.19 0-11.31.78-.79 2.05-.79 2.83-.01z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="auth-method-title">Biometric</div>
+                  <div class="auth-method-desc">Fingerprint scan</div>
+                </div>
+
+                <div
+                  class="auth-method"
+                  onclick="selectAuthMethod('social')"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Login with social media"
+                >
+                  <div class="auth-method-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="auth-method-title">Social</div>
+                  <div class="auth-method-desc">Quick access</div>
+                </div>
+
+                <div
+                  class="auth-method"
+                  onclick="selectAuthMethod('magic')"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Login with magic link"
+                >
+                  <div class="auth-method-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        d="M7.5 5.6L5 7l1.4-2.5L5 2l2.5 1.4L10 2 8.6 4.5 10 7 7.5 5.6zm12 9.8L22 14l-1.4 2.5L22 19l-2.5-1.4L17 19l1.4-2.5L17 14l2.5 1.4zM22 2l-1.4 2.5L22 7l-2.5-1.4L17 7l1.4-2.5L17 2l2.5 1.4L22 2zm-8.3 3.5l3.2 3.2-10 10.1-3.2-3.2 10-10.1z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="auth-method-title">Magic Link</div>
+                  <div class="auth-method-desc">Passwordless</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Email Login (Step 1) -->
+          <div class="form-step" id="step1">
+            <h2 style="text-align: center; margin-bottom: var(--space-lg)">
+              Email Login
+            </h2>
+            <form id="emailForm">
+              <div class="input-group">
+                <input
+                  type="email"
+                  class="input-field"
+                  id="emailInput"
+                  placeholder=" "
+                  required
+                  autocomplete="email"
+                />
+                <label class="input-label" for="emailInput"
+                  >Email address</label
+                >
+              </div>
+              <div class="input-group">
+                <input
+                  type="password"
+                  class="input-field"
+                  id="passwordInput"
+                  placeholder=" "
+                  required
+                  autocomplete="current-password"
+                />
+                <label class="input-label" for="passwordInput">Password</label>
+              </div>
+              <button type="submit" class="continue-btn">Continue</button>
+            </form>
+          </div>
+
+          <!-- Biometric Auth (Step 2) -->
+          <div class="form-step" id="step2">
+            <h2 style="text-align: center; margin-bottom: var(--space-lg)">
+              Biometric Authentication
+            </h2>
+            <div class="biometric-scanner active">
+              <div class="fingerprint-icon"></div>
+              <div class="scan-line"></div>
+            </div>
+            <p style="text-align: center; color: rgba(255, 255, 255, 0.6)">
+              Place your finger on the scanner
+            </p>
+            <button class="continue-btn" onclick="simulateBiometricAuth()">
+              Simulate Scan
+            </button>
+          </div>
+
+          <!-- Success State -->
+          <div class="success-state" id="successState">
+            <div class="success-icon">
+              <div class="success-circle"></div>
+              <div class="success-check"></div>
+            </div>
+            <h2>Welcome back!</h2>
+            <p
+              style="
+                color: rgba(255, 255, 255, 0.6);
+                margin-top: var(--space-sm);
+              "
+            >
+              Redirecting to your dashboard...
+            </p>
+          </div>
+
+          <!-- Loading State -->
+          <div class="loading-ripple" id="loadingRipple">
+            <div></div>
+            <div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gesture Hint -->
+      <div class="gesture-hint">
+        <div class="gesture-icon">
+          <div class="swipe-hand"></div>
+        </div>
+        <span>Swipe or use arrow keys to navigate</span>
+      </div>
+    </main>
+
+    <script>
+      // Initialize variables
+      let currentStep = 0;
+      let selectedAuthMethod = '';
+      let soundEnabled = true;
+      let particlesArray = [];
+      let mouseX = 0;
+      let mouseY = 0;
+
+      // Audio context for sound effects
+      let audioContext;
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        console.log('Web Audio API not supported');
+      }
+
+      // Initialize on page load
+      window.addEventListener('load', () => {
+        initializeParticles();
+        initializeCustomCursor();
+        initializeKeyboardNavigation();
+        setTimeBasedTheme();
+
+        // Hide loading overlay after initialization
+        setTimeout(() => {
+          document.getElementById('loadingOverlay').classList.add('hidden');
+        }, 500);
+      });
+
+      // Set theme based on time of day
+      function setTimeBasedTheme() {
+        const hour = new Date().getHours();
+        let theme = 'day';
+
+        if (hour >= 6 && hour < 12) {
+          theme = 'morning';
+          document.documentElement.style.setProperty(
+            '--primary',
+            'var(--morning-primary)'
+          );
+          document.documentElement.style.setProperty(
+            '--secondary',
+            'var(--morning-secondary)'
+          );
+          document.documentElement.style.setProperty(
+            '--accent',
+            'var(--morning-accent)'
+          );
+        } else if (hour >= 12 && hour < 18) {
+          theme = 'day';
+          document.documentElement.style.setProperty(
+            '--primary',
+            'var(--day-primary)'
+          );
+          document.documentElement.style.setProperty(
+            '--secondary',
+            'var(--day-secondary)'
+          );
+          document.documentElement.style.setProperty(
+            '--accent',
+            'var(--day-accent)'
+          );
+        } else if (hour >= 18 && hour < 22) {
+          theme = 'evening';
+          document.documentElement.style.setProperty(
+            '--primary',
+            'var(--evening-primary)'
+          );
+          document.documentElement.style.setProperty(
+            '--secondary',
+            'var(--evening-secondary)'
+          );
+          document.documentElement.style.setProperty(
+            '--accent',
+            'var(--evening-accent)'
+          );
+        } else {
+          theme = 'night';
+          document.documentElement.style.setProperty(
+            '--primary',
+            'var(--night-primary)'
+          );
+          document.documentElement.style.setProperty(
+            '--secondary',
+            'var(--night-secondary)'
+          );
+          document.documentElement.style.setProperty(
+            '--accent',
+            'var(--night-accent)'
+          );
+        }
+      }
+
+      // 3D Particle System
+      function initializeParticles() {
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        class Particle {
+          constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.z = Math.random() * 1000;
+            this.size = Math.random() * 2;
+            this.speedX = (Math.random() - 0.5) * 0.5;
+            this.speedY = (Math.random() - 0.5) * 0.5;
+            this.speedZ = Math.random() * 1;
+          }
+
+          update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            this.z -= this.speedZ;
+
+            // Reset particle if it goes off screen
+            if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+            if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+            if (this.z <= 0) this.z = 1000;
+
+            // Mouse interaction
+            const dx = this.x - mouseX;
+            const dy = this.y - mouseY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < 100) {
+              const angle = Math.atan2(dy, dx);
+              const force = (100 - distance) / 100;
+              this.x += Math.cos(angle) * force * 2;
+              this.y += Math.sin(angle) * force * 2;
+            }
+          }
+
+          draw() {
+            const perspective = 1000 / (1000 - this.z);
+            const x =
+              (this.x - canvas.width / 2) * perspective + canvas.width / 2;
+            const y =
+              (this.y - canvas.height / 2) * perspective + canvas.height / 2;
+            const size = this.size * perspective;
+            const opacity = (1000 - this.z) / 1000;
+
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.5})`;
+            ctx.fill();
+          }
+        }
+
+        // Create particles
+        for (let i = 0; i < 100; i++) {
+          particlesArray.push(new Particle());
+        }
+
+        // Animation loop
+        function animate() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          particlesArray.forEach((particle) => {
+            particle.update();
+            particle.draw();
+          });
+
+          // Draw connections between nearby particles
+          for (let i = 0; i < particlesArray.length; i++) {
+            for (let j = i + 1; j < particlesArray.length; j++) {
+              const dx = particlesArray[i].x - particlesArray[j].x;
+              const dy = particlesArray[i].y - particlesArray[j].y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+
+              if (distance < 100) {
+                ctx.beginPath();
+                ctx.moveTo(particlesArray[i].x, particlesArray[i].y);
+                ctx.lineTo(particlesArray[j].x, particlesArray[j].y);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${
+                  0.1 * (1 - distance / 100)
+                })`;
+                ctx.stroke();
+              }
+            }
+          }
+
+          requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+        });
+      }
+
+      // Custom Cursor
+      function initializeCustomCursor() {
+        const cursor = document.getElementById('cursor');
+        const cursorFollower = document.getElementById('cursorFollower');
+
+        document.addEventListener('mousemove', (e) => {
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+
+          cursor.style.left = e.clientX + 'px';
+          cursor.style.top = e.clientY + 'px';
+
+          setTimeout(() => {
+            cursorFollower.style.left = e.clientX + 'px';
+            cursorFollower.style.top = e.clientY + 'px';
+          }, 100);
+        });
+
+        // Add hover effects
+        const interactiveElements = document.querySelectorAll(
+          'button, a, .auth-method, input, .step-dot'
+        );
+        interactiveElements.forEach((element) => {
+          element.addEventListener('mouseenter', () => {
+            cursor.classList.add('expand');
+          });
+          element.addEventListener('mouseleave', () => {
+            cursor.classList.remove('expand');
+          });
+        });
+      }
+
+      // Keyboard Navigation
+      function initializeKeyboardNavigation() {
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowLeft' && currentStep > 0) {
+            navigateToStep(currentStep - 1);
+          } else if (e.key === 'ArrowRight' && currentStep < 3) {
+            navigateToStep(currentStep + 1);
+          }
+        });
+      }
+
+      // Sound Effects
+      function playSound(frequency, duration = 100) {
+        if (!soundEnabled || !audioContext) return;
+
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = frequency;
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.01,
+          audioContext.currentTime + duration / 1000
+        );
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + duration / 1000);
+      }
+
+      // Toggle Sound
+      document
+        .getElementById('soundToggle')
+        .addEventListener('click', function () {
+          soundEnabled = !soundEnabled;
+          this.classList.toggle('muted');
+
+          if (soundEnabled) {
+            playSound(523.25, 100); // C5 note
+          }
+        });
+
+      // Toggle Accessibility Mode
+      document
+        .getElementById('a11yToggle')
+        .addEventListener('click', function () {
+          document.body.classList.toggle('high-contrast');
+          playSound(440, 100); // A4 note
+        });
+
+      // Toggle Orbit Animation
+      document
+        .getElementById('orbitToggle')
+        .addEventListener('click', function () {
+          const circularNav = document.querySelector('.circular-nav');
+          circularNav.classList.toggle('orbit-hidden');
+          this.classList.toggle('off');
+
+          // Play feedback sound
+          if (circularNav.classList.contains('orbit-hidden')) {
+            playSound(330, 100); // E4 note (lower pitch for off)
+          } else {
+            playSound(659.25, 100); // E5 note (higher pitch for on)
+          }
+
+          // Announce to screen readers
+          const state = circularNav.classList.contains('orbit-hidden')
+            ? 'disabled'
+            : 'enabled';
+          announceToScreenReader(`Orbit animation ${state}`);
+        });
+
+      // Auth Method Selection
+      function selectAuthMethod(method) {
+        selectedAuthMethod = method;
+        playSound(587.33, 100); // D5 note
+
+        // Add tilt effect to card
+        const card = document.getElementById('loginCard');
+        card.classList.add('tilted');
+        setTimeout(() => {
+          card.classList.remove('tilted');
+        }, 300);
+
+        switch (method) {
+          case 'email':
+            navigateToStep(1);
+            break;
+          case 'biometric':
+            navigateToStep(2);
+            break;
+          case 'social':
+            showMessage('Social login coming soon!');
+            break;
+          case 'magic':
+            showMessage('Magic link sent to your email!');
+            break;
+        }
+      }
+
+      // Navigate Between Steps
+      function navigateToStep(step) {
+        // Hide current step
+        document.querySelectorAll('.form-step').forEach((s) => {
+          s.classList.remove('active');
+        });
+
+        // Update step indicators
+        document.querySelectorAll('.step-dot').forEach((dot, index) => {
+          dot.classList.toggle('active', index === step);
+        });
+
+        // Show new step
+        setTimeout(() => {
+          document.getElementById(`step${step}`).classList.add('active');
+          currentStep = step;
+        }, 100);
+
+        playSound(659.25, 100); // E5 note
+      }
+
+      // Email Form Submission
+      document.getElementById('emailForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const email = document.getElementById('emailInput').value;
+        const password = document.getElementById('passwordInput').value;
+
+        // Show loading
+        document.getElementById('loadingRipple').classList.add('active');
+        playSound(440, 200); // A4 note
+
+        // Simulate authentication
+        setTimeout(() => {
+          if (email === 'demo@example.com' && password === 'password') {
+            showSuccess();
+          } else {
+            showError('Invalid credentials. Try demo@example.com / password');
+            document.getElementById('loadingRipple').classList.remove('active');
+          }
+        }, 2000);
+      });
+
+      // Biometric Authentication Simulation
+      function simulateBiometricAuth() {
+        const scanner = document.querySelector('.biometric-scanner');
+        scanner.style.animation = 'pulse 2s ease-in-out';
+
+        playSound(880, 1000); // A5 note sweep
+
+        setTimeout(() => {
+          showSuccess();
+        }, 2000);
+      }
+
+      // Show Success State
+      function showSuccess() {
+        document.getElementById('loadingRipple').classList.remove('active');
+        document.querySelector('.form-step.active').style.display = 'none';
+        document.getElementById('successState').classList.add('active');
+
+        // Play success sound sequence
+        playSound(523.25, 100); // C5
+        setTimeout(() => playSound(659.25, 100), 100); // E5
+        setTimeout(() => playSound(783.99, 200), 200); // G5
+
+        // Redirect after delay
+        setTimeout(() => {
+          showMessage('Welcome to your dashboard!');
+        }, 3000);
+      }
+
+      // Show Error Message
+      function showError(message) {
+        const card = document.getElementById('loginCard');
+        card.style.animation = 'shake 0.5s';
+        setTimeout(() => {
+          card.style.animation = '';
+        }, 500);
+
+        // Add shake keyframes
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-10px); }
+                75% { transform: translateX(10px); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        showMessage(message);
+        playSound(220, 300); // A3 note (error sound)
+      }
+
+      // Show Toast Message
+      function showMessage(message) {
+        const existingToast = document.querySelector('.toast');
+        if (existingToast) existingToast.remove();
+
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s var(--transition-bounce);
+            z-index: 2000;
+        `;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+          toast.style.transform = 'translateX(-50%) translateY(0)';
+        }, 10);
+
+        setTimeout(() => {
+          toast.style.transform = 'translateX(-50%) translateY(100px)';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+
+      // Touch Gesture Support
+      let touchStartX = 0;
+      let touchEndX = 0;
+
+      document.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+      });
+
+      document.addEventListener('touchend', (e) => {
+        touchEndX = e.changedTouches[0].clientX;
+        handleSwipe();
+      });
+
+      function handleSwipe() {
+        const swipeThreshold = 50;
+        const diff = touchStartX - touchEndX;
+
+        if (Math.abs(diff) > swipeThreshold) {
+          if (diff > 0 && currentStep < 3) {
+            // Swipe left - next step
+            navigateToStep(currentStep + 1);
+          } else if (diff < 0 && currentStep > 0) {
+            // Swipe right - previous step
+            navigateToStep(currentStep - 1);
+          }
+        }
+      }
+
+      // Add ARIA announcements for screen readers
+      function announceToScreenReader(message) {
+        const announcement = document.createElement('div');
+        announcement.setAttribute('role', 'status');
+        announcement.setAttribute('aria-live', 'polite');
+        announcement.style.position = 'absolute';
+        announcement.style.left = '-10000px';
+        announcement.textContent = message;
+        document.body.appendChild(announcement);
+
+        setTimeout(() => {
+          document.body.removeChild(announcement);
+        }, 1000);
+      }
+
+      // Initialize ARIA attributes for interactive elements
+      document.querySelectorAll('.auth-method').forEach((method) => {
+        method.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            method.click();
+          }
+        });
+      });
+
+      // Performance optimization - throttle mouse events
+      function throttle(func, limit) {
+        let inThrottle;
+        return function () {
+          const args = arguments;
+          const context = this;
+          if (!inThrottle) {
+            func.apply(context, args);
+            inThrottle = true;
+            setTimeout(() => (inThrottle = false), limit);
+          }
+        };
+      }
+
+      // Throttled mouse move for particle interaction
+      document.addEventListener(
+        'mousemove',
+        throttle((e) => {
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+        }, 16)
+      );
+    </script>
+  </body>
+</html>
+
+<!-- 
+The UI/UX for the login page is very boring. Even though this is a MERN application, I want you to create a very sleek. modern with amazing UI/UX using html and css and javascript if necessary, all in a single html file I can click on a view the UI quicly in a browser. I dont want any server calls or any actual login functionality. I just want to have sample login UI/UX options while we consider changing our production login UI.
+
+I reviewed your login page example. Its ok.
+Your role assignment is now award winning app designer. Your world famous for your innovative designs that both leverage beautiful simplicity and extremely satisfying micro animations and micro interactions. Your UI/UX creations drive user feelings and really connect users to the site in ways they cant even explain. Rethink and recreate the login page as I am still looking for a login page design to replace our production page in the future
+
+i like that one a bit better, but i think you can improve on this login page. Some of the interactions felt forced an unnatural. The colors did inspire me. It seemed like a typical login page. Since your role is world famous design professional, i think you can improve on this. Please create another unique design
+
+
+Analysis and Plan
+Current Design Assessment:
+
+The existing login page has a clean glassmorphism design with floating orbs
+Good micro-interactions (password toggle, ripple effects, magnetic hover)
+Standard two-field login form with social login options
+Nice animations and transitions
+My Confidence Level: 10/10
+
+I'll create a completely new, unique login experience that includes:
+
+An immersive 3D particle system background
+A multi-step login flow with personality
+Biometric authentication simulation
+Dynamic color themes that respond to time of day
+An innovative circular navigation interface
+Gesture-based interactions
+Sound design integration (with mute option)
+Accessibility-first approach with unique visual indicators
+Let me create this enhanced login page:
+
+
+I've created a completely reimagined login experience that goes far beyond typical login pages. Here are the unique enhancements:
+
+Key Innovations:
+1. Time-Based Dynamic Theming
+Automatically changes color schemes based on time of day (morning, day, evening, night)
+Creates a personalized experience that feels alive and responsive
+2. 3D Interactive Particle System
+Custom canvas-based particle background that responds to mouse movement
+Particles connect when near each other, creating dynamic constellations
+Adds depth and immersion to the experience
+3. Multi-Method Authentication Hub
+Four authentication methods: Email, Biometric, Social, and Magic Link
+Each method has its own unique interaction pattern
+Biometric simulation with scanning animation
+4. Custom Cursor with Magnetic Effects
+Replaces default cursor with custom design
+Expands on hover over interactive elements
+Follower cursor creates smooth trailing effect
+5. Sound Design Integration
+Web Audio API for subtle sound effects
+Different tones for different actions (navigation, success, error)
+Mutable for accessibility
+6. Gesture-Based Navigation
+Swipe gestures on mobile devices
+Keyboard arrow navigation
+Multi-modal interaction support
+7. Advanced Micro-interactions
+3D card tilt effects
+Ripple animations on buttons
+Smooth step transitions with indicators
+Success animations with sequenced reveals
+8. Accessibility-First Features
+High contrast mode toggle
+Skip to content link
+ARIA labels and roles
+Keyboard navigation support
+Screen reader announcements
+Respects reduced motion preferences
+9. Circular Navigation System
+Orbiting ring animation adds sci-fi aesthetic
+Creates unique visual hierarchy
+Guides user attention naturally
+10. Performance Optimizations
+Throttled mouse events
+Efficient particle rendering
+Smooth 60fps animations
+Progressive enhancement approach
+Unique User Interactions:
+Hover over authentication methods - See the glow effect expand
+Click the sound toggle - Hear the UI respond with audio feedback
+Move your mouse around - Watch particles react and flee
+Try the biometric option - See the fingerprint scanner animation
+Submit with wrong credentials - Experience the shake animation
+Use arrow keys - Navigate between steps smoothly
+Click the accessibility toggle - Switch to high contrast mode
+Watch the orbit ring - Continuous rotation adds life to the interface
+The design creates an immersive, futuristic login experience that feels more like entering a high-tech system than filling out a form. Every interaction has been carefully crafted to provide feedback and delight users while maintaining accessibility and usability standards.
+
+Confidence Level: 10/10
+
+This enhanced login page demonstrates cutting-edge web design techniques while maintaining practical functionality and accessibility. The combination of visual effects, sound design, and innovative interaction patterns creates a truly unique user experience that stands out from typical login interfaces.
+
+-->

@@ -44,6 +44,10 @@ const initialState = {
   isGuest: guestUser ? true : false, // Flag to indicate if the current user is a guest
   guestAccessFeatureEnabled: guestAccessEnabled, // Tracks if the guest access feature is enabled globally by admin
 
+  // Authentication restoration state - CRITICAL for page refresh handling
+  isAuthRestored: false, // Tracks if auth state has been fully restored from localStorage
+  authRestorationAttempted: false, // Tracks if restoration has been attempted (prevents multiple attempts)
+
   // UI state flags
   isError: false, // True when an operation results in an error
   isSuccess: false, // True when an operation completes successfully
@@ -56,6 +60,103 @@ const initialState = {
 // === ASYNC THUNKS ===
 // Async thunks handle side effects (API calls) and update the Redux store
 // They are the recommended way to handle async logic in Redux Toolkit
+
+/**
+ * Restore authentication state from localStorage
+ * This thunk ensures proper authentication state restoration on page refresh
+ * and prevents race conditions with API calls during app initialization
+ */
+export const restoreAuthState = createAsyncThunk(
+  'auth/restoreAuthState',
+  async (_, thunkAPI) => {
+    try {
+      // Check if restoration has already been attempted to prevent multiple attempts
+      const { auth } = thunkAPI.getState();
+      if (auth.authRestorationAttempted) {
+        return { alreadyRestored: true };
+      }
+
+      // Get stored auth data
+      const storedUser = localStorage.getItem('user');
+      const storedToken = localStorage.getItem('token');
+      const storedGuestUser = localStorage.getItem('guestUser');
+      const storedGuestAccess = localStorage.getItem(
+        'guestAccessFeatureEnabled'
+      );
+
+      let restoredUser = null;
+      let restoredToken = null;
+      let isGuest = false;
+      let guestAccessEnabled = storedGuestAccess === 'true';
+
+      // Try to restore regular user first
+      if (storedUser && storedToken) {
+        try {
+          restoredUser = JSON.parse(storedUser);
+          restoredToken = storedToken;
+          console.log(
+            'Auth state restored: Regular user found in localStorage'
+          );
+        } catch (e) {
+          console.error('Failed to parse stored user data:', e);
+          localStorage.removeItem('user');
+          localStorage.removeItem('token');
+        }
+      }
+
+      // If no regular user, try guest user
+      if (!restoredUser && storedGuestUser) {
+        try {
+          restoredUser = JSON.parse(storedGuestUser);
+          isGuest = true;
+          console.log('Auth state restored: Guest user found in localStorage');
+        } catch (e) {
+          console.error('Failed to parse stored guest user data:', e);
+          localStorage.removeItem('guestUser');
+        }
+      }
+
+      // Validate token if present (basic validation)
+      if (restoredToken && !isGuest) {
+        try {
+          // Basic JWT structure check (should have 3 parts separated by dots)
+          const tokenParts = restoredToken.split('.');
+          if (tokenParts.length !== 3) {
+            console.warn('Invalid token structure detected, clearing token');
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            restoredToken = null;
+            restoredUser = null;
+          }
+        } catch (e) {
+          console.warn('Token validation failed, clearing token:', e);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          restoredToken = null;
+          restoredUser = null;
+        }
+      }
+
+      return {
+        user: restoredUser,
+        token: restoredToken,
+        isGuest,
+        guestAccessFeatureEnabled: guestAccessEnabled,
+        restorationSuccessful: true,
+      };
+    } catch (error) {
+      console.error('Auth restoration failed:', error);
+      // Return empty state on error to prevent app from breaking
+      return {
+        user: null,
+        token: null,
+        isGuest: false,
+        guestAccessFeatureEnabled: false,
+        restorationSuccessful: false,
+      };
+    }
+  }
+);
 
 /**
  * New Async Thunk for refreshing the access token
@@ -418,6 +519,61 @@ export const authSlice = createSlice({
   // In this case, these handle the async thunk actions defined above
   extraReducers: (builder) => {
     builder
+      // === RESTORE AUTH STATE CASES ===
+      .addCase(restoreAuthState.pending, (state) => {
+        // Mark that restoration is being attempted to prevent duplicate calls
+        state.authRestorationAttempted = true;
+        // Don't set isLoading to true here to avoid showing loading indicators during initialization
+      })
+      .addCase(restoreAuthState.fulfilled, (state, action) => {
+        const {
+          user,
+          token,
+          isGuest,
+          guestAccessFeatureEnabled,
+          restorationSuccessful,
+          alreadyRestored,
+        } = action.payload;
+
+        // Mark restoration as completed regardless of success
+        state.isAuthRestored = true;
+        state.authRestorationAttempted = true;
+
+        // Only update state if restoration was successful and wasn't already restored
+        if (restorationSuccessful && !alreadyRestored) {
+          state.user = user;
+          state.token = token;
+          state.isGuest = isGuest;
+          state.guestAccessFeatureEnabled = guestAccessFeatureEnabled;
+
+          console.log('Auth state restoration completed successfully:', {
+            hasUser: !!user,
+            hasToken: !!token,
+            isGuest,
+            userId: user?._id || user?.id,
+          });
+        } else if (alreadyRestored) {
+          console.log('Auth state restoration skipped - already restored');
+        } else {
+          console.log(
+            'Auth state restoration completed - no stored auth data found'
+          );
+        }
+      })
+      .addCase(restoreAuthState.rejected, (state, action) => {
+        // Mark restoration as completed even if it failed
+        state.isAuthRestored = true;
+        state.authRestorationAttempted = true;
+
+        // Ensure clean state on restoration failure
+        state.user = null;
+        state.token = null;
+        state.isGuest = false;
+        state.guestAccessFeatureEnabled = false;
+
+        console.error('Auth state restoration failed:', action.payload);
+      })
+
       // === REFRESH TOKEN CASES ===
       .addCase(refreshToken.pending, (state) => {
         // Optionally set a loading state for token refresh if needed for UI feedback
@@ -499,7 +655,7 @@ export const authSlice = createSlice({
       .addCase(loginUser.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload?.message || 'Login failed'; // Use message from payload
+        state.message = action.payload || 'Login failed'; // Use action.payload directly
         state.user = null;
         state.token = null; // Clear token on rejection
         // disconnectSocket(); // Socket disconnection is handled in App.js
@@ -632,6 +788,12 @@ export const authSlice = createSlice({
 // Export the regular actions created by createSlice
 export const { resetAuthStatus, updateUserInState, clearGuestUser } =
   authSlice.actions;
+
+// Selectors
+export const selectCurrentUser = (state) => state.auth.user;
+export const selectIsAuthenticated = (state) =>
+  !!state.auth.user && !!state.auth.token;
+export const selectIsGuest = (state) => state.auth.isGuest;
 
 // Export the reducer for use in the Redux store
 export default authSlice.reducer;

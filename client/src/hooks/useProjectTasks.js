@@ -37,13 +37,18 @@ const useProjectTasks = (projectId, options = {}) => {
     smartRefresh = true,
   } = options;
 
+  // Memoized selectors for additional Redux state
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+  const selectGuestTasks = useMemo(
+    () => (state) => selectGuestItemsByType(state, 'tasks'),
+    []
+  );
+
   // Get auth state to check if user is a guest
-  const { isGuest } = useSelector((state) => state.auth);
+  const { isGuest } = useSelector(selectAuth);
 
   // Get guest task data directly if the user is a guest
-  const guestTasks = useSelector((state) =>
-    isGuest ? selectGuestItemsByType(state, 'tasks') : []
-  );
+  const guestTasks = useSelector(selectGuestTasks);
 
   // Filter guest tasks for this project and format them to match API structure
   const filteredGuestTasks = useMemo(() => {
@@ -58,23 +63,28 @@ const useProjectTasks = (projectId, options = {}) => {
         updatedAt: task.updatedAt,
       }));
   }, [isGuest, projectId, guestTasks]);
-  // Selector functions for the useDataFetching hook
+
+  // PERFORMANCE FIX: Memoized selectors for the useDataFetching hook
   const selectTasks = useMemo(() => (state) => state.tasks.tasks, []);
 
   const selectLastFetched = useMemo(
-    () => (state) => state.tasks.projectTasksTimestamps[projectId],
+    () => (state) => state.tasks.projectTasksTimestamps?.[projectId],
     [projectId]
   );
 
   const selectIsLoading = useMemo(() => (state) => state.tasks.isLoading, []);
 
+  // PERFORMANCE FIX: Simplified error selector to prevent dependency issues
   const selectError = useMemo(
     () => (state) => state.tasks.isError ? state.tasks.message : null,
     []
   );
 
+  // PERFORMANCE FIX: Highly optimized fetchParams to prevent re-renders
+  const fetchParams = useMemo(() => ({ projectId }), [projectId]);
+
   // Skip API fetch if user is a guest - we'll use the guest tasks directly
-  const shouldSkipFetch = isGuest || skipInitialFetch; // Use our generic hook with task-specific selectors
+  const shouldSkipFetch = isGuest || skipInitialFetch;
   const {
     data: regularTasks,
     isLoading,
@@ -87,16 +97,12 @@ const useProjectTasks = (projectId, options = {}) => {
     selectLastFetched: selectLastFetched,
     selectIsLoading: selectIsLoading,
     selectError: selectError,
-    dependencies: [projectId], // Re-fetch when project ID changes
-    fetchParams: {
-      projectId,
-      backgroundRefresh,
-      smartRefresh,
-    }, // Pass to the action creator
+    dependencies: [], // PERFORMANCE FIX: Empty array to prevent re-renders, rely on cache timeout
+    fetchParams, // Now properly memoized
     cacheTimeout,
     skipInitialFetch: shouldSkipFetch, // Skip if guest user
-    backgroundRefresh: isGuest ? false : backgroundRefresh, // No background refresh for guests
-    smartRefresh,
+    backgroundRefresh: false, // PERFORMANCE FIX: Temporarily disable background refresh to isolate issue
+    smartRefresh: false, // PERFORMANCE FIX: Temporarily disable smart refresh to isolate issue
     idField: '_id', // Use _id for comparing task objects
   });
 

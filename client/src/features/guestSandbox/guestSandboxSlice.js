@@ -1,5 +1,5 @@
 // filepath: c:\Users\macdo\Documents\Cline\utool\client\src\features\guestSandbox\guestSandboxSlice.js
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createSelector } from '@reduxjs/toolkit';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -224,27 +224,33 @@ export const { addItem, updateItem, deleteItem, setItems, resetGuestSandbox } =
 export const selectGuestSandbox = (rootState) => rootState.guestSandbox;
 
 /**
- * Selects all items of a specific entity type from the guest sandbox.
- * @param {Object} rootState - The global Redux state.
+ * Memoized selector for guest items by type to prevent unnecessary rerenders.
  * @param {GuestSandboxEntityType} entityType - The type of entity to select.
- * @returns {GuestSandboxItem[]} An array of items for the specified entity type, or an empty array if not found.
+ * @returns {function} Memoized selector function.
  */
-export const selectGuestItemsByType = (rootState, entityType) => {
-  return rootState.guestSandbox && rootState.guestSandbox[entityType]
-    ? rootState.guestSandbox[entityType]
-    : [];
-};
+export const selectGuestItemsByType = createSelector(
+  [(rootState) => rootState.guestSandbox, (rootState, entityType) => entityType],
+  (guestSandbox, entityType) => {
+    return guestSandbox && guestSandbox[entityType]
+      ? guestSandbox[entityType]
+      : [];
+  }
+);
 
 /**
- * Selects a specific item by its ID and entity type from the guest sandbox.
- * @param {Object} rootState - The global Redux state.
+ * Memoized selector for a specific guest item by ID and entity type.
  * @param {GuestSandboxEntityType} entityType - The type of entity.
  * @param {string} id - The ID of the item to select.
- * @returns {GuestSandboxItem | undefined} The item if found, otherwise undefined.
+ * @returns {function} Memoized selector function.
  */
-export const selectGuestItemById = (rootState, entityType, id) => {
-  const items = selectGuestItemsByType(rootState, entityType);
-  return items.find((item) => item.id === id);
-};
+export const selectGuestItemById = createSelector(
+  [
+    (rootState, entityType) => selectGuestItemsByType(rootState, entityType),
+    (rootState, entityType, id) => id
+  ],
+  (items, id) => {
+    return items.find((item) => item.id === id);
+  }
+);
 
 export default guestSandboxSlice.reducer;

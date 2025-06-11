@@ -70,12 +70,17 @@ const QuoteFooter = () => {
     setIsRefreshing(true);
 
     try {
+      // Try the primary API first
       const response = await fetch(
-        'https://api.quotable.io/random?tags=motivational|inspirational|success|productivity'
+        'https://api.quotable.io/random?tags=motivational|inspirational|success|productivity',
+        {
+          // Add timeout and handle SSL issues
+          signal: AbortSignal.timeout(5000), // 5 second timeout
+        }
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch quote');
+        throw new Error(`API responded with status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -103,12 +108,68 @@ const QuoteFooter = () => {
     } catch (error) {
       console.error('Error fetching quote:', error);
 
-      // Use fallback quote
-      const fallbackQuote = {
-        text: 'Productivity is never an accident. It is always the result of a commitment to excellence, intelligent planning, and focused effort.',
-        author: 'Paul J. Meyer',
-        quoteId: 'fallback-quote',
-      };
+      // Try alternative API source as fallback
+      try {
+        console.log('Trying alternative quote source...');
+        const fallbackResponse = await fetch(
+          'https://quotegarden.herokuapp.com/api/v3/quotes/random',
+          {
+            signal: AbortSignal.timeout(5000),
+          }
+        );
+
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          if (fallbackData.statusCode === 200 && fallbackData.data) {
+            const newQuote = {
+              text: fallbackData.data.quoteText.replace(/[""]/g, ''), // Remove quotes from text
+              author: fallbackData.data.quoteAuthor,
+              quoteId: `fallback-${Date.now()}`,
+            };
+
+            setQuote(newQuote);
+            localStorage.setItem(
+              'dailyQuote',
+              JSON.stringify({
+                quote: newQuote,
+                timestamp: new Date().toISOString(),
+              })
+            );
+            await checkIfFavorite(newQuote.quoteId);
+            return; // Success with fallback
+          }
+        }
+      } catch (fallbackError) {
+        console.error('Fallback API also failed:', fallbackError);
+      }
+
+      // Use local fallback quotes as last resort
+      const fallbackQuotes = [
+        {
+          text: 'Productivity is never an accident. It is always the result of a commitment to excellence, intelligent planning, and focused effort.',
+          author: 'Paul J. Meyer',
+          quoteId: 'local-fallback-1',
+        },
+        {
+          text: 'The way to get started is to quit talking and begin doing.',
+          author: 'Walt Disney',
+          quoteId: 'local-fallback-2',
+        },
+        {
+          text: 'Innovation distinguishes between a leader and a follower.',
+          author: 'Steve Jobs',
+          quoteId: 'local-fallback-3',
+        },
+        {
+          text: 'Success is not final, failure is not fatal: it is the courage to continue that counts.',
+          author: 'Winston Churchill',
+          quoteId: 'local-fallback-4',
+        },
+      ];
+
+      // Select a random fallback quote based on the day to provide variety
+      const today = new Date().getDate();
+      const fallbackQuote = fallbackQuotes[today % fallbackQuotes.length];
 
       setQuote(fallbackQuote);
 

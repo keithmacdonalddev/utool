@@ -224,9 +224,24 @@ const useStockData = (options = {}) => {
       }
     } catch (err) {
       logStockClient(`Error during fetch: ${err.message}`);
-      setError(err.response?.data?.message || err.message || 'Stock N/A');
 
-      // Even if there's an error, update the lastUpdated time
+      // Handle specific error types
+      if (err.response?.status === 429) {
+        logStockClient(`Rate limit exceeded (429), setting extended cooldown`);
+        setError('Rate limit exceeded. Please wait before trying again.');
+        // Start an extended cooldown for rate limit errors
+        setCooldownRemaining(30); // 30 minute cooldown for rate limit
+        startCooldownTimer();
+      } else if (err.response?.status >= 500) {
+        logStockClient(
+          `Server error (${err.response.status}), using cached data if available`
+        );
+        setError('Stock service temporarily unavailable. Showing cached data.');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Stock N/A');
+      }
+
+      // Even if there's an error, update the lastUpdated time for cached data
       if (stock) {
         const updatedStock = {
           ...stock,

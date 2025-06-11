@@ -1,4 +1,4 @@
-// taskSlice.js - Redux Toolkit slice for managing task state
+// taskSlice.js - Enhanced Redux Toolkit slice for advanced task management
 //
 // KEY CONCEPTS:
 // 1. Redux Toolkit: Uses modern Redux patterns with createSlice and createAsyncThunk
@@ -7,9 +7,14 @@
 // 4. Action Creators: Automatically generated from the slice definition
 // 5. Reducers: Handle state changes based on actions
 // 6. State Normalization: Organizes related data efficiently
+// 7. Advanced Features: Subtasks, dependencies, time tracking, progress management
 
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import api from '../../utils/api'; // Use our configured axios instance
+import {
+  createSlice,
+  createAsyncThunk,
+  createSelector,
+} from '@reduxjs/toolkit';
+import api from '../../utils/api';
 import {
   hasCollectionChanged,
   deepCompareObjects,
@@ -26,63 +31,98 @@ import {
 const CACHE_TIMEOUT = 5 * 60 * 1000;
 
 /**
- * Initial state object for the tasks slice
- *
- * REDUX STATE DESIGN PATTERNS:
- * - Include UI state flags (isLoading, isError) alongside data
- * - Use null for single-entity references when not loaded
- * - Use arrays for collections of entities
- * - Include status messages for user feedback
- * - Cache tracking for optimized data fetching
+ * Enhanced initial state for advanced task management
  */
 const initialState = {
-  tasks: [], // Collection of task objects
-  currentTask: null, // Currently selected/viewed task
-  currentProjectId: null, // Current project context
-  isError: false, // Error state flag
-  isSuccess: false, // Success state flag
-  isLoading: false, // Loading state flag for UI spinners/indicators
-  message: '', // Message for notifications/alerts
-  lastFetched: null, // When tasks were last fetched
-  tasksByProject: {}, // Cache of tasks organized by project ID
-  projectTasksTimestamps: {}, // Track last fetch time per project
-  backgroundRefreshingRecent: false, // Flag for background refreshing recent tasks
+  // Core task data
+  tasks: [],
+  currentTask: null,
+  currentProjectId: null,
+
+  // Hierarchical data
+  subtasks: {}, // Nested subtasks by parent task ID
+  taskDependencies: {}, // Dependencies mapping
+
+  // Time tracking
+  activeTimeEntries: {}, // Active time tracking sessions
+  timeEntries: {}, // Time entries by task ID
+
+  // UI state
+  isError: false,
+  isSuccess: false,
+  isLoading: false,
+  message: '',
+
+  // Advanced UI states
+  draggedTask: null,
+  selectedTasks: [],
+  taskFilters: {
+    status: 'all',
+    assignee: 'all',
+    priority: 'all',
+    tags: [],
+    search: '',
+    hasSubtasks: false,
+    isBlocked: false,
+    isOverdue: false,
+  },
+
+  // View states
+  viewMode: 'list', // 'list', 'board', 'calendar', 'gantt'
+  boardColumns: [
+    { id: 'backlog', name: 'Backlog', color: '#6B7280', order: 0 },
+    { id: 'todo', name: 'To Do', color: '#3B82F6', order: 1 },
+    { id: 'in-progress', name: 'In Progress', color: '#F59E0B', order: 2 },
+    { id: 'review', name: 'Review', color: '#8B5CF6', order: 3 },
+    { id: 'done', name: 'Done', color: '#10B981', order: 4 },
+  ],
+
+  // Cache management
+  lastFetched: null,
+  tasksByProject: {},
+  projectTasksTimestamps: {},
+  backgroundRefreshingRecent: false,
+
+  // Analytics
+  projectAnalytics: null,
+  taskMetrics: {},
+
+  // Advanced features state
+  bulkOperations: {
+    isProcessing: false,
+    selectedCount: 0,
+    results: null,
+  },
+
+  // Recurring tasks
+  recurringTasks: {},
+
+  // Custom fields
+  customFields: {},
+
+  // Progress tracking
+  progressUpdating: {},
 };
 
-/**
- * Create Task Async Thunk
- *
- * ASYNC THUNK PATTERN:
- * 1. Define a Redux action type string ('tasks/create')
- * 2. Create an async function that returns a Promise
- * 3. Handle success with resolved Promise value
- * 4. Handle errors with thunkAPI.rejectWithValue
- *
- * @param {Object} payload - Object with task properties
- * @param {string} payload.title - Task title
- * @param {string} payload.projectId - Project ID this task belongs to (required)
- * @param {string} payload.description - Task description
- * @param {string} payload.status - Task status
- * @param {string} payload.priority - Task priority
- * @param {string} payload.dueDate - Task due date
- * @param {Array} payload.tags - Task tags
- * @returns {Promise<Object>} - Promise with the created task data
- */
+// ===== EXISTING THUNKS (ENHANCED) =====
+
 export const createTask = createAsyncThunk(
   'tasks/create',
-  async (
-    taskData, // Combined taskData object
-    thunkAPI
-  ) => {
+  async (taskData, thunkAPI) => {
     const { getState, dispatch } = thunkAPI;
     const { auth } = getState();
-    const { projectId, title, description, status, priority, dueDate, tags } =
-      taskData;
+    const {
+      projectId,
+      title,
+      description,
+      status,
+      priority,
+      dueDate,
+      tags,
+      parentTask,
+    } = taskData;
 
     if (auth.user && auth.isGuest) {
-      // Guest user: Add to sandbox, no API call
-      // The guestSandboxSlice.addItem reducer handles ID generation.
-      // Ensure the data passed matches what addItem expects, particularly the 'data' sub-object.
       const guestTaskData = {
         title,
         projectId,
@@ -91,26 +131,29 @@ export const createTask = createAsyncThunk(
         priority,
         dueDate,
         tags,
+        parentTask,
       };
       dispatch(
         addGuestItem({ entityType: 'tasks', itemData: { data: guestTaskData } })
       );
-      // Return a consistent structure, including a temporary ID if possible, or mark as guest creation.
-      // The actual item with ID will be in the guestSandbox state.
       return {
         ...guestTaskData,
         _isGuestCreation: true,
         id: 'guest-' + Date.now(),
-      }; // Placeholder ID for immediate feedback if needed
+      };
     } else {
-      // Regular user: Proceed with API call
       try {
         if (!projectId) {
           return thunkAPI.rejectWithValue(
             'Project ID is required for task creation'
           );
         }
-        const response = await api.post(`/projects/${projectId}/tasks`, {
+
+        const endpoint = parentTask
+          ? `/projects/${projectId}/tasks/${parentTask}/subtasks`
+          : `/projects/${projectId}/tasks`;
+
+        const response = await api.post(endpoint, {
           title,
           description,
           status,
@@ -118,7 +161,7 @@ export const createTask = createAsyncThunk(
           dueDate,
           tags,
         });
-        return response.data.data; // Return the newly created task data
+        return response.data.data;
       } catch (error) {
         const message =
           (error.response &&
@@ -132,36 +175,17 @@ export const createTask = createAsyncThunk(
   }
 );
 
-/**
- * Get Tasks For Project Async Thunk with caching support
- *
- * Gets tasks that belong to a specific project
- * Only fetches new data if cache is stale or forced refresh
- *
- * @param {Object} payload - Parameters object
- * @param {string} payload.projectId - ID of the project to fetch tasks for (required)
- * @param {boolean} payload.forceRefresh - Whether to bypass cache and force a refresh
- * @param {number} payload.cacheTimeout - Custom cache timeout in ms (defaults to 5 minutes)
- */
 export const getTasksForProject = createAsyncThunk(
   'tasks/getForProject',
   async (payload, thunkAPI) => {
     const { getState, dispatch } = thunkAPI;
     const { auth } = getState();
 
-    // Handle both string projectId and object payload formats
     const projectId = typeof payload === 'string' ? payload : payload.projectId;
     const options = typeof payload === 'object' ? payload : {};
     const { forceRefresh = false, cacheTimeout = CACHE_TIMEOUT } = options;
 
     if (auth.user && auth.isGuest) {
-      // Guest user: Simulate fetch from sandbox. Guests always see their current sandbox state.
-      // The actual items are already in state.guestSandbox.tasks.
-      // We can dispatch setItems with the current guest tasks for this project if needed,
-      // or rely on selectors to pick them up. For simplicity, returning an empty array
-      // or the filtered items directly from guestSandbox state if the thunk is expected to return data.
-      // For now, let's assume components will select directly.
-      // If a thunk MUST return something, select from guestSandbox here.
       const guestTasksForProject = getState().guestSandbox.tasks.filter(
         (task) => task.data.projectId === projectId
       );
@@ -170,14 +194,13 @@ export const getTasksForProject = createAsyncThunk(
           ...gt.data,
           id: gt.id,
           _id: gt.id,
-        })), // Transform to match expected task structure
+        })),
         projectId,
-        fromCache: true, // Indicate it's from guest sandbox, effectively a cache
+        fromCache: true,
         isGuestFetch: true,
       };
     }
 
-    // Regular user: Proceed with API call and caching logic
     if (!projectId) {
       return thunkAPI.rejectWithValue('Project ID is required to fetch tasks');
     }
@@ -206,7 +229,6 @@ export const getTasksForProject = createAsyncThunk(
         tasks: response.data.data,
         projectId,
         fromCache: false,
-        timestamp: now,
       };
     } catch (error) {
       const message =
@@ -220,786 +242,1193 @@ export const getTasksForProject = createAsyncThunk(
   }
 );
 
-/**
- * Update Task Async Thunk
- *
- * PARAMETER PATTERN: Use destructuring to extract required fields
- * from a single payload object for cleaner function calls
- *
- * Special handling for completed tasks that get archived and deleted on the server.
- * Also supports optimistic updates for better UI responsiveness.
- *
- * @param {Object} payload - Update payload
- * @param {string} payload.projectId - ID of the project the task belongs to (required)
- * @param {string} payload.taskId - ID of the task to update
- * @param {Object} payload.updates - Object with fields to update
- * @param {boolean} payload.optimistic - Whether to apply optimistic update
- */
-export const updateTask = createAsyncThunk(
-  'tasks/update',
-  async ({ projectId, taskId, updates, optimistic = false }, thunkAPI) => {
-    const { getState, dispatch } = thunkAPI;
-    const { auth } = getState();
+// ===== NEW ADVANCED THUNKS =====
 
-    if (auth.user && auth.isGuest) {
-      // Guest user: Update in sandbox
-      dispatch(updateGuestItem({ entityType: 'tasks', id: taskId, updates }));
-      // Return the updated data structure expected by the reducer/component
-      // We need to select the item from the sandbox to return it
-      // This is a bit tricky as the state updates after dispatch returns.
-      // For optimistic-like behavior, we can construct the expected shape.
-      const guestTask = getState().guestSandbox.tasks.find(
-        (t) => t.id === taskId
+/**
+ * Create subtask under a parent task
+ */
+export const createSubtask = createAsyncThunk(
+  'tasks/createSubtask',
+  async ({ parentTaskId, subtaskData }, thunkAPI) => {
+    try {
+      const response = await api.post(
+        `/projects/tasks/${parentTaskId}/subtasks`,
+        subtaskData
       );
       return {
-        ...(guestTask ? guestTask.data : {}),
-        ...updates,
-        id: taskId,
-        _id: taskId,
-        project: projectId,
-        _isGuestUpdate: true,
+        subtask: response.data.data,
+        parentTaskId,
       };
-    }
-
-    // Regular user: Proceed with API call
-    if (!projectId || !taskId) {
+    } catch (error) {
       return thunkAPI.rejectWithValue(
-        'Project ID and Task ID are required to update a task'
+        error.response?.data?.message || error.message
       );
     }
+  }
+);
 
-    if (optimistic) {
-      const state = getState();
-      // Ensure state.tasks.tasks exists and is an array before calling find
-      const existingTask =
-        state.tasks.tasks && Array.isArray(state.tasks.tasks)
-          ? state.tasks.tasks.find((t) => t._id === taskId)
-          : null;
-
-      if (!existingTask) {
-        return thunkAPI.rejectWithValue(
-          'Cannot apply optimistic update - task not found in state'
-        );
-      }
+/**
+ * Get subtasks for a parent task
+ */
+export const getSubtasks = createAsyncThunk(
+  'tasks/getSubtasks',
+  async (parentTaskId, thunkAPI) => {
+    try {
+      const response = await api.get(
+        `/projects/tasks/${parentTaskId}/subtasks`
+      );
       return {
-        ...existingTask,
-        ...updates,
-        _id: taskId,
-        project: projectId,
-        optimistic: true,
+        subtasks: response.data.data,
+        parentTaskId,
       };
-    }
-
-    const isCompletingTask = updates.status === 'Completed';
-
-    try {
-      const response = await api.put(
-        `/projects/${projectId}/tasks/${taskId}`,
-        updates
-      );
-      if (isCompletingTask) {
-        return {
-          taskId,
-          projectId,
-          wasCompleted: true,
-          originalData: response.data.data || { _id: taskId },
-        };
-      }
-      return response.data.data;
     } catch (error) {
-      if (isCompletingTask && error.response && error.response.status === 500) {
-        return {
-          taskId,
-          projectId,
-          wasCompleted: true,
-          originalData: { _id: taskId },
-        };
-      }
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      return thunkAPI.rejectWithValue(message);
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
     }
   }
 );
 
 /**
- * Delete Task Async Thunk
- *
- * DELETE PATTERN: Return the ID on success to allow
- * filtering from state in the reducer
- *
- * @param {Object} payload - Delete payload
- * @param {string} payload.projectId - ID of the project the task belongs to (required)
- * @param {string} payload.taskId - ID of task to delete
- * @returns {Object} - Contains taskId used for state updates
+ * Add task dependency
  */
-export const deleteTask = createAsyncThunk(
-  'tasks/delete',
-  async ({ projectId, taskId }, thunkAPI) => {
-    const { getState, dispatch } = thunkAPI;
-    const { auth } = getState();
-
-    if (auth.user && auth.isGuest) {
-      // Guest user: Delete from sandbox
-      dispatch(deleteGuestItem({ entityType: 'tasks', id: taskId }));
-      return { taskId, projectId, _isGuestDelete: true }; // Include projectId for potential UI updates
-    }
-
-    // Regular user: Proceed with API call
-    if (!projectId || !taskId) {
-      return thunkAPI.rejectWithValue(
-        'Project ID and Task ID are required to delete a task'
-      );
-    }
-
+export const addTaskDependency = createAsyncThunk(
+  'tasks/addDependency',
+  async ({ taskId, dependsOnTaskId }, thunkAPI) => {
     try {
-      await api.delete(`/projects/${projectId}/tasks/${taskId}`);
-      return { taskId, projectId }; // Include projectId for consistency and potential cache updates
-    } catch (error) {
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      return thunkAPI.rejectWithValue(message);
-    }
-  }
-);
-
-/**
- * Bulk Update Tasks Async Thunk
- *
- * BATCH OPERATION PATTERN: Send multiple IDs and one update
- * More efficient than updating each task individually
- *
- * @param {Object} payload - Bulk update properties
- * @param {string} payload.projectId - Project ID the tasks belong to (required)
- * @param {string[]} payload.taskIds - Array of task IDs to update
- * @param {Object} payload.updates - Update object to apply to all tasks
- */
-export const bulkUpdateTasks = createAsyncThunk(
-  'tasks/bulkUpdate',
-  async ({ projectId, taskIds, updates }, thunkAPI) => {
-    // Validate required fields
-    if (!projectId || !taskIds || taskIds.length === 0) {
-      return thunkAPI.rejectWithValue(
-        'Project ID and Task IDs are required for bulk updates'
-      );
-    }
-
-    try {
-      const response = await api.put(
-        `/projects/${projectId}/tasks/bulk-update`,
+      const response = await api.post(
+        `/projects/tasks/${taskId}/dependencies`,
         {
-          taskIds,
-          update: updates, // Note the field name difference (API expects "update")
+          dependsOnTaskId,
         }
       );
       return {
-        modifiedCount: response.data.modifiedCount,
-        taskIds,
-        projectId,
+        taskId,
+        dependsOnTaskId,
+        data: response.data.data,
       };
     } catch (error) {
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      return thunkAPI.rejectWithValue(message);
-    }
-  }
-);
-
-/**
- * Get Single Task Async Thunk
- *
- * Fetches detailed information for a single task
- * Sets the currentTask property in state
- *
- * @param {Object} payload - Fetch parameters
- * @param {string} payload.projectId - ID of the project the task belongs to (required)
- * @param {string} payload.taskId - ID of task to fetch
- */
-export const getTask = createAsyncThunk(
-  'tasks/getOne',
-  async ({ projectId, taskId }, thunkAPI) => {
-    // Validate required fields
-    if (!projectId || !taskId) {
       return thunkAPI.rejectWithValue(
-        'Project ID and Task ID are required to retrieve a task'
+        error.response?.data?.message || error.message
       );
     }
+  }
+);
 
+/**
+ * Remove task dependency
+ */
+export const removeTaskDependency = createAsyncThunk(
+  'tasks/removeDependency',
+  async ({ taskId, dependencyId }, thunkAPI) => {
     try {
-      const response = await api.get(`/projects/${projectId}/tasks/${taskId}`);
-      return response.data.data;
+      await api.delete(
+        `/projects/tasks/${taskId}/dependencies/${dependencyId}`
+      );
+      return { taskId, dependencyId };
     } catch (error) {
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      return thunkAPI.rejectWithValue(message);
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
     }
   }
 );
 
 /**
- * Get Recent Tasks Across All Projects
- *
- * This thunk fetches the user's most recent tasks across all their projects
- * It's used by dashboard widgets that need to display tasks regardless of project context
- *
- * @returns {Promise<Array>} - Promise with array of recent tasks
+ * Start time tracking for a task
+ */
+export const startTimeTracking = createAsyncThunk(
+  'tasks/startTimeTracking',
+  async ({ taskId, description }, thunkAPI) => {
+    try {
+      const response = await api.post(`/projects/tasks/${taskId}/time/start`, {
+        description,
+      });
+      return {
+        taskId,
+        timeEntry: response.data.data,
+      };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Stop time tracking for a task
+ */
+export const stopTimeTracking = createAsyncThunk(
+  'tasks/stopTimeTracking',
+  async ({ taskId, description }, thunkAPI) => {
+    try {
+      const response = await api.put(`/projects/tasks/${taskId}/time/stop`, {
+        description,
+      });
+      return {
+        taskId,
+        timeEntry: response.data.data,
+      };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Get time entries for a task
+ */
+export const getTimeEntries = createAsyncThunk(
+  'tasks/getTimeEntries',
+  async (taskId, thunkAPI) => {
+    try {
+      const response = await api.get(`/projects/tasks/${taskId}/time`);
+      return {
+        taskId,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Update task progress
+ */
+export const updateTaskProgress = createAsyncThunk(
+  'tasks/updateProgress',
+  async ({ taskId, percentage, automatic }, thunkAPI) => {
+    try {
+      const response = await api.put(`/projects/tasks/${taskId}/progress`, {
+        percentage,
+        automatic,
+      });
+      return {
+        taskId,
+        progress: response.data.data.progress,
+      };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Reorder tasks in a project
+ */
+export const reorderTasks = createAsyncThunk(
+  'tasks/reorder',
+  async ({ projectId, taskOrders }, thunkAPI) => {
+    try {
+      await api.put(`/projects/${projectId}/tasks/reorder`, { taskOrders });
+      return { projectId, taskOrders };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Get task analytics for a project
+ */
+export const getTaskAnalytics = createAsyncThunk(
+  'tasks/getAnalytics',
+  async (projectId, thunkAPI) => {
+    try {
+      const response = await api.get(`/projects/${projectId}/tasks/analytics`);
+      return {
+        projectId,
+        analytics: response.data.data,
+      };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Update task (comprehensive update)
+ */
+export const updateTask = createAsyncThunk(
+  'tasks/update',
+  async ({ taskId, updates }, thunkAPI) => {
+    try {
+      const response = await api.put(`/projects/tasks/${taskId}`, updates);
+      return response.data.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Delete task
+ */
+export const deleteTask = createAsyncThunk(
+  'tasks/delete',
+  async (taskId, thunkAPI) => {
+    try {
+      await api.delete(`/projects/tasks/${taskId}`);
+      return taskId;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Bulk operations on multiple tasks
+ */
+export const bulkUpdateTasks = createAsyncThunk(
+  'tasks/bulkUpdate',
+  async ({ taskIds, updates }, thunkAPI) => {
+    try {
+      const response = await api.put('/projects/tasks/bulk', {
+        taskIds,
+        updates,
+      });
+      return response.data.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Get task by ID with full details
+ */
+export const getTaskById = createAsyncThunk(
+  'tasks/getById',
+  async (taskId, thunkAPI) => {
+    try {
+      const response = await api.get(`/projects/tasks/${taskId}`);
+      return response.data.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+/**
+ * Get recent tasks across all projects
  */
 export const getRecentTasks = createAsyncThunk(
   'tasks/getRecent',
-  async (options = {}, thunkAPI) => {
+  async (payload = {}, thunkAPI) => {
+    const { getState } = thunkAPI;
+    const { auth } = getState();
+
     const {
+      limit = 10,
       forceRefresh = false,
       cacheTimeout = CACHE_TIMEOUT,
-      backgroundRefresh = false,
-      smartRefresh = true, // Default to smart refresh for recent tasks
-    } = options;
+    } = payload;
 
-    const state = thunkAPI.getState().tasks;
-    const now = Date.now();
-    const cacheIsValid =
-      state.lastFetched &&
-      now - state.lastFetched < cacheTimeout &&
-      state.tasks &&
-      state.tasks.length > 0;
-
-    // If background refresh, smart refresh, and cache is valid, return cached data and refresh in background
-    if (backgroundRefresh && smartRefresh && cacheIsValid && !forceRefresh) {
-      console.log(
-        'RecentTasks: Cache valid, returning cached data and queueing background refresh.'
-      );
-      // Dispatch a specific action or thunk for background fetching
-      // We'll create a new thunk for this: fetchRecentTasksInBackground
-      setTimeout(() => {
-        thunkAPI.dispatch(fetchRecentTasksInBackground({ smartRefresh })); // Pass smartRefresh option
-      }, 100); // Short delay to allow current call stack to clear
-
+    // Handle guest users
+    if (auth.user && auth.isGuest) {
+      const guestTasks = getState().guestSandbox.tasks || [];
       return {
-        tasks: state.tasks, // Return current tasks from cache
+        tasks: guestTasks
+          .map((gt) => ({
+            ...gt.data,
+            id: gt.id,
+            _id: gt.id,
+            createdAt: gt.createdAt,
+            updatedAt: gt.updatedAt,
+          }))
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, limit),
         fromCache: true,
-        backgroundRefreshInitiated: true, // Indicate that a background refresh has been started
+        isGuestFetch: true,
       };
     }
 
-    // Proceed with normal fetch if not background refreshing or cache is invalid/forced
-    console.log(
-      forceRefresh
-        ? 'RecentTasks: Force refreshing data.'
-        : cacheIsValid
-        ? 'RecentTasks: Cache valid, but not a background/smart refresh, or forceRefresh is true. Fetching fresh data.'
-        : 'RecentTasks: Cache invalid or not present. Fetching fresh data.'
-    );
-
     try {
-      // ... existing API call logic ...
-      const projectsResponse = await api.get('/projects');
-      const projects = projectsResponse.data.data;
-
-      if (!projects || projects.length === 0) {
-        return { tasks: [], timestamp: now, fromCache: false };
-      }
-
-      const recentProjects = projects.slice(0, 5); // Fetch from more projects for recent view
-      const taskPromises = recentProjects.map(
-        (project) =>
-          api
-            .get(
-              `/projects/${project._id}/tasks?limit=10&sortBy=createdAt:desc`
-            ) // Fetch recent tasks per project
-            .then((response) =>
-              response.data.data.map((task) => ({
-                ...task,
-                projectName: project.name, // Add project name directly
-              }))
-            )
-            .catch((err) => {
-              console.error(
-                `Error fetching tasks for project ${project._id}:`,
-                err
-              );
-              return [];
-            }) // Return empty array if fetching tasks for a project fails
-      );
-
-      const projectTasks = await Promise.all(taskPromises);
-      let allTasks = projectTasks.flat();
-      allTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      allTasks = allTasks.slice(0, 20); // Limit to overall 20 most recent tasks
-
-      return { tasks: allTasks, timestamp: now, fromCache: false };
+      const response = await api.get('/tasks/recent', {
+        params: { limit },
+      });
+      return {
+        tasks: response.data.data || response.data.tasks || [],
+        fromCache: false,
+        lastFetched: Date.now(),
+      };
     } catch (error) {
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      return thunkAPI.rejectWithValue(message);
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
     }
   }
 );
 
 /**
- * Task Slice Definition
- *
- * REDUX TOOLKIT PATTERNS:
- * 1. Slice combines reducers, action creators, and initial state
- * 2. Immutable updates handled automatically by Immer
- * 3. Actions created automatically based on reducer names
- * 4. Extra reducers handle async action states (pending/fulfilled/rejected)
+ * Update task status (enhanced for drag & drop)
  */
-export const taskSlice = createSlice({
-  name: 'tasks', // Namespace for actions
-  initialState, // Initial state object defined above
-  // Synchronous reducers
+export const updateTaskStatus = createAsyncThunk(
+  'tasks/updateStatus',
+  async ({ taskId, status, order }, thunkAPI) => {
+    try {
+      const updateData = { status };
+      if (order !== undefined) {
+        updateData.order = order;
+      }
+
+      const response = await api.put(`/projects/tasks/${taskId}`, updateData);
+      return response.data.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message || error.message
+      );
+    }
+  }
+);
+
+// ===== ENHANCED SLICE =====
+const tasksSlice = createSlice({
+  name: 'tasks',
+  initialState,
   reducers: {
-    /**
-     * Reset status flags
-     * This reducer is useful after showing notifications
-     * or when navigating between routes
-     */
-    resetTaskStatus: (state) => {
-      // STATE UPDATE PATTERN: With Immer, we can "mutate" state directly
-      // even though it's actually producing immutable updates
-      state.isLoading = false;
-      state.isSuccess = false;
+    // UI state management
+    setViewMode: (state, action) => {
+      state.viewMode = action.payload;
+    },
+
+    setTaskView: (state, action) => {
+      state.viewMode = action.payload;
+    },
+
+    setTaskFilters: (state, action) => {
+      state.taskFilters = { ...state.taskFilters, ...action.payload };
+    },
+
+    clearTaskFilters: (state) => {
+      state.taskFilters = initialState.taskFilters;
+    },
+
+    setSelectedTasks: (state, action) => {
+      state.selectedTasks = action.payload;
+    },
+
+    toggleTaskSelection: (state, action) => {
+      const taskId = action.payload;
+      const index = state.selectedTasks.indexOf(taskId);
+      if (index > -1) {
+        state.selectedTasks.splice(index, 1);
+      } else {
+        state.selectedTasks.push(taskId);
+      }
+    },
+
+    clearTaskSelection: (state) => {
+      state.selectedTasks = [];
+    },
+
+    setDraggedTask: (state, action) => {
+      state.draggedTask = action.payload;
+    },
+
+    clearDraggedTask: (state) => {
+      state.draggedTask = null;
+    },
+
+    // Current task management
+    setCurrentTask: (state, action) => {
+      state.currentTask = action.payload;
+    },
+
+    clearCurrentTask: (state) => {
+      state.currentTask = null;
+    },
+
+    // Project context
+    setCurrentProjectId: (state, action) => {
+      state.currentProjectId = action.payload;
+    },
+
+    // Real-time updates
+    taskUpdated: (state, action) => {
+      const updatedTask = action.payload;
+      const index = state.tasks.findIndex(
+        (task) => task._id === updatedTask._id
+      );
+      if (index !== -1) {
+        state.tasks[index] = updatedTask;
+      }
+
+      // Update in cache
+      if (
+        state.currentProjectId &&
+        state.tasksByProject[state.currentProjectId]
+      ) {
+        const cacheIndex = state.tasksByProject[
+          state.currentProjectId
+        ].findIndex((task) => task._id === updatedTask._id);
+        if (cacheIndex !== -1) {
+          state.tasksByProject[state.currentProjectId][cacheIndex] =
+            updatedTask;
+        }
+      }
+    },
+
+    taskDeleted: (state, action) => {
+      const taskId = action.payload;
+      state.tasks = state.tasks.filter((task) => task._id !== taskId);
+
+      // Remove from cache
+      if (
+        state.currentProjectId &&
+        state.tasksByProject[state.currentProjectId]
+      ) {
+        state.tasksByProject[state.currentProjectId] = state.tasksByProject[
+          state.currentProjectId
+        ].filter((task) => task._id !== taskId);
+      }
+
+      // Remove from selected tasks
+      state.selectedTasks = state.selectedTasks.filter((id) => id !== taskId);
+    },
+
+    // Error handling
+    clearError: (state) => {
       state.isError = false;
       state.message = '';
     },
 
-    /**
-     * Set current project context for tasks
-     * This helps components know which project they're working with
-     */
-    setTaskProjectContext: (state, action) => {
-      state.currentProjectId = action.payload;
+    clearSuccess: (state) => {
+      state.isSuccess = false;
+      state.message = '';
     },
 
-    /**
-     * Clear tasks when switching projects or contexts
-     * This prevents tasks from one project appearing in another
-     */
-    clearTasks: (state) => {
-      state.tasks = [];
-      state.currentTask = null;
+    // Bulk operations
+    setBulkSelection: (state, action) => {
+      state.selectedTasks = action.payload;
+      state.bulkOperations.selectedCount = action.payload.length;
+    },
+
+    clearBulkOperations: (state) => {
+      state.bulkOperations = initialState.bulkOperations;
+      state.selectedTasks = [];
+    },
+
+    // Board management
+    setBoardColumns: (state, action) => {
+      state.boardColumns = action.payload;
+    },
+
+    updateBoardColumn: (state, action) => {
+      const { columnId, updates } = action.payload;
+      const columnIndex = state.boardColumns.findIndex(
+        (col) => col.id === columnId
+      );
+      if (columnIndex !== -1) {
+        state.boardColumns[columnIndex] = {
+          ...state.boardColumns[columnIndex],
+          ...updates,
+        };
+      }
+    },
+
+    // Real-time dependency updates
+    dependencyUpdated: (state, action) => {
+      const { taskId, dependencies } = action.payload;
+      state.taskDependencies[taskId] = dependencies;
+    },
+
+    // Subtask management
+    subtaskUpdated: (state, action) => {
+      const { parentTaskId, subtask } = action.payload;
+      if (state.subtasks[parentTaskId]) {
+        const index = state.subtasks[parentTaskId].findIndex(
+          (st) => st._id === subtask._id
+        );
+        if (index !== -1) {
+          state.subtasks[parentTaskId][index] = subtask;
+        }
+      }
+    },
+
+    // Progress tracking
+    setProgressUpdating: (state, action) => {
+      const { taskId, isUpdating } = action.payload;
+      if (isUpdating) {
+        state.progressUpdating[taskId] = true;
+      } else {
+        delete state.progressUpdating[taskId];
+      }
     },
   },
-  // Handle async action states using builder callback pattern
-  extraReducers: (builder) => {
-    builder
-      // ASYNC REDUCER PATTERN: Handle the three states of each async action
-      // Each async thunk creates three action types: pending, fulfilled, rejected
 
-      // Create Task Cases
+  extraReducers: (builder) => {
+    // ===== EXISTING TASK OPERATIONS =====
+
+    // Create task
+    builder
       .addCase(createTask.pending, (state) => {
-        state.isLoading = true; // Set loading flag
+        state.isLoading = true;
+        state.isError = false;
       })
       .addCase(createTask.fulfilled, (state, action) => {
-        // IMMUTABLE UPDATE PATTERN: Modifying arrays
         state.isLoading = false;
-        state.isSuccess = true; // Indicate success for potential UI feedback
-        state.tasks.push(action.payload); // Add the new task to the state array
-        state.message = 'Task created successfully!'; // Optional success message
+        state.isSuccess = true;
+
+        if (!action.payload._isGuestCreation) {
+          state.tasks.unshift(action.payload);
+
+          // Add to cache if current project
+          if (
+            state.currentProjectId &&
+            state.tasksByProject[state.currentProjectId]
+          ) {
+            state.tasksByProject[state.currentProjectId].unshift(
+              action.payload
+            );
+          }
+        }
+
+        state.message = 'Task created successfully';
       })
       .addCase(createTask.rejected, (state, action) => {
-        // ERROR HANDLING PATTERN: Store error details in state
         state.isLoading = false;
         state.isError = true;
-        state.message = action.payload; // Error message from rejectWithValue
-      })
+        state.message = action.payload;
+      });
 
-      // Get Tasks for Project Cases
+    // Get tasks for project
+    builder
       .addCase(getTasksForProject.pending, (state) => {
         state.isLoading = true;
+        state.isError = false;
       })
       .addCase(getTasksForProject.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isSuccess = true;
 
-        // Store tasks in the main tasks array for current view
-        state.tasks = action.payload.tasks;
+        const { tasks, projectId, fromCache } = action.payload;
 
-        // Update the project context
-        state.currentProjectId = action.payload.projectId;
+        state.tasks = tasks;
+        state.currentProjectId = projectId;
 
-        // Only update cache if data was freshly fetched (not from cache)
-        if (!action.payload.fromCache) {
-          // Cache the tasks by project ID
-          state.tasksByProject[action.payload.projectId] = action.payload.tasks;
+        // Update cache
+        state.tasksByProject[projectId] = tasks;
+        state.projectTasksTimestamps[projectId] = Date.now();
 
-          // Update the timestamp for this project's data
-          state.projectTasksTimestamps[action.payload.projectId] =
-            action.payload.timestamp;
+        if (!fromCache) {
+          state.lastFetched = Date.now();
         }
       })
       .addCase(getTasksForProject.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
         state.message = action.payload;
-        state.tasks = []; // Clear tasks on error
-      })
+      });
 
-      // Update Task Cases
+    // ===== SUBTASK OPERATIONS =====
+
+    builder
+      .addCase(createSubtask.fulfilled, (state, action) => {
+        const { subtask, parentTaskId } = action.payload;
+
+        // Add subtask to tasks list
+        state.tasks.push(subtask);
+
+        // Update subtasks mapping
+        if (!state.subtasks[parentTaskId]) {
+          state.subtasks[parentTaskId] = [];
+        }
+        state.subtasks[parentTaskId].push(subtask);
+
+        state.message = 'Subtask created successfully';
+      })
+      .addCase(createSubtask.rejected, (state, action) => {
+        state.isError = true;
+        state.message = action.payload;
+      });
+
+    builder.addCase(getSubtasks.fulfilled, (state, action) => {
+      const { subtasks, parentTaskId } = action.payload;
+      state.subtasks[parentTaskId] = subtasks;
+    });
+
+    // ===== DEPENDENCY OPERATIONS =====
+
+    builder
+      .addCase(addTaskDependency.fulfilled, (state, action) => {
+        const { taskId, dependsOnTaskId } = action.payload;
+
+        if (!state.taskDependencies[taskId]) {
+          state.taskDependencies[taskId] = { blockedBy: [], blocks: [] };
+        }
+
+        if (
+          !state.taskDependencies[taskId].blockedBy.includes(dependsOnTaskId)
+        ) {
+          state.taskDependencies[taskId].blockedBy.push(dependsOnTaskId);
+        }
+
+        state.message = 'Task dependency added';
+      })
+      .addCase(addTaskDependency.rejected, (state, action) => {
+        state.isError = true;
+        state.message = action.payload;
+      });
+
+    builder.addCase(removeTaskDependency.fulfilled, (state, action) => {
+      const { taskId, dependencyId } = action.payload;
+
+      if (state.taskDependencies[taskId]) {
+        state.taskDependencies[taskId].blockedBy = state.taskDependencies[
+          taskId
+        ].blockedBy.filter((id) => id !== dependencyId);
+      }
+
+      state.message = 'Task dependency removed';
+    });
+
+    // ===== TIME TRACKING OPERATIONS =====
+
+    builder
+      .addCase(startTimeTracking.fulfilled, (state, action) => {
+        const { taskId, timeEntry } = action.payload;
+        state.activeTimeEntries[taskId] = timeEntry;
+        state.message = 'Time tracking started';
+      })
+      .addCase(startTimeTracking.rejected, (state, action) => {
+        state.isError = true;
+        state.message = action.payload;
+      });
+
+    builder
+      .addCase(stopTimeTracking.fulfilled, (state, action) => {
+        const { taskId, timeEntry } = action.payload;
+
+        // Remove from active entries
+        delete state.activeTimeEntries[taskId];
+
+        // Add to time entries
+        if (!state.timeEntries[taskId]) {
+          state.timeEntries[taskId] = [];
+        }
+        state.timeEntries[taskId].push(timeEntry);
+
+        state.message = 'Time tracking stopped';
+      })
+      .addCase(stopTimeTracking.rejected, (state, action) => {
+        state.isError = true;
+        state.message = action.payload;
+      });
+
+    builder.addCase(getTimeEntries.fulfilled, (state, action) => {
+      const { taskId, data } = action.payload;
+      state.timeEntries[taskId] = data.timeEntries;
+    });
+
+    // ===== PROGRESS OPERATIONS =====
+
+    builder.addCase(updateTaskProgress.fulfilled, (state, action) => {
+      const { taskId, progress } = action.payload;
+
+      // Update task in tasks array
+      const taskIndex = state.tasks.findIndex((task) => task._id === taskId);
+      if (taskIndex !== -1) {
+        state.tasks[taskIndex].progress = progress;
+      }
+
+      state.message = 'Task progress updated';
+    });
+
+    // ===== REORDERING OPERATIONS =====
+
+    builder.addCase(reorderTasks.fulfilled, (state, action) => {
+      const { taskOrders } = action.payload;
+
+      // Update order for each task
+      taskOrders.forEach(({ taskId, order }) => {
+        const taskIndex = state.tasks.findIndex((task) => task._id === taskId);
+        if (taskIndex !== -1) {
+          state.tasks[taskIndex].order = order;
+        }
+      });
+
+      // Re-sort tasks by order
+      state.tasks.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+      state.message = 'Tasks reordered successfully';
+    });
+
+    // ===== ANALYTICS OPERATIONS =====
+
+    builder.addCase(getTaskAnalytics.fulfilled, (state, action) => {
+      const { projectId, analytics } = action.payload;
+      state.projectAnalytics = analytics;
+    });
+
+    // ===== STATUS UPDATE OPERATIONS =====
+
+    builder.addCase(updateTaskStatus.fulfilled, (state, action) => {
+      const updatedTask = action.payload;
+      const taskIndex = state.tasks.findIndex(
+        (task) => task._id === updatedTask._id
+      );
+
+      if (taskIndex !== -1) {
+        state.tasks[taskIndex] = updatedTask;
+      }
+
+      state.message = 'Task status updated';
+    });
+
+    // ===== TASK UPDATE OPERATIONS =====
+
+    builder
       .addCase(updateTask.pending, (state) => {
         state.isLoading = true;
-        // Don't clear tasks while loading, preserve them
       })
       .addCase(updateTask.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.isSuccess = true;
+        const updatedTask = action.payload;
+        const taskIndex = state.tasks.findIndex(
+          (task) => task._id === updatedTask._id
+        );
 
-        // Special handling for completed tasks that were archived
-        if (action.payload.wasCompleted) {
-          console.log(
-            'Removing completed/archived task from Redux state:',
-            action.payload.taskId
-          );
-          // Remove the completed task from the array based on ID
-          state.tasks = state.tasks.filter(
-            (t) => t._id !== action.payload.taskId
-          );
-          state.message = 'Task completed and archived successfully!';
-        } else {
-          // First check if this was an optimistic update
-          if (action.payload.optimistic) {
-            // For optimistic updates, we replace the task immediately
-            state.tasks = state.tasks.map((t) => {
-              if (t._id === action.payload._id) {
-                return action.payload;
-              }
-              return t;
-            });
-
-            // No message for optimistic updates to avoid disrupting the UI
-            return;
-          }
-
-          // Standard update - replace the updated task in the array based on ID
-          // Only update if there are actual differences to avoid unnecessary re-renders
-          state.tasks = state.tasks.map((t) => {
-            if (t._id === action.payload._id) {
-              // Use our deep comparison utility with excluded metadata fields
-              const existingTask = { ...t };
-              const newTask = { ...action.payload };
-
-              const hasMeaningfulChanges = !deepCompareObjects(
-                existingTask,
-                newTask,
-                ['__v', 'updatedAt', 'lastModified']
-              );
-
-              return hasMeaningfulChanges ? action.payload : t;
-            }
-            return t;
-          });
-          state.message = 'Task updated successfully!';
+        if (taskIndex !== -1) {
+          state.tasks[taskIndex] = updatedTask;
         }
+
+        // Update current task if it's the one being updated
+        if (state.currentTask?._id === updatedTask._id) {
+          state.currentTask = updatedTask;
+        }
+
+        state.message = 'Task updated successfully';
       })
       .addCase(updateTask.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
+        state.message = action.payload;
+      });
 
-        // If the rejection is from a failed optimistic update, we need to restore original state
-        if (
-          action.payload &&
-          typeof action.payload === 'object' &&
-          action.payload.failedTaskId
-        ) {
-          // Find and revert the optimistically updated task
-          state.tasks = state.tasks.map((t) => {
-            if (t._id === action.payload.failedTaskId) {
-              return action.payload.originalTask;
-            }
-            return t;
-          });
-          state.message = `Failed to update task: ${action.payload.message}`;
-        } else {
-          state.message = action.payload || 'Failed to update task';
-        }
-        // Important: Do NOT clear tasks array on error - tasks should remain visible
-      })
+    // ===== TASK DELETE OPERATIONS =====
 
-      // Delete Task Cases
-      .addCase(deleteTask.pending, (state) => {
-        state.isLoading = true;
-      })
+    builder
       .addCase(deleteTask.fulfilled, (state, action) => {
-        // ARRAY FILTER PATTERN: Remove an item from an array
-        state.isLoading = false;
-        state.isSuccess = true;
-        // Remove the deleted task from the array based on ID
-        state.tasks = state.tasks.filter(
-          (t) => t._id !== action.payload.taskId
-        );
-        state.message = 'Task deleted successfully!';
+        const taskId = action.payload;
+
+        // Remove from tasks array
+        state.tasks = state.tasks.filter((task) => task._id !== taskId);
+
+        // Remove from cache
+        Object.keys(state.tasksByProject).forEach((projectId) => {
+          state.tasksByProject[projectId] = state.tasksByProject[
+            projectId
+          ].filter((task) => task._id !== taskId);
+        });
+
+        // Remove from selected tasks
+        state.selectedTasks = state.selectedTasks.filter((id) => id !== taskId);
+
+        // Clear current task if it was deleted
+        if (state.currentTask?._id === taskId) {
+          state.currentTask = null;
+        }
+
+        // Remove from subtasks mapping
+        delete state.subtasks[taskId];
+
+        // Remove from dependencies
+        delete state.taskDependencies[taskId];
+
+        // Remove from time tracking
+        delete state.activeTimeEntries[taskId];
+        delete state.timeEntries[taskId];
+
+        state.message = 'Task deleted successfully';
       })
       .addCase(deleteTask.rejected, (state, action) => {
-        state.isLoading = false;
         state.isError = true;
         state.message = action.payload;
-      })
+      });
 
-      // Bulk Update Cases
+    // ===== BULK OPERATIONS =====
+
+    builder
       .addCase(bulkUpdateTasks.pending, (state) => {
-        state.isLoading = true;
+        state.bulkOperations.isProcessing = true;
       })
       .addCase(bulkUpdateTasks.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.message = `${action.payload.modifiedCount} tasks updated successfully!`;
-        // The proper way to update would be to re-fetch the tasks
-        // but for now, we just set a success message
+        state.bulkOperations.isProcessing = false;
+        const updatedTasks = action.payload;
+
+        // Update each task in the array
+        updatedTasks.forEach((updatedTask) => {
+          const taskIndex = state.tasks.findIndex(
+            (task) => task._id === updatedTask._id
+          );
+          if (taskIndex !== -1) {
+            state.tasks[taskIndex] = updatedTask;
+          }
+        });
+
+        state.bulkOperations.results = {
+          success: true,
+          updatedCount: updatedTasks.length,
+        };
+
+        state.message = `${updatedTasks.length} tasks updated successfully`;
       })
       .addCase(bulkUpdateTasks.rejected, (state, action) => {
-        state.isLoading = false;
+        state.bulkOperations.isProcessing = false;
+        state.bulkOperations.results = {
+          success: false,
+          error: action.payload,
+        };
         state.isError = true;
         state.message = action.payload;
-      })
+      });
 
-      // Get Single Task Cases
-      .addCase(getTask.pending, (state) => {
+    // ===== GET TASK BY ID =====
+
+    builder.addCase(getTaskById.fulfilled, (state, action) => {
+      const task = action.payload;
+
+      // Update or add task to tasks array
+      const taskIndex = state.tasks.findIndex((t) => t._id === task._id);
+      if (taskIndex !== -1) {
+        state.tasks[taskIndex] = task;
+      } else {
+        state.tasks.push(task);
+      }
+
+      // Set as current task
+      state.currentTask = task;
+    });
+
+    // ===== RECENT TASKS OPERATIONS =====
+
+    builder
+      .addCase(getRecentTasks.pending, (state) => {
         state.isLoading = true;
-        state.currentTask = null; // Clear current task while loading
-      })
-      .addCase(getTask.fulfilled, (state, action) => {
-        // SINGLE ENTITY PATTERN: Store the current entity separately
-        state.isLoading = false;
-        state.isSuccess = true;
-        state.currentTask = action.payload; // Store the fetched task
-      })
-      .addCase(getTask.rejected, (state, action) => {
-        state.isLoading = false;
-        state.isError = true;
-        state.message = action.payload;
-        state.currentTask = null; // Clear current task on error
-      })
-
-      // Get Recent Tasks Cases
-      .addCase(getRecentTasks.pending, (state, action) => {
-        // Only set isLoading if it's not a background refresh where cache is being returned
-        const isBackgroundCacheReturn =
-          action.meta.arg.backgroundRefresh &&
-          action.meta.arg.smartRefresh &&
-          state.lastFetched &&
-          Date.now() - state.lastFetched <
-            (action.meta.arg.cacheTimeout || CACHE_TIMEOUT) &&
-          state.tasks &&
-          state.tasks.length > 0 &&
-          !action.meta.arg.forceRefresh;
-
-        if (!isBackgroundCacheReturn) {
-          state.isLoading = true;
-        } else {
-          // If cache is being returned and background refresh is initiated,
-          // we might briefly set a background flag, though the main fetch is deferred.
-          // The actual backgroundRefreshingRecent will be more accurately set by fetchRecentTasksInBackground.pending
-          // For now, let's ensure isLoading is false if we are returning cache.
-          state.isLoading = false;
-        }
-        // Clear previous error/success messages related to this specific operation
         state.isError = false;
-        state.message = '';
       })
       .addCase(getRecentTasks.fulfilled, (state, action) => {
-        // If data came from cache and a background refresh was initiated,
-        // the main state update will be handled by fetchRecentTasksInBackground.
-        // We just ensure isLoading is false.
-        if (
-          action.payload.fromCache &&
-          action.payload.backgroundRefreshInitiated
-        ) {
-          state.isLoading = false;
-          state.isSuccess = true; // Indicate that cached data was successfully returned
-          // state.backgroundRefreshingRecent might be true if the background thunk started
-          return; // No further processing for main state here
-        }
-
-        // If data was fetched directly (not from cache, or cache was invalid/bypassed)
         state.isLoading = false;
         state.isSuccess = true;
 
-        const { tasks: newTasks, timestamp } = action.payload;
-        const smartRefresh =
-          action.meta.arg.smartRefresh !== undefined
-            ? action.meta.arg.smartRefresh
-            : true;
+        const { tasks, fromCache, lastFetched } = action.payload;
 
-        if (smartRefresh) {
-          if (hasCollectionChanged(state.tasks, newTasks, '_id')) {
-            console.log(
-              'RecentTasks: Smart refresh detected changes, updating tasks.'
-            );
-            state.tasks = newTasks;
-            state.lastFetched = timestamp;
+        // For recent tasks, we merge with existing tasks rather than replace
+        // This prevents losing current project context
+        tasks.forEach((task) => {
+          const existingIndex = state.tasks.findIndex(
+            (t) => t._id === task._id
+          );
+          if (existingIndex !== -1) {
+            state.tasks[existingIndex] = task;
           } else {
-            console.log(
-              'RecentTasks: Smart refresh detected no changes, preserving existing tasks.'
-            );
-            // Even if no data change, update timestamp if this was a direct fetch,
-            // as it signifies a successful refresh attempt.
-            state.lastFetched = timestamp;
+            state.tasks.push(task);
           }
-        } else {
-          // If not smart refreshing, always update
-          console.log('RecentTasks: Not a smart refresh, updating tasks.');
-          state.tasks = newTasks;
-          state.lastFetched = timestamp;
+        });
+
+        if (!fromCache && lastFetched) {
+          state.lastFetched = lastFetched;
         }
-        // Ensure background flag is reset if it was somehow set by this thunk's pending state
-        state.backgroundRefreshingRecent = false;
       })
       .addCase(getRecentTasks.rejected, (state, action) => {
         state.isLoading = false;
         state.isError = true;
-        state.message =
-          action.payload?.message ||
-          action.payload ||
-          'Failed to fetch recent tasks';
-        state.backgroundRefreshingRecent = false; // Ensure reset on failure
-      })
-
-      // Fetch Recent Tasks In Background Cases
-      .addCase(fetchRecentTasksInBackground.pending, (state) => {
-        state.backgroundRefreshingRecent = true;
-        // DO NOT set state.isLoading = true for background fetches
-        state.isError = false; // Clear previous errors for this specific background operation
-        state.message = '';
-      })
-      .addCase(fetchRecentTasksInBackground.fulfilled, (state, action) => {
-        state.backgroundRefreshingRecent = false;
-        // No change to global isLoading or isSuccess for background updates
-
-        const { tasks: newTasks, timestamp, smartRefresh } = action.payload;
-
-        if (smartRefresh) {
-          if (hasCollectionChanged(state.tasks, newTasks, '_id')) {
-            console.log(
-              'RecentTasks (Background): Smart refresh detected changes, updating tasks.'
-            );
-            state.tasks = newTasks;
-            state.lastFetched = timestamp;
-          } else {
-            console.log(
-              'RecentTasks (Background): Smart refresh detected no changes, preserving existing tasks.'
-            );
-            // Update timestamp even if no data change to reflect the background refresh time
-            state.lastFetched = timestamp;
-          }
-        } else {
-          console.log(
-            'RecentTasks (Background): Not a smart refresh, updating tasks.'
-          );
-          state.tasks = newTasks;
-          state.lastFetched = timestamp;
-        }
-      })
-      .addCase(fetchRecentTasksInBackground.rejected, (state, action) => {
-        state.backgroundRefreshingRecent = false;
-        // For background errors, we typically don't set the global isError flag
-        // as it might be too disruptive. Log it instead.
-        console.error(
-          'Error during background fetch of recent tasks:',
-          action.payload?.message || action.payload
-        );
-        // Optionally, set a specific error message for background failures if needed for UI
-        // state.message = `Background refresh failed: ${action.payload?.message || action.payload}`;
+        state.message = action.payload;
       });
   },
 });
 
-/**
- * Fetch Recent Tasks In Background Async Thunk
- *
- * This thunk is dispatched by getRecentTasks when a background refresh is needed.
- * It fetches the latest recent tasks without setting the main isLoading flag,
- * and can use smartRefresh to avoid unnecessary state updates.
- *
- * @param {Object} options - Options object.
- * @param {boolean} options.smartRefresh - Whether to perform a smart comparison before updating state.
- * @returns {Promise<Object>} - Promise with fetched tasks, timestamp, and smartRefresh flag.
- */
-export const fetchRecentTasksInBackground = createAsyncThunk(
-  'tasks/fetchRecentInBackground',
-  async ({ smartRefresh = true } = {}, thunkAPI) => {
-    const now = Date.now();
-    console.log('RecentTasks (Background): Fetching fresh data.');
-    try {
-      const projectsResponse = await api.get('/projects');
-      const projects = projectsResponse.data.data;
+// Export actions
+export const {
+  setViewMode,
+  setTaskView,
+  setTaskFilters,
+  clearTaskFilters,
+  setSelectedTasks,
+  toggleTaskSelection,
+  clearTaskSelection,
+  setDraggedTask,
+  clearDraggedTask,
+  setCurrentTask,
+  clearCurrentTask,
+  setCurrentProjectId,
+  taskUpdated,
+  taskDeleted,
+  clearError,
+  clearSuccess,
+  setBulkSelection,
+  clearBulkOperations,
+  setBoardColumns,
+  updateBoardColumn,
+  dependencyUpdated,
+  subtaskUpdated,
+  setProgressUpdating,
+} = tasksSlice.actions;
 
-      if (!projects || projects.length === 0) {
-        return {
-          tasks: [],
-          timestamp: now,
-          smartRefresh,
-          fromBackground: true,
-        };
+// ===== SELECTORS =====
+
+// Basic selectors
+export const selectAllTasks = (state) => state.tasks.tasks;
+export const selectCurrentTask = (state) => state.tasks.currentTask;
+export const selectTasksLoading = (state) => state.tasks.isLoading;
+export const selectTasksError = (state) => state.tasks.isError;
+export const selectTasksMessage = (state) => state.tasks.message;
+
+// View selectors
+export const selectViewMode = (state) => state.tasks.viewMode;
+export const selectTaskView = (state) => state.tasks.viewMode;
+export const selectTaskFilters = (state) => state.tasks.taskFilters;
+export const selectSelectedTasks = (state) => state.tasks.selectedTasks;
+export const selectDraggedTask = (state) => state.tasks.draggedTask;
+
+// Advanced selectors
+export const selectSubtasks = (state) => state.tasks.subtasks;
+export const selectTaskDependencies = (state) => state.tasks.taskDependencies;
+export const selectActiveTimeEntries = (state) => state.tasks.activeTimeEntries;
+export const selectTimeEntries = (state) => state.tasks.timeEntries;
+export const selectProjectAnalytics = (state) => state.tasks.projectAnalytics;
+
+// Computed selectors (memoized with createSelector)
+export const selectFilteredTasks = createSelector(
+  [
+    (state) => state.tasks.tasks,
+    (state) => state.tasks.taskFilters,
+    (state) => state.tasks.subtasks,
+    (state) => state.tasks.taskDependencies,
+  ],
+  (tasks, filters, subtasks, dependencies) => {
+    return tasks.filter((task) => {
+      // Status filter
+      if (filters.status !== 'all' && task.status !== filters.status) {
+        return false;
       }
 
-      const recentProjects = projects.slice(0, 5);
-      const taskPromises = recentProjects.map((project) =>
-        api
-          .get(`/projects/${project._id}/tasks?limit=10&sortBy=createdAt:desc`)
-          .then((response) =>
-            response.data.data.map((task) => ({
-              ...task,
-              projectName: project.name,
-            }))
-          )
-          .catch((err) => {
-            console.error(
-              `Background fetch tasks for project ${project._id} failed:`,
-              err
-            );
-            return [];
-          })
-      );
+      // Assignee filter
+      if (
+        filters.assignee !== 'all' &&
+        task.assignee?._id !== filters.assignee
+      ) {
+        return false;
+      }
 
-      const projectTasks = await Promise.all(taskPromises);
-      let allTasks = projectTasks.flat();
-      allTasks.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      allTasks = allTasks.slice(0, 20);
+      // Priority filter
+      if (filters.priority !== 'all' && task.priority !== filters.priority) {
+        return false;
+      }
 
-      return {
-        tasks: allTasks,
-        timestamp: now,
-        smartRefresh,
-        fromBackground: true,
-      };
-    } catch (error) {
-      const message =
-        (error.response &&
-          error.response.data &&
-          error.response.data.message) ||
-        error.message ||
-        error.toString();
-      console.error('RecentTasks (Background) fetch failed:', message);
-      // For background errors, we might not want to blast the main error state
-      // but rather just log it or handle it more subtly.
-      // However, for consistency with other thunks, we'll use rejectWithValue.
-      return thunkAPI.rejectWithValue({ message, fromBackground: true });
-    }
+      // Tags filter
+      if (filters.tags.length > 0) {
+        const taskTags = task.tags || [];
+        const hasMatchingTag = filters.tags.some((tag) =>
+          taskTags.includes(tag)
+        );
+        if (!hasMatchingTag) {
+          return false;
+        }
+      }
+
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const titleMatch = task.title?.toLowerCase().includes(searchLower);
+        const descMatch = task.description?.toLowerCase().includes(searchLower);
+        if (!titleMatch && !descMatch) {
+          return false;
+        }
+      }
+
+      // Has subtasks filter
+      if (filters.hasSubtasks) {
+        const taskSubtasks = subtasks[task._id];
+        if (!taskSubtasks || taskSubtasks.length === 0) {
+          return false;
+        }
+      }
+
+      // Is blocked filter
+      if (filters.isBlocked) {
+        const taskDeps = dependencies[task._id];
+        if (!taskDeps || !taskDeps.blockedBy.length) {
+          return false;
+        }
+
+        // Check if actually blocked (has uncompleted dependencies)
+        const isBlocked = taskDeps.blockedBy.some((depId) => {
+          const depTask = tasks.find((t) => t._id === depId);
+          return depTask && depTask.status !== 'done';
+        });
+
+        if (!isBlocked) {
+          return false;
+        }
+      }
+
+      // Is overdue filter
+      if (filters.isOverdue) {
+        const now = new Date();
+        const isOverdue =
+          task.dueDate &&
+          new Date(task.dueDate) < now &&
+          task.status !== 'done';
+        if (!isOverdue) {
+          return false;
+        }
+      }
+
+      return true;
+    });
   }
 );
 
-// Export the reducer's actions
-export const { resetTaskStatus, setTaskProjectContext, clearTasks } =
-  taskSlice.actions;
+export const selectTasksByStatus = createSelector(
+  [selectFilteredTasks],
+  (tasks) => {
+    return tasks.reduce((acc, task) => {
+      const status = task.status || 'todo';
+      if (!acc[status]) {
+        acc[status] = [];
+      }
+      acc[status].push(task);
+      return acc;
+    }, {});
+  }
+);
 
-// Export the reducer as default
-export default taskSlice.reducer;
+export const selectTaskMetrics = createSelector(
+  [(state) => state.tasks.tasks],
+  (tasks) => {
+    return {
+      total: tasks.length,
+      completed: tasks.filter((t) => t.status === 'done').length,
+      inProgress: tasks.filter((t) => t.status === 'in-progress').length,
+      blocked: tasks.filter((t) => t.status === 'blocked').length,
+      overdue: tasks.filter((t) => t.isOverdue).length,
+    };
+  }
+);
+
+// Additional advanced selectors
+export const selectBulkOperations = (state) => state.tasks.bulkOperations;
+export const selectBoardColumns = (state) => state.tasks.boardColumns;
+export const selectProgressUpdating = (state) => state.tasks.progressUpdating;
+
+export const selectTasksWithSubtasks = createSelector(
+  [(state) => state.tasks.tasks, (state) => state.tasks.subtasks],
+  (tasks, subtasks) => {
+    return tasks.filter((task) => {
+      const taskSubtasks = subtasks[task._id];
+      return taskSubtasks && taskSubtasks.length > 0;
+    });
+  }
+);
+
+export const selectBlockedTasks = createSelector(
+  [(state) => state.tasks.tasks, (state) => state.tasks.taskDependencies],
+  (tasks, dependencies) => {
+    return tasks.filter((task) => {
+      const taskDeps = dependencies[task._id];
+      if (!taskDeps || !taskDeps.blockedBy.length) return false;
+
+      // Check if any dependencies are not completed
+      return taskDeps.blockedBy.some((depId) => {
+        const depTask = tasks.find((t) => t._id === depId);
+        return depTask && depTask.status !== 'done';
+      });
+    });
+  }
+);
+
+export const selectOverdueTasks = createSelector(
+  [(state) => state.tasks.tasks],
+  (tasks) => {
+    const now = new Date();
+    return tasks.filter((task) => {
+      return (
+        task.dueDate && new Date(task.dueDate) < now && task.status !== 'done'
+      );
+    });
+  }
+);
+
+export const selectTasksByAssignee = createSelector(
+  [selectFilteredTasks],
+  (tasks) => {
+    return tasks.reduce((acc, task) => {
+      const assigneeId = task.assignee?._id || 'unassigned';
+      const assigneeName = task.assignee?.name || 'Unassigned';
+
+      if (!acc[assigneeId]) {
+        acc[assigneeId] = {
+          assignee: task.assignee || { name: 'Unassigned' },
+          tasks: [],
+        };
+      }
+      acc[assigneeId].tasks.push(task);
+      return acc;
+    }, {});
+  }
+);
+
+export const selectTaskProgress = createSelector(
+  [(state) => state.tasks.tasks],
+  (tasks) => {
+    if (tasks.length === 0) return 0;
+
+    const completedTasks = tasks.filter((t) => t.status === 'done').length;
+    return Math.round((completedTasks / tasks.length) * 100);
+  }
+);
+
+export const selectTimeTrackingSummary = createSelector(
+  [
+    (state) => state.tasks.timeEntries,
+    (state) => state.tasks.activeTimeEntries,
+  ],
+  (timeEntries, activeEntries) => {
+    let totalTracked = 0;
+    let activeCount = 0;
+
+    // Sum all completed time entries
+    Object.values(timeEntries).forEach((entries) => {
+      entries.forEach((entry) => {
+        totalTracked += entry.duration || 0;
+      });
+    });
+
+    // Count active time tracking sessions
+    activeCount = Object.keys(activeEntries).length;
+
+    return {
+      totalTrackedHours: Math.round((totalTracked / 3600) * 100) / 100, // Convert to hours
+      activeTimeTrackingSessions: activeCount,
+      totalSessions: Object.values(timeEntries).reduce(
+        (sum, entries) => sum + entries.length,
+        0
+      ),
+    };
+  }
+);
+
+// Export reducer
+export default tasksSlice.reducer;

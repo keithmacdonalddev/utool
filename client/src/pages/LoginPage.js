@@ -48,8 +48,14 @@ const LoginPage = () => {
       message,
     });
     if (isError) {
+      // Enhanced error logging for debugging
+      console.error('LOGIN ERROR DETAILS:', {
+        message,
+        timestamp: new Date().toISOString(),
+        errorFlag: isError,
+        userState: user,
+      });
       toast.error(message); // Display error to user
-      console.error('Login error:', message);
       dispatch(resetAuthStatus()); // Reset error state
     }
     if (isSuccess && user) {

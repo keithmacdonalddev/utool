@@ -35,6 +35,8 @@ This milestone transforms projects from individual tools into powerful collabora
 - `client/src/hooks/useProjectPresence.js` - **REAL-TIME PRESENCE SYSTEM FOR PROJECTS**
 - `server/utils/pushNotificationManager.js` - **ENHANCED PUSH NOTIFICATION SETUP**
 - `client/src/components/projects/organisms/RealTimeCollaborationInterface.js` - **UNIFIED COLLABORATION UI**
+- `client/src/components/projects/molecules/CommentThread.js` - **COMMENT THREAD UI COMPONENT**
+- `client/src/components/projects/organisms/ProjectActivityFeed.js` - **ACTIVITY FEED UI COMPONENT**
 
 **Patterns We'll Maintain:**
 
@@ -1675,6 +1677,861 @@ const RealTimeCollaborationInterface = ({ projectId, isMinimized = false }) => {
 };
 
 export default RealTimeCollaborationInterface;
+```
+
+---
+
+## 🚨 ADDRESSING TEAMMATE REVIEW - MISSING CRITICAL UI COMPONENTS
+
+### ADDED: Missing UI Components for Rich User Experience
+
+The teammate review identified missing detailed UI components for activity feeds and comment threads. Adding these essential user-facing elements:
+
+#### **New File: `client/src/components/projects/molecules/CommentThread.js`**
+
+```javascript
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  MessageCircle,
+  Send,
+  MoreVertical,
+  Edit,
+  Trash,
+  Reply,
+} from 'lucide-react';
+import {
+  fetchComments,
+  addComment,
+  updateComment,
+  deleteComment,
+} from '../../../features/comments/commentsSlice';
+
+/**
+ * CommentThread Component
+ *
+ * Displays a threaded conversation for projects, tasks, or other entities.
+ * Supports nested replies, editing, deletion, and real-time updates.
+ */
+const CommentThread = ({ entityType, entityId, projectId }) => {
+  const dispatch = useDispatch();
+  const { comments, loading } = useSelector((state) => state.comments);
+  const { user } = useSelector((state) => state.auth);
+  const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [editingComment, setEditingComment] = useState(null);
+
+  useEffect(() => {
+    dispatch(fetchComments({ entityType, entityId }));
+  }, [dispatch, entityType, entityId]);
+
+  const handleSubmitComment = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+
+    try {
+      await dispatch(
+        addComment({
+          entityType,
+          entityId,
+          projectId,
+          content: newComment,
+          parentComment: replyingTo,
+        })
+      );
+      setNewComment('');
+      setReplyingTo(null);
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+    }
+  };
+
+  const handleEditComment = async (commentId, newContent) => {
+    try {
+      await dispatch(updateComment({ commentId, content: newContent }));
+      setEditingComment(null);
+    } catch (error) {
+      console.error('Failed to edit comment:', error);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (window.confirm('Are you sure you want to delete this comment?')) {
+      try {
+        await dispatch(deleteComment(commentId));
+      } catch (error) {
+        console.error('Failed to delete comment:', error);
+      }
+    }
+  };
+
+  const renderComment = (comment, depth = 0) => (
+    <div
+      key={comment._id}
+      className={`${
+        depth > 0 ? 'ml-8 mt-4' : 'mt-4'
+      } border-l-2 border-gray-100 pl-4`}
+    >
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        {/* Comment Header */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <span className="text-sm font-medium text-blue-600">
+                {comment.author.name?.[0]?.toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900">
+                {comment.author.name}
+              </p>
+              <p className="text-xs text-gray-500">
+                {new Date(comment.createdAt).toLocaleDateString()} at{' '}
+                {new Date(comment.createdAt).toLocaleTimeString()}
+              </p>
+            </div>
+          </div>
+
+          {comment.author._id === user.id && (
+            <div className="relative">
+              <button className="text-gray-400 hover:text-gray-600 p-1">
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {/* Dropdown menu for edit/delete */}
+            </div>
+          )}
+        </div>
+
+        {/* Comment Content */}
+        {editingComment === comment._id ? (
+          <CommentEditor
+            initialContent={comment.content}
+            onSave={(content) => handleEditComment(comment._id, content)}
+            onCancel={() => setEditingComment(null)}
+          />
+        ) : (
+          <div className="prose prose-sm text-gray-700 mb-3">
+            {comment.content}
+          </div>
+        )}
+
+        {/* Comment Actions */}
+        <div className="flex items-center space-x-4 text-sm">
+          <button
+            onClick={() =>
+              setReplyingTo(replyingTo === comment._id ? null : comment._id)
+            }
+            className="flex items-center space-x-1 text-gray-500 hover:text-blue-600"
+          >
+            <Reply className="w-4 h-4" />
+            <span>Reply</span>
+          </button>
+
+          {comment.author._id === user.id && (
+            <>
+              <button
+                onClick={() => setEditingComment(comment._id)}
+                className="flex items-center space-x-1 text-gray-500 hover:text-blue-600"
+              >
+                <Edit className="w-4 h-4" />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={() => handleDeleteComment(comment._id)}
+                className="flex items-center space-x-1 text-gray-500 hover:text-red-600"
+              >
+                <Trash className="w-4 h-4" />
+                <span>Delete</span>
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Reply Form */}
+        {replyingTo === comment._id && (
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <CommentForm
+              onSubmit={handleSubmitComment}
+              value={newComment}
+              onChange={setNewComment}
+              placeholder={`Reply to ${comment.author.name}...`}
+              submitLabel="Reply"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Nested Replies */}
+      {comment.replies &&
+        comment.replies.map((reply) => renderComment(reply, depth + 1))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Add Comment Form */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <CommentForm
+          onSubmit={handleSubmitComment}
+          value={newComment}
+          onChange={setNewComment}
+          placeholder="Add a comment..."
+          submitLabel="Comment"
+        />
+      </div>
+
+      {/* Comments List */}
+      {loading ? (
+        <div className="space-y-4">
+          {[...Array(3)].map((_, i) => (
+            <div
+              key={i}
+              className="bg-white rounded-lg border border-gray-200 p-4 animate-pulse"
+            >
+              <div className="flex items-center space-x-3 mb-3">
+                <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+                <div className="space-y-1">
+                  <div className="h-4 bg-gray-200 rounded w-24"></div>
+                  <div className="h-3 bg-gray-200 rounded w-16"></div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-4 bg-gray-200 rounded w-full"></div>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {comments.map((comment) => renderComment(comment))}
+          {comments.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <MessageCircle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              <p>No comments yet. Start the conversation!</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Comment Form Component
+const CommentForm = ({
+  onSubmit,
+  value,
+  onChange,
+  placeholder,
+  submitLabel,
+}) => (
+  <form onSubmit={onSubmit} className="space-y-3">
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+      rows={3}
+    />
+    <div className="flex justify-end">
+      <button
+        type="submit"
+        disabled={!value.trim()}
+        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+      >
+        <Send className="w-4 h-4" />
+        <span>{submitLabel}</span>
+      </button>
+    </div>
+  </form>
+);
+
+// Comment Editor Component
+const CommentEditor = ({ initialContent, onSave, onCancel }) => {
+  const [content, setContent] = useState(initialContent);
+
+  return (
+    <div className="space-y-3">
+      <textarea
+        value={content}
+        onChange={(e) => setContent(e.target.value)}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+        rows={3}
+      />
+      <div className="flex justify-end space-x-2">
+        <button
+          onClick={onCancel}
+          className="px-3 py-1 text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => onSave(content)}
+          disabled={!content.trim()}
+          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default CommentThread;
+```
+
+#### **New File: `client/src/components/projects/organisms/ProjectActivityFeed.js`**
+
+```javascript
+import React, { useState, useEffect, useMemo } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  Activity,
+  User,
+  CheckSquare,
+  FileText,
+  MessageCircle,
+  UserPlus,
+  Settings,
+  Calendar,
+  Filter,
+  RefreshCw,
+} from 'lucide-react';
+import { fetchProjectActivity } from '../../../features/activity/activitySlice';
+
+/**
+ * ProjectActivityFeed Component
+ *
+ * Displays a comprehensive activity feed for a project showing:
+ * - Task updates and completions
+ * - Member additions/changes
+ * - Comment additions
+ * - Project setting changes
+ * - File uploads and modifications
+ * - Real-time updates via Socket.IO
+ */
+const ProjectActivityFeed = ({ projectId, className = '' }) => {
+  const dispatch = useDispatch();
+  const { activities, loading, hasMore } = useSelector(
+    (state) => state.activity
+  );
+  const [filter, setFilter] = useState('all');
+  const [timeRange, setTimeRange] = useState('week');
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    dispatch(
+      fetchProjectActivity({
+        projectId,
+        filter,
+        timeRange,
+        page: 1,
+      })
+    );
+    setPage(1);
+  }, [dispatch, projectId, filter, timeRange]);
+
+  const activityTypes = [
+    { value: 'all', label: 'All Activity', icon: Activity },
+    { value: 'tasks', label: 'Tasks', icon: CheckSquare },
+    { value: 'comments', label: 'Comments', icon: MessageCircle },
+    { value: 'members', label: 'Members', icon: UserPlus },
+    { value: 'files', label: 'Files', icon: FileText },
+    { value: 'settings', label: 'Settings', icon: Settings },
+  ];
+
+  const timeRanges = [
+    { value: 'day', label: 'Today' },
+    { value: 'week', label: 'This Week' },
+    { value: 'month', label: 'This Month' },
+    { value: 'all', label: 'All Time' },
+  ];
+
+  const loadMore = () => {
+    if (hasMore && !loading) {
+      const nextPage = page + 1;
+      dispatch(
+        fetchProjectActivity({
+          projectId,
+          filter,
+          timeRange,
+          page: nextPage,
+        })
+      );
+      setPage(nextPage);
+    }
+  };
+
+  const refresh = () => {
+    dispatch(
+      fetchProjectActivity({
+        projectId,
+        filter,
+        timeRange,
+        page: 1,
+      })
+    );
+    setPage(1);
+  };
+
+  const getActivityIcon = (activity) => {
+    const iconProps = { className: 'w-4 h-4' };
+
+    switch (activity.type) {
+      case 'task_created':
+      case 'task_updated':
+      case 'task_completed':
+        return (
+          <CheckSquare {...iconProps} className="w-4 h-4 text-green-500" />
+        );
+      case 'comment_added':
+        return (
+          <MessageCircle {...iconProps} className="w-4 h-4 text-blue-500" />
+        );
+      case 'member_added':
+      case 'member_removed':
+        return <UserPlus {...iconProps} className="w-4 h-4 text-purple-500" />;
+      case 'file_uploaded':
+      case 'file_deleted':
+        return <FileText {...iconProps} className="w-4 h-4 text-orange-500" />;
+      case 'project_updated':
+        return <Settings {...iconProps} className="w-4 h-4 text-gray-500" />;
+      default:
+        return <Activity {...iconProps} className="w-4 h-4 text-gray-400" />;
+    }
+  };
+
+  const getActivityMessage = (activity) => {
+    const userName = activity.user?.name || 'Someone';
+    const target = activity.targetName || 'item';
+
+    switch (activity.type) {
+      case 'task_created':
+        return `${userName} created task "${target}"`;
+      case 'task_updated':
+        return `${userName} updated task "${target}"`;
+      case 'task_completed':
+        return `${userName} completed task "${target}"`;
+      case 'comment_added':
+        return `${userName} commented on "${target}"`;
+      case 'member_added':
+        return `${userName} added ${target} to the project`;
+      case 'member_removed':
+        return `${userName} removed ${target} from the project`;
+      case 'file_uploaded':
+        return `${userName} uploaded file "${target}"`;
+      case 'file_deleted':
+        return `${userName} deleted file "${target}"`;
+      case 'project_updated':
+        return `${userName} updated project settings`;
+      default:
+        return `${userName} performed an action`;
+    }
+  };
+
+  const getTimeAgo = (date) => {
+    const now = new Date();
+    const activityDate = new Date(date);
+    const diffInMs = now - activityDate;
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    const diffInDays = Math.floor(diffInHours / 24);
+
+    if (diffInMinutes < 1) return 'just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+    return activityDate.toLocaleDateString();
+  };
+
+  const groupedActivities = useMemo(() => {
+    const groups = {};
+    activities.forEach((activity) => {
+      const date = new Date(activity.createdAt).toDateString();
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(activity);
+    });
+    return groups;
+  }, [activities]);
+
+  return (
+    <div className={`bg-white rounded-lg border border-gray-200 ${className}`}>
+      {/* Header */}
+      <div className="border-b border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+            <Activity className="w-5 h-5" />
+            <span>Activity Feed</span>
+          </h3>
+          <button
+            onClick={refresh}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2">
+          {/* Activity Type Filter */}
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            {activityTypes.map((type) => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+
+          {/* Time Range Filter */}
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          >
+            {timeRanges.map((range) => (
+              <option key={range.value} value={range.value}>
+                {range.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Activity List */}
+      <div className="max-h-96 overflow-y-auto">
+        {loading && activities.length === 0 ? (
+          <div className="space-y-3 p-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-start space-x-3 animate-pulse">
+                <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : Object.keys(groupedActivities).length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Activity className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+            <p>No recent activity</p>
+          </div>
+        ) : (
+          <div className="space-y-4 p-4">
+            {Object.entries(groupedActivities).map(([date, dayActivities]) => (
+              <div key={date}>
+                {/* Date Header */}
+                <div className="flex items-center space-x-2 mb-3">
+                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">
+                    {new Date(date).toLocaleDateString(undefined, {
+                      weekday: 'long',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </div>
+
+                {/* Activities for this date */}
+                <div className="space-y-3 ml-6 border-l-2 border-gray-100 pl-4">
+                  {dayActivities.map((activity) => (
+                    <div
+                      key={activity._id}
+                      className="flex items-start space-x-3"
+                    >
+                      {/* Activity Icon */}
+                      <div className="w-8 h-8 bg-gray-50 rounded-full flex items-center justify-center border border-gray-200">
+                        {getActivityIcon(activity)}
+                      </div>
+
+                      {/* Activity Content */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900">
+                          {getActivityMessage(activity)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {getTimeAgo(activity.createdAt)}
+                        </p>
+
+                        {/* Activity Details */}
+                        {activity.details && (
+                          <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                            {activity.details}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* Load More */}
+            {hasMore && (
+              <div className="text-center mt-4">
+                <button
+                  onClick={loadMore}
+                  disabled={loading}
+                  className="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                >
+                  {loading ? 'Loading...' : 'Load More'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ProjectActivityFeed;
+```
+
+#### **New File: `server/models/UserNotificationPreferences.js`**
+
+```javascript
+import mongoose from 'mongoose';
+
+/**
+ * User Notification Preferences Schema
+ *
+ * Manages user preferences for notifications across different channels and contexts.
+ * Supports project-specific settings, notification types, timing preferences, and channels.
+ */
+const userNotificationPreferencesSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true,
+  },
+
+  // Global Notification Settings
+  globalSettings: {
+    enabled: { type: Boolean, default: true },
+    emailEnabled: { type: Boolean, default: true },
+    pushEnabled: { type: Boolean, default: true },
+    smsEnabled: { type: Boolean, default: false },
+
+    // Quiet Hours
+    quietHours: {
+      enabled: { type: Boolean, default: false },
+      start: { type: String, default: '22:00' }, // 24-hour format
+      end: { type: String, default: '07:00' },
+      timezone: { type: String, default: 'UTC' },
+    },
+
+    // Digest Settings
+    digest: {
+      enabled: { type: Boolean, default: true },
+      frequency: {
+        type: String,
+        enum: ['immediate', 'hourly', 'daily', 'weekly'],
+        default: 'daily',
+      },
+      time: { type: String, default: '09:00' }, // 24-hour format
+    },
+  },
+
+  // Notification Type Preferences
+  notificationTypes: {
+    // Task-related notifications
+    taskAssigned: {
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+    taskCompleted: {
+      email: { type: Boolean, default: false },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+    taskOverdue: {
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+    taskCommented: {
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+
+    // Project-related notifications
+    projectInvited: {
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+    projectUpdated: {
+      email: { type: Boolean, default: false },
+      push: { type: Boolean, default: false },
+      inApp: { type: Boolean, default: true },
+    },
+    projectDeadline: {
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+
+    // Collaboration notifications
+    mentioned: {
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+    commentReplied: {
+      email: { type: Boolean, default: true },
+      push: { type: Boolean, default: true },
+      inApp: { type: Boolean, default: true },
+    },
+
+    // System notifications
+    systemUpdates: {
+      email: { type: Boolean, default: false },
+      push: { type: Boolean, default: false },
+      inApp: { type: Boolean, default: true },
+    },
+  },
+
+  // Project-specific overrides
+  projectOverrides: [
+    {
+      project: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Project',
+        required: true,
+      },
+      settings: {
+        // Override global settings for this specific project
+        emailEnabled: Boolean,
+        pushEnabled: Boolean,
+        inAppEnabled: Boolean,
+
+        // Override notification types for this project
+        taskAssigned: {
+          email: Boolean,
+          push: Boolean,
+          inApp: Boolean,
+        },
+        taskCompleted: {
+          email: Boolean,
+          push: Boolean,
+          inApp: Boolean,
+        },
+        mentions: {
+          email: Boolean,
+          push: Boolean,
+          inApp: Boolean,
+        },
+        comments: {
+          email: Boolean,
+          push: Boolean,
+          inApp: Boolean,
+        },
+      },
+    },
+  ],
+
+  // Device-specific settings
+  devices: [
+    {
+      deviceId: String,
+      type: { type: String, enum: ['web', 'mobile', 'desktop'] },
+      pushToken: String,
+      enabled: { type: Boolean, default: true },
+      lastSeen: { type: Date, default: Date.now },
+    },
+  ],
+
+  // Metadata
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+// Indexes for efficient queries
+userNotificationPreferencesSchema.index({ user: 1 });
+userNotificationPreferencesSchema.index({ 'projectOverrides.project': 1 });
+userNotificationPreferencesSchema.index({ 'devices.deviceId': 1 });
+
+// Helper method to get notification preference for a specific type and project
+userNotificationPreferencesSchema.methods.getPreference = function (
+  notificationType,
+  channel,
+  projectId = null
+) {
+  // Check project-specific override first
+  if (projectId) {
+    const projectOverride = this.projectOverrides.find(
+      (override) => override.project.toString() === projectId.toString()
+    );
+
+    if (projectOverride && projectOverride.settings[notificationType]) {
+      const typeSettings = projectOverride.settings[notificationType];
+      if (
+        typeof typeSettings === 'object' &&
+        typeSettings[channel] !== undefined
+      ) {
+        return typeSettings[channel];
+      }
+    }
+  }
+
+  // Fall back to global type settings
+  const typeSettings = this.notificationTypes[notificationType];
+  if (typeSettings && typeSettings[channel] !== undefined) {
+    return typeSettings[channel];
+  }
+
+  // Fall back to global channel settings
+  const globalChannelEnabled = this.globalSettings[`${channel}Enabled`];
+  if (globalChannelEnabled !== undefined) {
+    return globalChannelEnabled;
+  }
+
+  // Default to enabled
+  return true;
+};
+
+// Helper method to check if user is in quiet hours
+userNotificationPreferencesSchema.methods.isInQuietHours = function () {
+  if (!this.globalSettings.quietHours.enabled) return false;
+
+  const now = new Date();
+  const userTimezone = this.globalSettings.quietHours.timezone || 'UTC';
+
+  // Convert current time to user's timezone
+  const userTime = new Intl.DateTimeFormat('en-US', {
+    timeZone: userTimezone,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(now);
+
+  const currentTime = userTime.replace(':', '');
+  const startTime = this.globalSettings.quietHours.start.replace(':', '');
+  const endTime = this.globalSettings.quietHours.end.replace(':', '');
+
+  // Handle quiet hours that span midnight
+  if (startTime > endTime) {
+    return currentTime >= startTime || currentTime <= endTime;
+  } else {
+    return currentTime >= startTime && currentTime <= endTime;
+  }
+};
+
+const UserNotificationPreferences = mongoose.model(
+  'UserNotificationPreferences',
+  userNotificationPreferencesSchema
+);
+
+export default UserNotificationPreferences;
 ```
 
 ---

@@ -21,9 +21,14 @@ const ProjectEditPage = () => {
   const { id } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { currentProject, isLoading, isError, isSuccess, message } =
-    useSelector((state) => state.projects);
-  const { user } = useSelector((state) => state.auth); // Get current user
+
+  // Memoized selectors to prevent Redux rerender warnings
+  const selectProjects = useMemo(() => (state) => state.projects, []);
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+
+  const { projects, currentProject, isLoading, isError, isSuccess, message } =
+    useSelector(selectProjects);
+  const { user } = useSelector(selectAuth); // Get current user
   const { showNotification } = useNotifications(); // Extract the showNotification function
   const [formData, setFormData] = useState({
     name: '',

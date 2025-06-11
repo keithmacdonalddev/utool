@@ -1,15 +1,17 @@
 // App.js - Main entry point for the React application
 // This file defines the application's routing structure and global providers
 
-import React, { Suspense, lazy, useEffect } from 'react'; // React core and hooks
+import React, { Suspense, lazy, useEffect, useMemo } from 'react'; // React core and hooks
 import { NotificationProvider } from './context/NotificationContext'; // Custom notification context
 import { useDispatch, useSelector } from 'react-redux'; // Redux hooks for state management
-import { connectSocketWithToken, disconnectSocket } from './utils/socket'; // Socket.IO connection utilities
+import { connectSocket, disconnectSocket } from './utils/socket'; // Socket.IO connection utilities // connectSocketWithToken renamed to connectSocket
+import { restoreAuthState } from './features/auth/authSlice'; // Import auth restoration thunk
 import {
   BrowserRouter as Router, // Client-side router implementation
   Routes, // Container for all routes
   Route, // Individual route definition
   Navigate, // Component for redirecting
+  useParams,
 } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify'; // Toast notification system
 import 'react-toastify/dist/ReactToastify.css'; // Styles for toast notifications
@@ -19,6 +21,8 @@ import MainLayout from './components/layout/MainLayout'; // Layout wrapper with 
 import ErrorBoundary from './components/ErrorBoundary'; // Import the ErrorBoundary
 import './App.css'; // Global application styles
 
+// Redirect component removed - direct navigation to project details eliminates unmount/remount cycle
+
 // Lazy-loaded components using code splitting
 // This improves initial load performance by only loading components when needed
 // Each import() returns a Promise that resolves to the component module
@@ -27,6 +31,9 @@ const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const ProjectListPage = lazy(() => import('./pages/ProjectListPage'));
+const ProjectDashboard = lazy(() =>
+  import('./pages/projects/ProjectDashboard')
+); // Milestone 1: Enhanced Project Dashboard
 const ProjectCreatePage = lazy(() => import('./pages/ProjectCreatePage'));
 const ProjectDetailsPage = lazy(() => import('./pages/ProjectDetailsPage'));
 const ProjectEditPage = lazy(() => import('./pages/ProjectEditPage'));
@@ -88,28 +95,71 @@ const QuotesRedirect = () => (
 );
 
 function App() {
+  const dispatch = useDispatch();
+
+  // Memoized selector to prevent Redux rerender warnings
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+
   // Extract user authentication state from Redux store
   // This is used to determine if socket connection should be established
-  const { user, token } = useSelector((state) => state.auth);
+  const { user, token, isAuthRestored, authRestorationAttempted } =
+    useSelector(selectAuth);
+
+  // CRITICAL: Restore authentication state on app startup to prevent race conditions
+  // This useEffect runs once when the app mounts and ensures auth state is properly
+  // restored from localStorage before any API calls are made
+  useEffect(() => {
+    // Only attempt restoration once and if it hasn't been attempted yet
+    if (!authRestorationAttempted) {
+      console.log('App.js: Initiating authentication state restoration...');
+      dispatch(restoreAuthState());
+    }
+  }, [dispatch, authRestorationAttempted]);
 
   // useEffect hook to manage socket connection based on authentication state
   // This ensures real-time features only work when the user is logged in
+  // IMPORTANT: Only run after auth restoration is complete to prevent timing issues
   useEffect(() => {
+    // Wait for auth restoration to complete before managing socket connections
+    if (!isAuthRestored) {
+      console.log(
+        'App.js: Waiting for auth restoration to complete before managing socket...'
+      );
+      return;
+    }
+
+    let isEffectActive = true; // Flag to prevent state updates on unmounted component
+
     if (token) {
-      // Connect to socket with authentication token when user is logged in
-      connectSocketWithToken(token);
+      console.log('App.js Effect: Token found, ensuring socket is connected.');
+      connectSocket(token)
+        .then(() => {
+          if (isEffectActive) {
+            console.log('App.js Effect: Socket connected successfully.');
+          }
+        })
+        .catch((error) => {
+          // Only log errors that aren't intentional cancellations
+          if (
+            isEffectActive &&
+            error.message !== 'Connection cancelled by disconnect.'
+          ) {
+            console.error('App.js Effect: Socket connection failed:', error);
+          }
+        });
     } else {
-      // Disconnect socket when no token is present (logged out)
+      console.log('App.js Effect: No token, ensuring socket is disconnected.');
       disconnectSocket();
     }
 
-    // Clean up function runs when component unmounts
-    // Ensures socket is properly disconnected when leaving the application
+    // The cleanup function ALWAYS runs.
+    // Our new socket.js module will handle this gracefully.
     return () => {
+      console.log('App.js Effect: Cleanup triggered. Disconnecting socket.');
+      isEffectActive = false;
       disconnectSocket();
     };
-  }, [token]); // Only re-run effect when token changes
-
+  }, [token, isAuthRestored]); // Add isAuthRestored to dependencies
   return (
     // NotificationProvider makes notifications available throughout the app
     <NotificationProvider>
@@ -133,183 +183,206 @@ function App() {
               theme="dark" // Visual theme
             />
 
-            {/* Suspense shows a fallback UI while lazy-loaded components are loading */}
-            <Suspense
-              fallback={
-                <div
-                  role="status"
-                  aria-live="polite"
-                  style={{
-                    textAlign: 'center',
-                    padding: '20px',
-                    color: 'white',
-                  }}
-                >
-                  Loading page content...
+            {/* CRITICAL: Show loading screen until authentication state is restored */}
+            {!isAuthRestored ? (
+              <div
+                className="flex items-center justify-center h-screen bg-gray-900"
+                role="status"
+                aria-live="polite"
+              >
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                  <p className="text-lg text-gray-300">
+                    Restoring authentication state...
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    This ensures secure access to your projects
+                  </p>
                 </div>
-              }
-            >
-              {/* Routes defines all application routes */}
-              <Routes>
-                {/* Public Routes - accessible without authentication */}
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route
-                  path="/verify-email/:token" // Route with URL parameter
-                  element={<VerifyEmailPage />}
-                />
-
-                {/* Protected Routes - require authentication */}
-                {/* ProtectedRoute component checks user role before rendering */}
-                <Route
-                  element={
-                    <ProtectedRoute
-                      allowedRoles={[
-                        'Regular User',
-                        'Pro User',
-                        'Admin',
-                        'Guest',
-                      ]} // Allow guests to access dashboard
-                    />
-                  }
-                >
-                  {/* MainLayout provides common structure (sidebar, header, etc.) */}
-                  <Route element={<MainLayout />}>
-                    {/* Dashboard and main feature routes */}
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    {/* Project management routes */}
-                    <Route
-                      path="/projects/new"
-                      element={<ProjectCreatePage />}
-                    />
-                    <Route
-                      path="/projects/:id" // Dynamic route with project ID parameter
-                      element={<ProjectDetailsPage />}
-                    />
-                    <Route path="/projects" element={<ProjectListPage />} />
-                    <Route
-                      path="/projects/:id/edit"
-                      element={<ProjectEditPage />}
-                    />
-                    {/* Knowledge Base routes */}
-                    <Route path="/kb/new" element={<KbCreatePage />} />
-                    <Route path="/kb" element={<KbListPage />} />
-                    <Route path="/kb/:id" element={<KbDetailsPage />} />
-                    <Route path="/kb/:id/edit" element={<KbEditPage />} />
-                    <Route
-                      path="/kb/:id/versions"
-                      element={<KbVersionHistoryPage />}
-                    />
-                    <Route path="/resources" element={<ResourcesPage />} />
-                    <Route path="/profile" element={<ProfilePage />} />
-                    <Route path="/notes" element={<NotesPage />} />
-                    <Route path="/notes/trash" element={<TrashPage />} />
-                    <Route path="/archive" element={<ArchivePage />} />
-                    {/* Standalone task routes removed - tasks are only accessible through projects */}
-                    {/* <Route path="/tasks" element={<TasksPage />} /> */}
-                    {/* <Route path="/tasks/:id" element={<TaskDetailsPage />} /> */}
-                    {/* Redirect old favorite-quotes page to resources with quotes tab active */}
-                    <Route
-                      path="/favorite-quotes"
-                      element={<QuotesRedirect />}
-                    />
-                    <Route path="/friends" element={<FriendsPage />} />
-                    {/* Admin Only Routes - nested protected route */}
-                    {/* Additional role check for admin-specific functionality */}{' '}
-                    <Route
-                      element={<ProtectedRoute allowedRoles={['Admin']} />}
-                    >
-                      {/* Main admin dashboard and redirect */}
+              </div>
+            ) : (
+              /* Suspense shows a fallback UI while lazy-loaded components are loading */
+              <Suspense
+                fallback={
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                      textAlign: 'center',
+                      padding: '20px',
+                      color: 'white',
+                    }}
+                  >
+                    Loading page content...
+                  </div>
+                }
+              >
+                {/* Routes defines all application routes */}
+                <Routes>
+                  {/* Public Routes - accessible without authentication */}
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
+                  <Route
+                    path="/verify-email/:token" // Route with URL parameter
+                    element={<VerifyEmailPage />}
+                  />
+                  {/* Protected Routes - require authentication */}
+                  {/* ProtectedRoute component checks user role before rendering */}
+                  <Route
+                    element={
+                      <ProtectedRoute
+                        allowedRoles={[
+                          'Regular User',
+                          'Pro User',
+                          'Admin',
+                          'Guest',
+                        ]} // Allow guests to access dashboard
+                      />
+                    }
+                  >
+                    {/* MainLayout provides common structure (sidebar, header, etc.) */}
+                    <Route element={<MainLayout />}>
+                      {/* Dashboard and main feature routes */}
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      {/* Project management routes */}
                       <Route
-                        path="/admin"
-                        element={<Navigate to="/admin/dashboard" replace />}
+                        path="/projects/dashboard"
+                        element={<ProjectDashboard />}
                       />
                       <Route
-                        path="/admin/dashboard"
-                        element={<AdminDashboardPage />}
-                      />
-                      {/* Existing admin routes */}
-                      <Route
-                        path="/admin/users"
-                        element={<AdminUserListPage />}
+                        path="/projects/new"
+                        element={<ProjectCreatePage />}
                       />
                       <Route
-                        path="/admin/users/:id/edit"
-                        element={<AdminUserEditPage />}
+                        path="/projects/:id" // This is now the single source of truth for project details
+                        element={<ProjectDetailsPage />}
+                      />
+                      {/* Redirect /projects to enhanced dashboard */}
+                      <Route
+                        path="/projects"
+                        element={<Navigate to="/projects/dashboard" replace />}
                       />
                       <Route
-                        path="/admin/audit-logs"
-                        element={<AuditLogsPage />}
-                      />{' '}
-                      <Route
-                        path="/admin/settings"
-                        element={<AdminSettingsPage />}
+                        path="/projects/:id/edit"
+                        element={<ProjectEditPage />}
                       />
+                      {/* Knowledge Base routes */}
+                      <Route path="/kb/new" element={<KbCreatePage />} />
+                      <Route path="/kb" element={<KbListPage />} />
+                      <Route path="/kb/:id" element={<KbDetailsPage />} />
+                      <Route path="/kb/:id/edit" element={<KbEditPage />} />
                       <Route
-                        path="/admin/analytics/guest"
-                        element={<GuestAnalyticsPage />}
+                        path="/kb/:id/versions"
+                        element={<KbVersionHistoryPage />}
                       />
-                      {/* New routes with placeholder pages */}
+                      <Route path="/resources" element={<ResourcesPage />} />
+                      <Route path="/profile" element={<ProfilePage />} />
+                      <Route path="/notes" element={<NotesPage />} />
+                      <Route path="/notes/trash" element={<TrashPage />} />
+                      <Route path="/archive" element={<ArchivePage />} />
+                      {/* Standalone task routes removed - tasks are only accessible through projects */}
+                      {/* <Route path="/tasks" element={<TasksPage />} /> */}
+                      {/* <Route path="/tasks/:id" element={<TaskDetailsPage />} /> */}
+                      {/* Redirect old favorite-quotes page to resources with quotes tab active */}
                       <Route
-                        path="/admin/roles"
-                        element={<RoleManagementPage />}
+                        path="/favorite-quotes"
+                        element={<QuotesRedirect />}
                       />
+                      <Route path="/friends" element={<FriendsPage />} />
+                      {/* Admin Only Routes - nested protected route */}
+                      {/* Additional role check for admin-specific functionality */}{' '}
                       <Route
-                        path="/admin/system-health"
-                        element={<SystemHealthPage />}
-                      />
-                      <Route
-                        path="/admin/analytics"
-                        element={<AnalyticsPage />}
-                      />
-                      <Route
-                        path="/admin/public-settings"
-                        element={<PublicSettingsPage />}
-                      />
-                      <Route
-                        path="/admin/batch-operations"
-                        element={<BatchOperationsPage />}
-                      />
-                      <Route
-                        path="/admin/reporting"
-                        element={<ReportingPage />}
-                      />
-                      <Route
-                        path="/admin/maintenance"
-                        element={
-                          <ComingSoonPage
-                            title="Advanced Maintenance"
-                            features={[
-                              'Scheduled maintenance windows',
-                              'Automated backup management',
-                              'Performance optimization wizards',
-                              'Database migration tools',
-                            ]}
-                          />
-                        }
-                      />
+                        element={<ProtectedRoute allowedRoles={['Admin']} />}
+                      >
+                        {/* Main admin dashboard and redirect */}
+                        <Route
+                          path="/admin"
+                          element={<Navigate to="/admin/dashboard" replace />}
+                        />
+                        <Route
+                          path="/admin/dashboard"
+                          element={<AdminDashboardPage />}
+                        />
+                        {/* Existing admin routes */}
+                        <Route
+                          path="/admin/users"
+                          element={<AdminUserListPage />}
+                        />
+                        <Route
+                          path="/admin/users/:id/edit"
+                          element={<AdminUserEditPage />}
+                        />
+                        <Route
+                          path="/admin/audit-logs"
+                          element={<AuditLogsPage />}
+                        />{' '}
+                        <Route
+                          path="/admin/settings"
+                          element={<AdminSettingsPage />}
+                        />
+                        <Route
+                          path="/admin/analytics/guest"
+                          element={<GuestAnalyticsPage />}
+                        />
+                        {/* New routes with placeholder pages */}
+                        <Route
+                          path="/admin/roles"
+                          element={<RoleManagementPage />}
+                        />
+                        <Route
+                          path="/admin/system-health"
+                          element={<SystemHealthPage />}
+                        />
+                        <Route
+                          path="/admin/analytics"
+                          element={<AnalyticsPage />}
+                        />
+                        <Route
+                          path="/admin/public-settings"
+                          element={<PublicSettingsPage />}
+                        />
+                        <Route
+                          path="/admin/batch-operations"
+                          element={<BatchOperationsPage />}
+                        />
+                        <Route
+                          path="/admin/reporting"
+                          element={<ReportingPage />}
+                        />
+                        <Route
+                          path="/admin/maintenance"
+                          element={
+                            <ComingSoonPage
+                              title="Advanced Maintenance"
+                              features={[
+                                'Scheduled maintenance windows',
+                                'Automated backup management',
+                                'Performance optimization wizards',
+                                'Database migration tools',
+                              ]}
+                            />
+                          }
+                        />
+                      </Route>
                     </Route>
                   </Route>
-                </Route>
-
-                {/* Special routes for handling unauthorized access and redirects */}
-                <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
-                {/* Root path redirects to dashboard */}
-                <Route
-                  path="/"
-                  element={<Navigate replace to="/dashboard" />}
-                />
-
-                {/* Redirect standalone task routes to projects */}
-                <Route
-                  path="/tasks/*"
-                  element={<Navigate replace to="/projects" />}
-                />
-                {/* Catch-all route for 404 Not Found pages */}
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Suspense>
+                  {/* Special routes for handling unauthorized access and redirects */}
+                  <Route path="/unauthorized" element={<UnauthorizedPage />} />
+                  {/* Root path redirects to dashboard */}
+                  <Route
+                    path="/"
+                    element={<Navigate replace to="/dashboard" />}
+                  />
+                  {/* Redirect standalone task routes to projects */}
+                  <Route
+                    path="/tasks/*"
+                    element={<Navigate replace to="/projects" />}
+                  />{' '}
+                  {/* Catch-all route for 404 Not Found pages */}
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
+            )}
           </div>
         </ErrorBoundary>
       </Router>

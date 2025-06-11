@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Spinner from '../common/Spinner';
 import useProjects from '../../hooks/useProjects';
@@ -20,10 +20,16 @@ const ProjectProgressWidget = () => {
     smartRefresh: true, // Enable smart comparison to prevent unnecessary re-renders
   });
 
-  // Sort projects by due date (closest first)
-  const sortedProjects = [...(projects || [])]
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
-    .slice(0, 3); // Only show 3 most immediate projects
+  // Memoize sortedProjects to prevent Redux selector warnings
+  // Previously, this array was being recreated on every render with the spread operator
+  const sortedProjects = useMemo(() => {
+    if (!projects || !Array.isArray(projects)) return [];
+
+    return projects
+      .filter((project) => project.dueDate) // Only include projects with due dates
+      .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+      .slice(0, 3); // Only show 3 most immediate projects
+  }, [projects]);
 
   /**
    * Handle manual refresh of project data

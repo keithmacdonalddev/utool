@@ -33,13 +33,18 @@ const useRecentTasks = (options = {}) => {
     smartRefresh = true,
   } = options;
 
+  // Memoized selectors to prevent Redux rerender warnings
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+  const selectGuestTasks = useMemo(
+    () => (state) => selectGuestItemsByType(state, 'tasks'),
+    []
+  );
+
   // Get auth state to check if user is a guest
-  const { isGuest } = useSelector((state) => state.auth);
+  const { isGuest } = useSelector(selectAuth);
 
   // Get guest task data directly if the user is a guest
-  const guestTasks = useSelector((state) =>
-    isGuest ? selectGuestItemsByType(state, 'tasks') : []
-  );
+  const guestTasks = useSelector(selectGuestTasks);
 
   // Format guest tasks to match API structure
   const formattedGuestTasks = useMemo(() => {
@@ -59,7 +64,7 @@ const useRecentTasks = (options = {}) => {
         .slice(0, 10)
     );
   }, [isGuest, guestTasks]);
-  // Selector functions for the useDataFetching hook
+  // Selector functions for the useDataFetching hook (stable references)
   const selectTasks = useMemo(() => (state) => state.tasks.tasks, []);
 
   const selectLastFetched = useMemo(
@@ -69,6 +74,7 @@ const useRecentTasks = (options = {}) => {
 
   const selectIsLoading = useMemo(() => (state) => state.tasks.isLoading, []);
 
+  // PERFORMANCE FIX: Simplified error selector to prevent dependency issues
   const selectError = useMemo(
     () => (state) => state.tasks.isError ? state.tasks.message : null,
     []

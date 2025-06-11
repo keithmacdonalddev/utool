@@ -230,7 +230,11 @@ function validateEnvironmentVariables(logger) {
 
 // Regular imports continue...
 import { isShuttingDown, setShuttingDown } from './utils/serverState.js';
-import { authenticateSocket, handleConnection } from './utils/socketManager.js';
+import {
+  authenticateSocket,
+  handleConnection,
+  initializeSocketManager,
+} from './utils/socketManager.js';
 import { logoutPriorityMiddleware } from './middleware/logoutPriorityMiddleware.js';
 import { enhancedLogging } from './middleware/enhancedLogging.js';
 import { trackGuestActivity } from './middleware/analyticsMiddleware.js';
@@ -344,6 +348,10 @@ import archiveRoutes from './routes/archive.js';
 import adminSettingsRoutes from './routes/adminSettingsRoutes.js'; // Added for admin settings
 import publicSettingsRoutes from './routes/publicSettingsRoutes.js'; // Added for public settings
 
+// Import task controller for recent tasks endpoint
+import { getRecentTasks } from './controllers/taskController.js';
+import { protect } from './middleware/authMiddleware.js';
+
 // Middleware Section
 // Middleware functions process requests before they reach route handlers
 
@@ -400,6 +408,9 @@ initializeLogManagement();
 app.use(express.json({ limit: '1mb' }));
 // Parse URL-encoded request bodies with size limit
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Parse cookies from incoming requests
+app.use(cookieParser());
 
 // Add guest analytics tracking middleware
 app.use(trackGuestActivity);
@@ -574,25 +585,17 @@ app.use('/api/v1/snippets', snippetRoutes);
 app.use('/api/v1/archive', archiveRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 
+// Add specific route for recent tasks (must be before the catch-all route)
+app.get('/api/v1/tasks/recent', protect, getRecentTasks);
+
 // Basic Route with logging
 app.get('/', (req, res) => {
   logger.info('Root route accessed');
   res.send('API is running...');
 });
 
-// Add a catch-all route for standalone task requests to redirect/inform users
-app.all('/api/v1/tasks/*any', (req, res) => {
-  logger.warn(`Attempted access to standalone task route: ${req.originalUrl}`, {
-    method: req.method,
-    userId: req.user?.id,
-  });
-
-  res.status(400).json({
-    success: false,
-    message:
-      'Tasks can only be accessed within project context. Please use /api/v1/projects/:projectId/tasks instead.',
-  });
-});
+// Temporarily removed catch-all route to fix server startup issues
+// TODO: Add back a proper catch-all route for task endpoints later
 
 // Error handling middleware with enhanced logging
 // This catches errors thrown in routes and middleware
@@ -658,7 +661,6 @@ async function connectToDatabase() {
       minPoolSize: 5, // Keep at least 5 connections open
       maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
     });
-
     logger.info(
       `MongoDB Connected - readyState: ${mongoose.connection.readyState}`,
       {
@@ -666,8 +668,33 @@ async function connectToDatabase() {
         host: mongoose.connection.host,
         port: mongoose.connection.port,
       }
-    ); // Make io available to routes through the app object // This allows routes to access the socket.io instance
+    );
 
+    // Initialize socket manager with io instance for push notifications
+    initializeSocketManager(io);
+    logger.info('Socket manager initialized with io instance');
+
+    // Initialize push notification manager
+    try {
+      const { default: PushNotificationManager } = await import(
+        './utils/pushNotificationManager.js'
+      );
+      const pushNotificationManager = new PushNotificationManager();
+
+      // Initialize with socket manager reference
+      const socketManagerModule = await import('./utils/socketManager.js');
+      pushNotificationManager.initialize(socketManagerModule);
+
+      // Make push notification manager available globally for controllers
+      global.pushNotificationManager = pushNotificationManager;
+
+      logger.info('Push notification manager initialized');
+    } catch (error) {
+      logger.warn('Failed to initialize push notification manager:', error);
+      // Continue without push notifications
+    }
+
+    // Make io available to routes through the app object // This allows routes to access the socket.io instance
     app.set('io', io); // Start scheduled reminders with logging
 
     const {
@@ -800,4 +827,10 @@ process.on('uncaughtException', (err) => {
 });
 
 // Start the application by connecting to the database
-connectToDatabase();
+// Only start the server if we're not in test mode
+if (process.env.NODE_ENV !== 'test') {
+  connectToDatabase();
+}
+
+// Export app for testing
+export default app;

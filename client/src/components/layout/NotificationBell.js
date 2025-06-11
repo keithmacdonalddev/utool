@@ -3,7 +3,7 @@ import { useNotifications } from '../../context/NotificationContext';
 import { Bell, Check, Trash2, X, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { connectSocketWithToken } from '../../utils/socket';
+import { connectSocket } from '../../utils/socket'; // Changed from connectSocketWithToken
 import { useSelector } from 'react-redux';
 
 const NotificationBell = () => {
@@ -20,7 +20,7 @@ const NotificationBell = () => {
     fetchNotifications,
     fetchUnreadCount,
   } = useNotifications();
-  
+
   const { token } = useSelector((state) => state.auth);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -42,19 +42,19 @@ const NotificationBell = () => {
 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
-    
+
     // Refresh notifications when opening the dropdown
     if (!isOpen) {
       fetchNotifications();
       fetchUnreadCount();
     }
   };
-  
+
   // Handle manual reconnection of socket
   const handleReconnect = (e) => {
     e.stopPropagation();
     if (token) {
-      connectSocketWithToken(token);
+      connectSocket(token); // Changed from connectSocketWithToken
     }
   };
 
@@ -69,11 +69,18 @@ const NotificationBell = () => {
       {/* Bell Icon Button */}
       <div className="flex items-center">
         {/* Socket connection status indicator */}
-        <div className="mr-1" title={socketConnected ? "Real-time notifications connected" : "Real-time notifications disconnected"}>
+        <div
+          className="mr-1"
+          title={
+            socketConnected
+              ? 'Real-time notifications connected'
+              : 'Real-time notifications disconnected'
+          }
+        >
           {socketConnected ? (
             <Wifi size={14} className="text-green-500" />
           ) : (
-            <button 
+            <button
               onClick={handleReconnect}
               className="text-red-500 hover:text-red-400 focus:outline-none"
               title="Click to reconnect"
@@ -82,7 +89,7 @@ const NotificationBell = () => {
             </button>
           )}
         </div>
-        
+
         <button
           onClick={toggleDropdown}
           className="p-2 rounded-full hover:bg-dark-700 focus:outline-none focus:ring-2 focus:ring-primary-400 relative"
@@ -93,13 +100,13 @@ const NotificationBell = () => {
             className={unreadCount > 0 ? 'text-accent-purple' : 'text-gray-400'}
           />
 
-        {/* Notification Counter Badge */}
-        {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full min-w-[1.2rem] h-[1.2rem]">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
+          {/* Notification Counter Badge */}
+          {unreadCount > 0 && (
+            <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-500 rounded-full min-w-[1.2rem] h-[1.2rem]">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Dropdown Menu */}
@@ -117,7 +124,7 @@ const NotificationBell = () => {
                     <span>Live</span>
                   </span>
                 ) : (
-                  <button 
+                  <button
                     onClick={handleReconnect}
                     className="flex items-center text-xs text-red-500 hover:text-red-400"
                     title="Click to reconnect"
@@ -215,7 +222,7 @@ const NotificationBell = () => {
                 <Bell size={24} className="text-gray-400 mb-2" />
                 <p className="text-sm text-gray-400">No notifications</p>
                 {!socketConnected && (
-                  <button 
+                  <button
                     onClick={handleReconnect}
                     className="mt-3 flex items-center text-xs text-red-500 hover:text-red-400 bg-dark-800 p-2 rounded"
                   >

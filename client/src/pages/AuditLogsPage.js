@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router-dom';
 import {
@@ -78,6 +78,7 @@ const AuditLogsPage = () => {
    * - error: Any error that occurred during data fetching
    * - filters: Currently applied filters
    */
+  const selectAuditLogsState = useMemo(() => (state) => state.auditLogs, []);
   const {
     logs,
     journeys, // Add journeys from state
@@ -87,7 +88,7 @@ const AuditLogsPage = () => {
     loading,
     error,
     filters,
-  } = useSelector((state) => state.auditLogs);
+  } = useSelector(selectAuditLogsState);
 
   /**
    * Local component state declarations

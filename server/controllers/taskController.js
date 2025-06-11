@@ -1029,3 +1029,699 @@ export const getUserTasks = async (req, res, next) => {
     );
   }
 };
+
+/**
+ * @desc    Create a subtask under a parent task
+ * @route   POST /api/v1/tasks/:taskId/subtasks
+ * @access  Private
+ */
+export const createSubtask = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const {
+      title,
+      description,
+      priority = 'medium',
+      assignee,
+      dueDate,
+    } = req.body;
+
+    // Validate parent task exists and user has access
+    const parentTask = await Task.findById(taskId).populate('project');
+    if (!parentTask) {
+      return next(new ErrorResponse('Parent task not found', 404));
+    }
+
+    // Check project access
+    const project = parentTask.project;
+    if (
+      !project.members.includes(req.user.id) &&
+      project.owner.toString() !== req.user.id
+    ) {
+      return next(
+        new ErrorResponse(
+          'Not authorized to create subtasks in this project',
+          403
+        )
+      );
+    }
+
+    // Create subtask
+    const subtaskData = {
+      title,
+      description,
+      priority,
+      assignee: assignee || req.user.id,
+      dueDate,
+      project: parentTask.project._id,
+      parentTask: taskId,
+      createdBy: req.user.id,
+      status: 'todo',
+    };
+
+    const subtask = await Task.create(subtaskData);
+    await subtask.populate(['assignee', 'createdBy'], 'name email');
+
+    // Update parent task's subtasks array
+    parentTask.subtasks.push(subtask._id);
+    await parentTask.save();
+
+    logger.info('Subtask created successfully', {
+      userId: req.user.id,
+      parentTaskId: taskId,
+      subtaskId: subtask._id,
+    });
+
+    res.status(201).json({
+      success: true,
+      data: subtask,
+    });
+  } catch (error) {
+    logger.error('Error creating subtask', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get all subtasks for a parent task
+ * @route   GET /api/v1/tasks/:taskId/subtasks
+ * @access  Private
+ */
+export const getSubtasks = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+
+    // Validate parent task exists and user has access
+    const parentTask = await Task.findById(taskId).populate('project');
+    if (!parentTask) {
+      return next(new ErrorResponse('Parent task not found', 404));
+    }
+
+    // Check project access
+    const project = parentTask.project;
+    if (
+      !project.members.includes(req.user.id) &&
+      project.owner.toString() !== req.user.id
+    ) {
+      return next(new ErrorResponse('Not authorized to view subtasks', 403));
+    }
+
+    const subtasks = await Task.find({ parentTask: taskId })
+      .populate('assignee', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({ order: 1, createdAt: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: subtasks.length,
+      data: subtasks,
+    });
+  } catch (error) {
+    logger.error('Error fetching subtasks', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Add task dependency (blockedBy relationship)
+ * @route   POST /api/v1/tasks/:taskId/dependencies
+ * @access  Private
+ */
+export const addTaskDependency = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const { dependsOnTaskId } = req.body;
+
+    if (!dependsOnTaskId) {
+      return next(new ErrorResponse('dependsOnTaskId is required', 400));
+    }
+
+    // Validate both tasks exist and user has access
+    const [task, dependencyTask] = await Promise.all([
+      Task.findById(taskId).populate('project'),
+      Task.findById(dependsOnTaskId).populate('project'),
+    ]);
+
+    if (!task || !dependencyTask) {
+      return next(new ErrorResponse('One or both tasks not found', 404));
+    }
+
+    // Check circular dependency
+    const hasCircular = await task.hasCircularDependency(dependsOnTaskId);
+    if (hasCircular) {
+      return next(new ErrorResponse('Cannot create circular dependency', 400));
+    }
+
+    // Add dependency relationships
+    if (!task.dependencies.blockedBy.includes(dependsOnTaskId)) {
+      task.dependencies.blockedBy.push(dependsOnTaskId);
+    }
+    if (!dependencyTask.dependencies.blocks.includes(taskId)) {
+      dependencyTask.dependencies.blocks.push(taskId);
+    }
+
+    await Promise.all([task.save(), dependencyTask.save()]);
+
+    logger.info('Task dependency added', {
+      userId: req.user.id,
+      taskId,
+      dependsOnTaskId,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        task: task._id,
+        dependsOn: dependsOnTaskId,
+      },
+    });
+  } catch (error) {
+    logger.error('Error adding task dependency', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Remove task dependency
+ * @route   DELETE /api/v1/tasks/:taskId/dependencies/:dependencyId
+ * @access  Private
+ */
+export const removeTaskDependency = async (req, res, next) => {
+  try {
+    const { taskId, dependencyId } = req.params;
+
+    const [task, dependencyTask] = await Promise.all([
+      Task.findById(taskId),
+      Task.findById(dependencyId),
+    ]);
+
+    if (!task || !dependencyTask) {
+      return next(new ErrorResponse('One or both tasks not found', 404));
+    }
+
+    // Remove dependency relationships
+    task.dependencies.blockedBy = task.dependencies.blockedBy.filter(
+      (id) => id.toString() !== dependencyId
+    );
+    dependencyTask.dependencies.blocks =
+      dependencyTask.dependencies.blocks.filter(
+        (id) => id.toString() !== taskId
+      );
+
+    await Promise.all([task.save(), dependencyTask.save()]);
+
+    logger.info('Task dependency removed', {
+      userId: req.user.id,
+      taskId,
+      dependencyId,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Dependency removed successfully',
+    });
+  } catch (error) {
+    logger.error('Error removing task dependency', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Start time tracking for a task
+ * @route   POST /api/v1/tasks/:taskId/time/start
+ * @access  Private
+ */
+export const startTimeTracking = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const { description } = req.body;
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return next(new ErrorResponse('Task not found', 404));
+    }
+
+    // Check if user already has an active time entry for this task
+    const activeEntry = task.timeEntries.find(
+      (entry) => entry.user.toString() === req.user.id && !entry.endTime
+    );
+
+    if (activeEntry) {
+      return next(
+        new ErrorResponse('Time tracking already active for this task', 400)
+      );
+    }
+
+    // Create new time entry
+    const timeEntry = {
+      user: req.user.id,
+      startTime: new Date(),
+      description: description || '',
+    };
+
+    task.timeEntries.push(timeEntry);
+    task.updateActivity(req.user.id);
+    await task.save();
+
+    const newEntry = task.timeEntries[task.timeEntries.length - 1];
+
+    logger.info('Time tracking started', {
+      userId: req.user.id,
+      taskId,
+      timeEntryId: newEntry._id,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: newEntry,
+    });
+  } catch (error) {
+    logger.error('Error starting time tracking', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Stop time tracking for a task
+ * @route   PUT /api/v1/tasks/:taskId/time/stop
+ * @access  Private
+ */
+export const stopTimeTracking = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const { description } = req.body;
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return next(new ErrorResponse('Task not found', 404));
+    }
+
+    // Find active time entry
+    const activeEntry = task.timeEntries.find(
+      (entry) => entry.user.toString() === req.user.id && !entry.endTime
+    );
+
+    if (!activeEntry) {
+      return next(
+        new ErrorResponse('No active time tracking found for this task', 400)
+      );
+    }
+
+    // Update time entry
+    const endTime = new Date();
+    activeEntry.endTime = endTime;
+    activeEntry.duration = Math.round(
+      (endTime - activeEntry.startTime) / 60000
+    ); // in minutes
+    if (description) {
+      activeEntry.description = description;
+    }
+
+    // Update total actual hours
+    task.actualHours = task.timeEntries.reduce((total, entry) => {
+      return total + (entry.duration || 0) / 60;
+    }, 0);
+
+    task.updateActivity(req.user.id);
+    await task.save();
+
+    logger.info('Time tracking stopped', {
+      userId: req.user.id,
+      taskId,
+      duration: activeEntry.duration,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: activeEntry,
+    });
+  } catch (error) {
+    logger.error('Error stopping time tracking', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get time tracking entries for a task
+ * @route   GET /api/v1/tasks/:taskId/time
+ * @access  Private
+ */
+export const getTimeEntries = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+
+    const task = await Task.findById(taskId)
+      .populate('timeEntries.user', 'name email')
+      .select('timeEntries actualHours estimatedHours');
+
+    if (!task) {
+      return next(new ErrorResponse('Task not found', 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        timeEntries: task.timeEntries,
+        actualHours: task.actualHours,
+        estimatedHours: task.estimatedHours,
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching time entries', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update task progress
+ * @route   PUT /api/v1/tasks/:taskId/progress
+ * @access  Private
+ */
+export const updateTaskProgress = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const { percentage, automatic } = req.body;
+
+    if (percentage !== undefined && (percentage < 0 || percentage > 100)) {
+      return next(
+        new ErrorResponse('Progress percentage must be between 0 and 100', 400)
+      );
+    }
+
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return next(new ErrorResponse('Task not found', 404));
+    }
+
+    // Update progress settings
+    if (percentage !== undefined) {
+      task.progress.percentage = percentage;
+      task.progress.automatic = false; // Manual override
+    }
+    if (automatic !== undefined) {
+      task.progress.automatic = automatic;
+    }
+
+    // Recalculate if set to automatic
+    if (task.progress.automatic) {
+      await task.calculateProgress();
+    }
+
+    task.progress.lastUpdated = new Date();
+    task.updateActivity(req.user.id);
+    await task.save();
+
+    logger.info('Task progress updated', {
+      userId: req.user.id,
+      taskId,
+      percentage: task.progress.percentage,
+      automatic: task.progress.automatic,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        progress: task.progress,
+      },
+    });
+  } catch (error) {
+    logger.error('Error updating task progress', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Reorder tasks within a project
+ * @route   PUT /api/v1/projects/:projectId/tasks/reorder
+ * @access  Private
+ */
+export const reorderTasks = async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+    const { taskOrders } = req.body; // Array of { taskId, order }
+
+    if (!Array.isArray(taskOrders)) {
+      return next(new ErrorResponse('taskOrders must be an array', 400));
+    }
+
+    // Validate project access
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return next(new ErrorResponse('Project not found', 404));
+    }
+
+    if (
+      !project.members.includes(req.user.id) &&
+      project.owner.toString() !== req.user.id
+    ) {
+      return next(new ErrorResponse('Not authorized to reorder tasks', 403));
+    }
+
+    // Update task orders
+    const bulkOps = taskOrders.map(({ taskId, order }) => ({
+      updateOne: {
+        filter: { _id: taskId, project: projectId },
+        update: { order },
+      },
+    }));
+
+    await Task.bulkWrite(bulkOps);
+
+    logger.info('Tasks reordered', {
+      userId: req.user.id,
+      projectId,
+      taskCount: taskOrders.length,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Tasks reordered successfully',
+    });
+  } catch (error) {
+    logger.error('Error reordering tasks', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get task analytics for a project
+ * @route   GET /api/v1/projects/:projectId/tasks/analytics
+ * @access  Private
+ */
+export const getTaskAnalytics = async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+
+    // Validate project access
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return next(new ErrorResponse('Project not found', 404));
+    }
+
+    if (
+      !project.members.includes(req.user.id) &&
+      project.owner.toString() !== req.user.id
+    ) {
+      return next(new ErrorResponse('Not authorized to view analytics', 403));
+    }
+
+    const analytics = await Task.aggregate([
+      { $match: { project: new mongoose.Types.ObjectId(projectId) } },
+      {
+        $group: {
+          _id: null,
+          totalTasks: { $sum: 1 },
+          completedTasks: {
+            $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] },
+          },
+          inProgressTasks: {
+            $sum: { $cond: [{ $eq: ['$status', 'in-progress'] }, 1, 0] },
+          },
+          blockedTasks: {
+            $sum: { $cond: [{ $eq: ['$status', 'blocked'] }, 1, 0] },
+          },
+          overdueTasks: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $lt: ['$dueDate', new Date()] },
+                    { $not: { $in: ['$status', ['done', 'cancelled']] } },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          totalEstimatedHours: { $sum: '$estimatedHours' },
+          totalActualHours: { $sum: '$actualHours' },
+          avgProgress: { $avg: '$progress.percentage' },
+        },
+      },
+    ]);
+
+    const result = analytics[0] || {
+      totalTasks: 0,
+      completedTasks: 0,
+      inProgressTasks: 0,
+      blockedTasks: 0,
+      overdueTasks: 0,
+      totalEstimatedHours: 0,
+      totalActualHours: 0,
+      avgProgress: 0,
+    };
+
+    // Get priority breakdown
+    const priorityBreakdown = await Task.aggregate([
+      { $match: { project: new mongoose.Types.ObjectId(projectId) } },
+      { $group: { _id: '$priority', count: { $sum: 1 } } },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        overview: result,
+        priorityBreakdown,
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching task analytics', {
+      error: error.message,
+      userId: req.user.id,
+    });
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get recent tasks for the authenticated user across all projects
+ * @route   GET /api/v1/tasks/recent
+ * @access  Private
+ */
+export const getRecentTasks = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+
+    logger.info('Fetching recent tasks for user', {
+      userId: req.user.id,
+      limit,
+      action: 'get_recent_tasks',
+    });
+
+    // Find all projects where the user is either owner or member
+    const projects = await Project.find({
+      $or: [
+        { owner: userId },
+        { members: userId }, // Array of ObjectIds
+        { 'members.user': userId }, // Array of objects with user field (if using newer schema)
+      ],
+    }).select('_id');
+
+    if (projects.length === 0) {
+      logger.info('No projects found for user', { userId: req.user.id });
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+      });
+    }
+
+    // Get project IDs
+    const projectIds = projects.map((project) => project._id);
+
+    // Find recent tasks across these projects, prioritizing:
+    // 1. Tasks assigned to the user
+    // 2. Recently updated tasks
+    // 3. Active tasks (not completed/cancelled)
+    const recentTasks = await Task.find({
+      project: { $in: projectIds },
+      $or: [
+        { assignee: userId }, // Tasks assigned to user
+        { createdBy: userId }, // Tasks created by user
+        { 'comments.user': userId }, // Tasks user has commented on
+      ],
+      status: { $nin: ['done', 'completed', 'cancelled', 'archived'] }, // Exclude finished tasks
+    })
+      .populate('project', 'name description')
+      .populate('assignee', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({
+        updatedAt: -1, // Most recently updated first
+        createdAt: -1, // Then most recently created
+      })
+      .limit(limit);
+
+    logger.info('Successfully fetched recent tasks', {
+      userId: req.user.id,
+      taskCount: recentTasks.length,
+      projectsChecked: projectIds.length,
+    });
+
+    // Record this action in audit logs for analytics using a valid enum action
+    const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+    await auditLog(req, 'task_read', 'success', {
+      taskCount: recentTasks.length,
+      limit,
+      operation: 'recent_tasks_fetch',
+    });
+
+    res.status(200).json({
+      success: true,
+      count: recentTasks.length,
+      data: recentTasks,
+    });
+  } catch (error) {
+    logger.error('Error fetching recent tasks', {
+      error: {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      },
+      userId: req.user.id,
+    });
+
+    // Record failed attempt using valid enum action
+    try {
+      const { auditLog } = await import('../middleware/auditLogMiddleware.js');
+      await auditLog(req, 'task_read', 'failed', {
+        error: error.message,
+        operation: 'recent_tasks_fetch',
+      });
+    } catch (auditError) {
+      logger.error('Failed to create audit log', { error: auditError.message });
+    }
+
+    return next(
+      new ErrorResponse(`Error fetching recent tasks: ${error.message}`, 500)
+    );
+  }
+};

@@ -34,13 +34,18 @@ const useBookmarks = (options = {}) => {
     actionParams = {},
   } = options;
 
+  // Memoized selectors for additional Redux state
+  const selectAuth = useMemo(() => (state) => state.auth, []);
+  const selectGuestBookmarks = useMemo(
+    () => (state) => selectGuestItemsByType(state, 'bookmarks'),
+    []
+  );
+
   // Get auth state to check if user is a guest
-  const { isGuest } = useSelector((state) => state.auth);
+  const { isGuest } = useSelector(selectAuth);
 
   // Get guest bookmark data directly if the user is a guest
-  const guestBookmarks = useSelector((state) =>
-    isGuest ? selectGuestItemsByType(state, 'bookmarks') : []
-  );
+  const guestBookmarks = useSelector(selectGuestBookmarks);
 
   // Format guest bookmarks to match API structure
   const formattedGuestBookmarks = useMemo(() => {
@@ -85,13 +90,25 @@ const useBookmarks = (options = {}) => {
     return getBookmarks;
   }, [actionCreator]);
 
-  // Selectors for accessing bookmarks state from Redux
-  const selectBookmarks = (state) => state.bookmarks.bookmarks;
-  const selectBookmarksLastFetched = (state) =>
-    state.bookmarks.lastFetched || null;
-  const selectBookmarksLoading = (state) => state.bookmarks.isLoading;
-  const selectBookmarksError = (state) =>
-    state.bookmarks.isError ? state.bookmarks.message : null;
+  // Memoized selectors for accessing bookmarks state from Redux
+  const selectBookmarks = useMemo(
+    () => (state) => state.bookmarks.bookmarks,
+    []
+  );
+  const selectBookmarksLastFetched = useMemo(
+    () => (state) => state.bookmarks.lastFetched || null,
+    []
+  );
+  const selectBookmarksLoading = useMemo(
+    () => (state) => state.bookmarks.isLoading,
+    []
+  );
+
+  // PERFORMANCE FIX: Simplified error selector to prevent dependency issues
+  const selectBookmarksError = useMemo(
+    () => (state) => state.bookmarks.isError ? state.bookmarks.message : null,
+    []
+  );
 
   // Use the enhanced data fetching hook
   const {

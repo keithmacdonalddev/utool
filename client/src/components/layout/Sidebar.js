@@ -474,10 +474,9 @@ const Sidebar = ({
         onClick={toggleSidebar}
         aria-hidden="true" // Hide from screen readers as it's a visual effect
       ></div>
-
-      {/* Sidebar container */}
+      {/* Sidebar container */}{' '}
       <aside
-        className={`fixed inset-y-0 left-0 bg-app-sidebar text-[#F8FAFC] border-r border-sidebar-border space-y-6 py-7 px-2 z-40 transform ${
+        className={`fixed inset-y-0 left-0 bg-transparent backdrop-blur-sm text-[#F8FAFC] border-r border-sidebar-border space-y-6 py-7 px-2 z-40 transform ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } md:relative md:translate-x-0 transition-all duration-200 ease-in-out flex flex-col shadow-lg ${
           isMinimized ? 'md:w-20' : 'md:w-64'
@@ -560,7 +559,7 @@ const Sidebar = ({
             <span className={linkTextClasses}>Dashboard</span>
           </NavLink>
           <NavLink
-            to="/projects"
+            to="/projects/dashboard"
             className={({ isActive }) =>
               `${linkItemClasses} ${isMinimized ? 'md:justify-center' : ''} ${
                 isActive ? activeLinkClasses : inactiveLinkClasses

@@ -72,7 +72,7 @@ import authReducer from '../features/auth/authSlice';
 import taskReducer from '../features/tasks/taskSlice';
 import noteReducer from '../features/notes/noteSlice';
 import kbReducer from '../features/kb/kbSlice';
-import projectReducer from '../features/projects/projectSlice';
+import projectReducer from '../features/projects/projectsSlice';
 import projectNoteReducer from '../features/projectNotes/projectNoteSlice';
 import friendReducer from '../features/friends/friendSlice';
 import auditLogsReducer from '../features/auditLogs/auditLogsSlice';
@@ -82,6 +82,8 @@ import snippetReducer from '../features/snippets/snippetSlice';
 import snippetCategoryReducer from '../features/snippets/snippetCategorySlice';
 import quoteReducer from '../features/quotes/quoteSlice';
 import guestSandboxReducer from '../features/guestSandbox/guestSandboxSlice'; // Added import for guest sandbox
+import commentsReducer from '../features/comments/commentsSlice'; // Project collaboration comments
+import activityReducer from '../features/activity/activitySlice'; // Project activity tracking
 
 /**
  * STORE CONFIGURATION
@@ -113,10 +115,11 @@ export const store = configureStore({
     auditLogs: auditLogsReducer, // Audit logs for system activities
     bookmarks: bookmarkReducer, // Bookmarks state
     bookmarkFolders: bookmarkFolderReducer, // Bookmark folders state
-    snippets: snippetReducer, // Code/text snippets state
-    snippetCategories: snippetCategoryReducer, // Snippet categories state
+    snippets: snippetReducer, // Code/text snippets state    snippetCategories: snippetCategoryReducer, // Snippet categories state
     quotes: quoteReducer, // Favorite quotes state
     guestSandbox: guestSandboxReducer, // Added guest sandbox reducer
+    comments: commentsReducer, // Project collaboration comments
+    activity: activityReducer, // Project activity tracking and real-time updates
   },
 
   /**
