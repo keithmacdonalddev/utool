@@ -29,6 +29,7 @@ logs
 .DS_Store
 .idea/
 .vscode/
+.cursor/
 *.suo
 *.ntvs*
 *.njsproj
@@ -53,3 +54,5 @@ dev-debug.log
 # Task files
 tasks.json
 tasks/ 
+
+.cursor\mcp.json
